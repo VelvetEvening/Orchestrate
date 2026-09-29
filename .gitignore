@@ -1,0 +1,33 @@
+# Build output
+/app/build*/
+/app/cmake-build-*/
+# Portable release archives, staging directories and packaging checks
+/dist/
+/app/dist/
+
+# Local runtimes and environment-generated directories
+/Python/
+/%SystemDrive%/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Personal development settings and environment secrets
+**/.claude/settings.local.json
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+# Runtime state written by built-in tools
+/app/tools/**/state/
+/docs/examples/tool-adapter/state/
+
+# Personal databases and runtime logs (keep app/src/data/ tracked)
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.log

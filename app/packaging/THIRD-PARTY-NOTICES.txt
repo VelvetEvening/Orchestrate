@@ -1,0 +1,29 @@
+Orchestrate dynamically links the Qt libraries shipped alongside this executable.
+Qt version: @QT_VERSION@
+Qt copyright: The Qt Company Ltd. and other contributors.
+Qt Base and Qt SVG are used under the GNU Lesser General Public License v3,
+with their included third-party components under their respective licenses.
+The dynamic libraries are not modified in source; windeployqt may relocate paths
+in Qt6Core.dll for deployment. Users may replace the compatible shared libraries
+and reverse-engineer the application as required to debug such modifications.
+
+Qt source and license information:
+https://download.qt.io/official_releases/qt/@QT_SERIES@/@QT_VERSION@/submodules/
+https://code.qt.io/cgit/qt/qtbase.git/tag/?h=v@QT_VERSION@
+https://code.qt.io/cgit/qt/qtsvg.git/tag/?h=v@QT_VERSION@
+https://doc.qt.io/qt-6/licensing.html
+
+licenses/qtbase and licenses/qtsvg contain the upstream SPDX license texts,
+third-party attribution metadata and license notices from the corresponding
+source distributions. These collections also describe optional Qt components
+which are not necessarily present in this package.
+
+MinGW-w64/GCC shared runtime libraries accompany the Qt MinGW build.
+The GCC Runtime Library Exception applies where specified by the upstream
+runtime licenses. Original notices are included in licenses/mingw/.
+https://gcc.gnu.org/onlinedocs/libstdc++/manual/license.html
+https://www.mingw-w64.org/
+
+Orchestrate source for this binary is identified in build-info.json and available
+at https://github.com/VelvetEvening/Orchestrate . No additional license for the
+Orchestrate source is granted by this third-party notice.

@@ -1,0 +1,13 @@
+{
+  "schema": "orchestrate-tool/v1",
+  "id": "example-adapter",
+  "name": "服务器接入示例",
+  "description": "部署到自己的服务器目录后，修改 working_directory；通过注册服务器工具导入。",
+  "target_type": "ssh",
+  "working_directory": "/opt/orchestrate-example",
+  "state_path": "state/current.json",
+  "commands": [
+    {"name": "生成示例结果", "executable": "python3", "arguments": ["-u", "adapter.py", "run"]},
+    {"name": "模拟失败", "executable": "python3", "arguments": ["-u", "adapter.py", "fail"]}
+  ]
+}

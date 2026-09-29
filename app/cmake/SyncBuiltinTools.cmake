@@ -1,0 +1,13 @@
+if(NOT DEFINED TOOL_SOURCE OR NOT DEFINED TOOL_DESTINATION)
+    message(FATAL_ERROR "TOOL_SOURCE and TOOL_DESTINATION are required")
+endif()
+# Runtime state belongs to the destination installation. Never ship or overwrite it.
+file(GLOB_RECURSE tool_files RELATIVE "${TOOL_SOURCE}" LIST_DIRECTORIES false "${TOOL_SOURCE}/*")
+foreach(relative IN LISTS tool_files)
+    if(relative MATCHES "(^|/)state(/|$)")
+        continue()
+    endif()
+    get_filename_component(parent "${TOOL_DESTINATION}/${relative}" DIRECTORY)
+    file(MAKE_DIRECTORY "${parent}")
+    file(COPY_FILE "${TOOL_SOURCE}/${relative}" "${TOOL_DESTINATION}/${relative}" ONLY_IF_DIFFERENT)
+endforeach()

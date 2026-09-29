@@ -1,0 +1,9 @@
+{
+  "schema": "orchestrate-tool/v1",
+  "id": "example-adapter",
+  "name": "只读监测示例",
+  "description": "状态由外部手动运行 adapter.py 或现有调度器生成；客户端只读取。",
+  "target_type": "windows-local",
+  "state_path": "state/current.json",
+  "commands": []
+}

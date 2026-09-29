@@ -1,0 +1,36 @@
+#pragma once
+
+#include <QWidget>
+
+class QPlainTextEdit;
+class QStackedWidget;
+class QTabBar;
+class QTextEdit;
+
+class HeadingTextEdit final : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit HeadingTextEdit(QWidget *parent = nullptr);
+    void setPlainText(const QString &text);
+    QString toPlainText() const;
+    void setPlaceholderText(const QString &text);
+    void clear();
+    void setPreviewMode(bool preview);
+    bool isPreviewMode() const;
+
+    static QString getText(QWidget *parent, const QString &title,
+                           const QString &initial, bool *accepted, bool previewFirst = false);
+
+signals:
+    void textChanged();
+    void previewModeChanged(bool preview);
+
+private:
+    void updatePreview();
+    QTabBar *tabs_;
+    QStackedWidget *pages_;
+    QPlainTextEdit *source_;
+    QTextEdit *preview_;
+};

@@ -1,0 +1,16 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file>chevron-down.svg</file>
+        <file>chevron-up.svg</file>
+        <file>check.svg</file>
+    </qresource>
+    <qresource prefix="/app-icon">
+        <file alias="16.png">app-icon/app-16.png</file>
+        <file alias="24.png">app-icon/app-24.png</file>
+        <file alias="32.png">app-icon/app-32.png</file>
+        <file alias="48.png">app-icon/app-48.png</file>
+        <file alias="64.png">app-icon/app-64.png</file>
+        <file alias="128.png">app-icon/app-128.png</file>
+        <file alias="256.png">app-icon/app-256.png</file>
+    </qresource>
+</RCC>

@@ -1,0 +1,97 @@
+{
+  "schema": "orchestrate-tool/v1",
+  "id": "scheduled-shutdown",
+  "name": "定时关机",
+  "description": "每天定时弹出置顶的关机倒计时窗口，无人取消就自动关机。Orchestrate 自带，只控制本机，不联网。",
+  "group": "系统工具",
+  "target_type": "windows-local",
+  "state_path": "state/current.json",
+  "commands": [
+    {
+      "name": "从系统同步设置",
+      "description": "重新读取计划任务的设置并写入状态；在任务计划程序里手动改过时用，不做任何修改。",
+      "executable": "powershell.exe",
+      "arguments": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "shutdown-control.ps1", "-Action", "status"]
+    },
+    {
+      "name": "开启定时关机",
+      "description": "启用计划任务；还没安装时按默认的每天 00:10、倒计时 60 秒安装。",
+      "executable": "powershell.exe",
+      "arguments": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "shutdown-control.ps1", "-Action", "enable"]
+    },
+    {
+      "name": "关闭定时关机",
+      "description": "停用计划任务并取消正在进行的倒计时；时间和倒计时设置保留。",
+      "executable": "powershell.exe",
+      "arguments": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "shutdown-control.ps1", "-Action", "disable"]
+    },
+    {
+      "name": "设置弹窗时间",
+      "description": "修改每天弹出关机倒计时的时间；倒计时长度和开关状态保持不变。",
+      "executable": "powershell.exe",
+      "arguments": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "shutdown-control.ps1",
+                    "-Action", "set-time", "-Time", "{time}", "{weekdays_only}"],
+      "parameters": [
+        {
+          "key": "time",
+          "label": "弹窗时间",
+          "type": "time",
+          "default": "00:10",
+          "state_key": "settings.time",
+          "required": true
+        },
+        {
+          "key": "weekdays_only",
+          "label": "触发日期",
+          "type": "boolean",
+          "text": "仅工作日（周一至周五）",
+          "state_key": "settings.weekdays_only",
+          "true_value": "-WeekdaysOnly",
+          "false_value": "-Daily"
+        }
+      ]
+    },
+    {
+      "name": "设置弹窗持续时间",
+      "description": "修改倒计时弹窗持续的秒数；弹窗时间和开关状态保持不变。",
+      "executable": "powershell.exe",
+      "arguments": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "shutdown-control.ps1",
+                    "-Action", "set-countdown", "-CountdownSeconds", "{seconds}"],
+      "parameters": [
+        {
+          "key": "seconds",
+          "label": "倒计时",
+          "type": "integer",
+          "min": 5,
+          "max": 3600,
+          "step": 15,
+          "unit": "秒",
+          "default": 60,
+          "state_key": "settings.countdown_seconds",
+          "required": true,
+          "description": "倒计时结束后还有 30 秒系统缓冲，期间仍可取消关机。"
+        }
+      ]
+    },
+    {
+      "name": "取消本次关机",
+      "description": "关掉正在倒计时的弹窗，并中止已经排队的关机。",
+      "executable": "powershell.exe",
+      "arguments": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "shutdown-control.ps1", "-Action", "cancel"]
+    },
+    {
+      "name": "立即关机",
+      "description": "马上弹出关机倒计时（时长同弹窗持续时间），无人取消就会关机。",
+      "executable": "powershell.exe",
+      "arguments": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "shutdown-control.ps1", "-Action", "shutdown-now"],
+      "high_risk": true
+    },
+    {
+      "name": "卸载计划任务",
+      "description": "从任务计划程序中删除定时关机；把 Orchestrate 从这台电脑移走前使用。",
+      "executable": "powershell.exe",
+      "arguments": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "shutdown-control.ps1", "-Action", "uninstall"],
+      "high_risk": true
+    }
+  ]
+}
