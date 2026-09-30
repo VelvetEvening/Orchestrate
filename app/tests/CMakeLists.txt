@@ -35,7 +35,8 @@ set_tests_properties(release_info PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscr
 add_executable(AutoStartTest test_autostart.cpp)
 target_link_libraries(AutoStartTest PRIVATE OrchestrateAutoStart Qt6::Test)
 set_target_properties(AutoStartTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_BINARY_DIR}/autostart-test>")
-add_test(NAME autostart COMMAND AutoStartTest)
+add_test(NAME autostart COMMAND AutoStartTest
+    -o "${CMAKE_CURRENT_BINARY_DIR}/autostart-test/results.txt,txt" -o -,txt)
 add_executable(AutomationContractTest test_automation_contract.cpp ../src/pages/automationpage.cpp ../src/data/appdatabase.cpp)
 target_include_directories(AutomationContractTest PRIVATE ../src)
 target_compile_definitions(AutomationContractTest PRIVATE ORCHESTRATE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../..")

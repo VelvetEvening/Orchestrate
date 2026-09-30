@@ -6,6 +6,8 @@ v1.1.0 更新机制增加三个 CTest 套件，总计 13 个：`release_info` �
 
 `ReleaseInfoTest --live-check` 是额外的联网验收入口，不加入 CTest；它通过真实 Qt Network/TLS 请求 GitHub 最新正式 Release。设置页截图覆盖更新入口和最小窗口下的滚动布局。
 
+v1.1.1 的 `autostart` 回归覆盖不同目录开关隔离、路径大小写/分隔符/`.`/`..` 规范化、中文空格路径、同目录重开保留设置、移动后独立身份、旧启动项仅归属匹配 EXE、旧 Windows 禁用标记迁移、新项禁用决定保留及迁移失败不删除旧启动项。原生注册表测试在随机临时键下验证 REG_SZ、REG_BINARY 和旧项迁移；不更改现用正式版的登录配置。真实自动更新及重新登录由用户现场验收。
+
 开机自动启动设置新增 `autostart` 套件，当前共 10 个套件。覆盖中文/空格路径、持久化、搬迁后更新路径、外部变更、保存失败及 Windows 禁用标记。注册表集成测试只写入随机命名的 `HKCU\Software\OrchestrateAutoStartTest-*` 临时键并清理；不操作真实 Run 或 StartupApproved 项。设置页通过注入临时 INI 存储验证点击、重开、错误提示和系统禁用入口；普通 offscreen 界面测试不访问真实开机启动配置。截图为 `settings-autostart.png`、`settings-autostart-compact.png` 和 `settings-autostart-disabled.png`。实际注销/重启登录行为未自动验收。
 
 文字窗口与项目目录回归已通过：编辑／预览的 Ctrl＋滚轮缩放、三级标题比例、像素／点字号、连续滚轮增量、字号边界、普通滚动、选择与撤销保留、预览阅读位置、窗口间隔离及大纲窗口重开。缩放不发送正文修改信号。项目列表使用实际单击／双击事件，覆盖中文、空格、`#`、`%` 路径、项目切换、目录设置更新、未设置目录、失效目录及文件路径；通过 `QDesktopServices` URL 接收器核对打开目标，不启动真实文件管理器。10 个 CTest 套件全部通过，HeadingTextTest 为 47 passed / 0 failed。新增截图为 `project-outline-zoom-preview.png` 和 `project-outline-zoom-editor.png`；原生滚轮设备和资源管理器窗口仍属于桌面验收范围。

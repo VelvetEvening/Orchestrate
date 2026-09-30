@@ -16,6 +16,7 @@ public:
     };
 
     AutoStart();
+    static QString entryNameForExecutable(const QString &executablePath);
     // An explicit store lets tests exercise persistence without touching login settings.
     AutoStart(std::unique_ptr<QSettings> registration, std::unique_ptr<QSettings> approval,
               const QString &executablePath);
@@ -23,7 +24,11 @@ public:
     bool setEnabled(bool enabled, QString *error);
 
 private:
+    bool ownsLegacyEntry(const QSettings &registration) const;
+    QString effectiveEntryName(const QSettings &registration) const;
+    bool preserveLegacyApproval(QString *error) const;
     QString command_;
+    QString entryName_;
     std::unique_ptr<QSettings> registration_;
     std::unique_ptr<QSettings> approval_;
 };

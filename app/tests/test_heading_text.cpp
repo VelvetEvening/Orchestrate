@@ -186,6 +186,7 @@ private slots:
         QVERIFY(directory.isValid());
         const QString path = directory.filePath("login.ini");
         const QString approvalPath = directory.filePath("approval.ini");
+        const QString startupEntry = AutoStart::entryNameForExecutable(QStringLiteral("C:/应用 目录/Orchestrate.exe"));
         const auto backend = [&] {
             return std::make_unique<AutoStart>(std::make_unique<QSettings>(path, QSettings::IniFormat),
                 std::make_unique<QSettings>(approvalPath, QSettings::IniFormat), QStringLiteral("C:/应用 目录/Orchestrate.exe"));
@@ -216,15 +217,15 @@ private slots:
         check->setChecked(false);
         QSettings actual(path, QSettings::IniFormat);
         actual.sync();
-        QVERIFY(!actual.contains("Orchestrate"));
+        QVERIFY(!actual.contains(startupEntry));
         // Changes from Windows settings are picked up on re-entering the page.
-        actual.setValue("Orchestrate", QStringLiteral("\"C:\\old\\Orchestrate.exe\""));
+        actual.setValue(startupEntry, QStringLiteral("\"C:\\old\\Orchestrate.exe\""));
         actual.sync();
         button(restored, QStringLiteral("设置"))->click();
         QVERIFY(check->isChecked());
         QVERIFY(restored.findChild<QLabel *>(QStringLiteral("autoStartStatus"))->text().contains(QStringLiteral("其他位置")));
         QSettings approval(approvalPath, QSettings::IniFormat);
-        approval.setValue("Orchestrate", QByteArray::fromHex("030000000000000000000000"));
+        approval.setValue(startupEntry, QByteArray::fromHex("030000000000000000000000"));
         approval.sync();
         restored.show();
         button(restored, QStringLiteral("设置"))->click();
