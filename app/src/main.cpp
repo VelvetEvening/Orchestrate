@@ -41,7 +41,7 @@ int main(int argc, char *argv[])
     }
 
     MainWindow window;
-    window.show();
+    window.showMainWindow();
 
     const auto arguments = app.arguments();
     const int healthArgument = arguments.indexOf(QStringLiteral("--update-health-file"));
@@ -52,10 +52,12 @@ int main(int argc, char *argv[])
             && workspace.fileName().startsWith(QStringLiteral(".Orchestrate-update-"))
             && workspace.dir().absolutePath() == QFileInfo(app.applicationDirPath()).dir().absolutePath()) {
             // Confirm only once the initialized window's event loop is running.
-            QTimer::singleShot(0, &window, [healthFile] {
+            QTimer::singleShot(0, &window, [healthFile, &window] {
+                if (!window.mainWindowVisible()) return;
                 QSaveFile file(healthFile.absoluteFilePath());
                 const QJsonObject health {{QStringLiteral("version"), QCoreApplication::applicationVersion()},
-                                          {QStringLiteral("process_id"), QCoreApplication::applicationPid()}};
+                                          {QStringLiteral("process_id"), QCoreApplication::applicationPid()},
+                                          {QStringLiteral("window_visible"), true}};
                 if (file.open(QIODevice::WriteOnly)) {
                     file.write(QJsonDocument(health).toJson());
                     file.commit();

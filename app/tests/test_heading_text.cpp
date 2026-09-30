@@ -325,11 +325,13 @@ private slots:
             QApplication::sendEvent(&window, &close);
             QVERIFY(!close.isAccepted());
             QVERIFY(!window.isVisible());
+            QVERIFY(!window.mainWindowVisible());
             QVERIFY(QApplication::activeModalWidget() == nullptr);
             // Exercise signal-to-window wiring, without sending system keystrokes.
             QVERIFY(QMetaObject::invokeMethod(shortcut, "activated", Qt::DirectConnection));
             QVERIFY(window.isVisible());
             QVERIFY(!window.isMinimized());
+            QVERIFY(window.mainWindowVisible());
         }
         window.showMinimized();
         QVERIFY(QMetaObject::invokeMethod(shortcut, "activated", Qt::DirectConnection));

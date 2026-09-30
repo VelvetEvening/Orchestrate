@@ -351,10 +351,10 @@ function Install-PreparedPackage($Plan) {
 
 function Start-UpdatedApplication([string]$Install, [string]$HealthPath = '') {
     if ($HealthPath) {
-        return Start-Process -FilePath (Join-Path $Install 'Orchestrate.exe') -WorkingDirectory $Install -WindowStyle Hidden `
+        return Start-Process -FilePath (Join-Path $Install 'Orchestrate.exe') -WorkingDirectory $Install -WindowStyle Normal `
             -ArgumentList ('--update-health-file "' + $HealthPath + '"') -PassThru
     }
-    $null = Start-Process -FilePath (Join-Path $Install 'Orchestrate.exe') -WorkingDirectory $Install -WindowStyle Hidden
+    $null = Start-Process -FilePath (Join-Path $Install 'Orchestrate.exe') -WorkingDirectory $Install -WindowStyle Normal
 }
 
 function Confirm-UpdatedStartup($Process, [string]$HealthPath, [string]$Version) {
@@ -365,6 +365,9 @@ function Confirm-UpdatedStartup($Process, [string]$HealthPath, [string]$Version)
         if (Test-Path -LiteralPath $HealthPath -PathType Leaf) {
             $health = Get-Content -LiteralPath $HealthPath -Raw -Encoding UTF8 | ConvertFrom-Json
             if ($health.version -ne $Version -or [int]$health.process_id -ne $Process.Id) { throw '新版启动确认信息不匹配。' }
+            if (-not $health.PSObject.Properties['window_visible'] -or $health.window_visible -ne $true) {
+                throw '新版程序未确认主窗口可见，将尝试恢复旧版。'
+            }
             return
         }
         Start-Sleep -Milliseconds 200

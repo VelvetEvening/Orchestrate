@@ -114,6 +114,13 @@ set_tests_properties(heading_text PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscr
 if (WIN32)
     # Qt's bin directory also contains the MinGW runtime shipped with this Qt kit.
     string(REPLACE ";" "\;" test_path "$<TARGET_FILE_DIR:Qt6::Core>;$ENV{PATH}")
+    add_executable(StartupVisibilityTest test_startup_visibility.cpp)
+    target_link_libraries(StartupVisibilityTest PRIVATE Qt6::Core Qt6::Sql Qt6::Test user32)
+    target_compile_definitions(StartupVisibilityTest PRIVATE ORCHESTRATE_APPLICATION="$<TARGET_FILE:Orchestrate>")
+    set_target_properties(StartupVisibilityTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_BINARY_DIR}/startup-visibility-test>")
+    add_test(NAME startup_visibility COMMAND StartupVisibilityTest
+        -o "${CMAKE_CURRENT_BINARY_DIR}/startup-visibility-test/results.txt,txt" -o -,txt)
+    set_tests_properties(startup_visibility PROPERTIES ENVIRONMENT "PATH=${test_path}" TIMEOUT 40 RUN_SERIAL TRUE)
     set_tests_properties(builtin_identity PROPERTIES ENVIRONMENT "PATH=${test_path}")
     set_tests_properties(database_migration PROPERTIES ENVIRONMENT "PATH=${test_path}")
     set_tests_properties(database_schema PROPERTIES ENVIRONMENT "PATH=${test_path}")

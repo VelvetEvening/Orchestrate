@@ -685,8 +685,28 @@ void MainWindow::showMainWindow()
 {
     show();
     setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+#ifdef Q_OS_WIN
+    if (QApplication::platformName() == QStringLiteral("windows")) {
+        // STARTUPINFO/SW_HIDE from an older updater can hide the native window
+        // while QWidget already considers it visible, making show() a no-op.
+        const auto hwnd = reinterpret_cast<HWND>(winId());
+        ShowWindow(hwnd, IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
+    }
+#endif
     raise();
     activateWindow();
+}
+
+bool MainWindow::mainWindowVisible() const
+{
+    if (!isVisible() || isMinimized()) return false;
+#ifdef Q_OS_WIN
+    if (QApplication::platformName() == QStringLiteral("windows")) {
+        const auto hwnd = reinterpret_cast<HWND>(effectiveWinId());
+        return hwnd && IsWindowVisible(hwnd) && !IsIconic(hwnd);
+    }
+#endif
+    return true;
 }
 
 void MainWindow::quitApplication()

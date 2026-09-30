@@ -25,6 +25,8 @@ public:
     explicit MainWindow(QWidget *parent = nullptr, std::unique_ptr<AutoStart> autoStart = nullptr);
     ~MainWindow() override = default;
     bool ready() const { return database_.isOpen(); }
+    bool mainWindowVisible() const;
+    void showMainWindow();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -37,7 +39,6 @@ private:
     void buildTray();
     void switchToPage(int index);
     void toggleSidebar();
-    void showMainWindow();
     void quitApplication();
     void installUpdate();
     void refreshAutoStartSettings(const QString &error = QString());

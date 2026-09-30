@@ -4,6 +4,7 @@ $ErrorActionPreference = 'Stop'
 $originalLocation = Get-Location
 $originalNativeDirectory = [Environment]::CurrentDirectory
 . ([scriptblock]::Create([IO.File]::ReadAllText((Resolve-Path -LiteralPath $Updater), [Text.Encoding]::UTF8)))
+$startupValidator = ${function:Confirm-UpdatedStartup}
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 function Assert([bool]$Condition, [string]$Message) { if (-not $Condition) { throw $Message } }
@@ -210,6 +211,20 @@ try {
         }
     }
     Write-Output 'PASS root and nested junctions preserve their targets'
+
+    $probe = [pscustomobject]@{ HasExited = $false; Id = 12345 }
+    $probe | Add-Member ScriptMethod Refresh { }
+    $probePath = Join-Path $root 'visibility-health.json'
+    foreach ($case in @('visible', 'hidden', 'missing', 'wrongpid')) {
+        $health = @{ version = '1.1.2'; process_id = 12345 }
+        if ($case -ne 'missing') { $health.window_visible = $case -ne 'hidden' }
+        if ($case -eq 'wrongpid') { $health.process_id = 54321 }
+        Write-UpdateJson $probePath $health
+        $failed = $false
+        try { & $startupValidator $probe $probePath '1.1.2' } catch { $failed = $true }
+        Assert ($failed -eq ($case -ne 'visible')) "Invalid startup visibility accepted: $case"
+    }
+    Write-Output 'PASS startup requires matching process identity and confirmed window visibility'
 
     foreach ($path in @('../escape', 'data/orchestrate.sqlite3', 'tools/test/state/current.json', 'C:/escape', 'tools/test/x:stream', 'NUL.txt', 'tools\\escape', 'data./file')) {
         $failed = $false
