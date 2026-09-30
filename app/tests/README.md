@@ -1,12 +1,14 @@
 # 项目测试与隔离验收
 
-## 当前测试入口（2026-09-29）
+## 当前测试入口（2026-09-30）
 
 开机自动启动设置新增 `autostart` 套件，当前共 10 个套件。覆盖中文/空格路径、持久化、搬迁后更新路径、外部变更、保存失败及 Windows 禁用标记。注册表集成测试只写入随机命名的 `HKCU\Software\OrchestrateAutoStartTest-*` 临时键并清理；不操作真实 Run 或 StartupApproved 项。设置页通过注入临时 INI 存储验证点击、重开、错误提示和系统禁用入口；普通 offscreen 界面测试不访问真实开机启动配置。截图为 `settings-autostart.png`、`settings-autostart-compact.png` 和 `settings-autostart-disabled.png`。实际注销/重启登录行为未自动验收。
 
+文字窗口与项目目录回归已通过：编辑／预览的 Ctrl＋滚轮缩放、三级标题比例、像素／点字号、连续滚轮增量、字号边界、普通滚动、选择与撤销保留、预览阅读位置、窗口间隔离及大纲窗口重开。缩放不发送正文修改信号。项目列表使用实际单击／双击事件，覆盖中文、空格、`#`、`%` 路径、项目切换、目录设置更新、未设置目录、失效目录及文件路径；通过 `QDesktopServices` URL 接收器核对打开目标，不启动真实文件管理器。10 个 CTest 套件全部通过，HeadingTextTest 为 47 passed / 0 failed。新增截图为 `project-outline-zoom-preview.png` 和 `project-outline-zoom-editor.png`；原生滚轮设备和资源管理器窗口仍属于桌面验收范围。
+
 从仓库根目录配置并构建后，运行 `ctest --test-dir app/build-qt --output-on-failure`。六项待办及删除防护修复后，通过 9 个套件：`builtin_identity`、`database_migration`、`automation_contract`、`tool_copy`、`adapter_example`、`builtin_acceptance`、`heading_text`、`shutdown_process_identity`、`shutdown_disable`。各套件使用自己的测试目录/模拟数据；Python 样例测试仅在配置时找到 Python 3 解释器时注册，应用不依赖 Python。
 
-新增回归：SQLite 触发器故障注入验证资料与命令一起回滚；本地/模拟 SSH 状态归属、字段与有效期验证；辅助进程模拟读取阻塞、重试、启动失败、逐字节 UTF-8 及大量输出；PowerShell 模拟进程验证精确脚本路径及旧路径接管。项目界面覆盖双击、精确删除文字、取消与目录文件保留，大纲保存失败阻止两种退出路径、恢复后重试，以及数据库初始化失败禁用编辑。HeadingTextTest 当前 40 项通过；删除截图位于 `heading-text-test/artifacts/project-delete-confirmation.png`，自动化详细结果位于 `automation-contract-test/results.txt`。
+新增回归：SQLite 触发器故障注入验证资料与命令一起回滚；本地/模拟 SSH 状态归属、字段与有效期验证；辅助进程模拟读取阻塞、重试、启动失败、逐字节 UTF-8 及大量输出；PowerShell 模拟进程验证精确脚本路径及旧路径接管。项目界面覆盖项目列表与工作记录双击、项目设置内的低强调删除入口、精确删除文字、取消后保留未保存设置、删除后关闭设置窗口及目录文件保留，大纲保存失败阻止两种退出路径、恢复后重试，以及数据库初始化失败禁用编辑。HeadingTextTest 当前 47 项通过；删除相关截图位于 `heading-text-test/artifacts/projects-delete-hidden.png`、`heading-text-test/artifacts/project-settings-delete.png` 和 `heading-text-test/artifacts/project-delete-confirmation.png`，自动化详细结果位于 `automation-contract-test/results.txt`。
 
 新增的 `automation_contract` 使用专用 `automation-contract-test/data/` 和真实声明解析器，不执行声明中的程序；同时读取文档示例及内置声明，防止说明和解析器漂移。`tool_copy` 只操作专用测试目录，验证同步不覆盖 state；`adapter_example` 将本地样例复制到临时目录，检查状态写入和失败处理。详见 [审查报告](../../docs/project-review-2026-09-29.md)。
 

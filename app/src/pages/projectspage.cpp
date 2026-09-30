@@ -1,9 +1,12 @@
 #include "projectspage.h"
 #include "widgets/headingtextedit.h"
 #include "widgets/summaryfield.h"
+#include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFrame>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -17,6 +20,7 @@
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QVBoxLayout>
+#include <QUrl>
 
 namespace {
 QFrame *card(QWidget *parent) {
@@ -93,14 +97,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     outlineTitle_->installEventFilter(this);
     header->addWidget(outlineTitle_);
     auto *edit = new QPushButton(QStringLiteral("项目设置"), details_);
-    auto *remove = new QPushButton(QStringLiteral("删除项目"), details_);
-    deleteProjectButton_ = remove;
-    remove->setObjectName(QStringLiteral("deleteProjectButton"));
-    remove->setToolTip(QStringLiteral("双击后输入项目名称确认删除"));
-    remove->setAccessibleDescription(QStringLiteral("双击打开删除确认，须输入完整确认文字"));
-    remove->installEventFilter(this);
     header->addWidget(edit);
-    header->addWidget(remove);
     detailsLayout_->addLayout(header);
 
     outlineWindow_ = new QDialog(this, Qt::Window);
@@ -158,6 +155,9 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     connect(projectList_, &QListWidget::currentRowChanged, this, [this](int row){
         if (row >= 0) selectProject(projectList_->item(row)->data(Qt::UserRole).toInt());
     });
+    connect(projectList_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
+        if (item) openProjectDirectory(item->data(Qt::UserRole + 1).toString());
+    });
     connect(outlineEdit_, &HeadingTextEdit::textChanged, this, [this]{ saveOutline(); });
     connect(add, &QPushButton::clicked, this, [this]{ recordDialog(true); });
     connect(editWorkButton_, &QPushButton::clicked, this, [this]{ recordDialog(false); });
@@ -184,7 +184,9 @@ void ProjectsPage::loadProjects(int preferred)
         auto *item = new QListWidgetItem(project.name, projectList_);
         item->setSizeHint(QSize(0,46));
         item->setData(Qt::UserRole,project.id);
-        item->setToolTip(project.name);
+        item->setData(Qt::UserRole + 1, project.directory);
+        item->setToolTip(project.directory.isEmpty() ? project.name
+            : project.name + QStringLiteral("\n双击打开目录：") + QDir::toNativeSeparators(project.directory));
         if (project.id == preferred) row = projectList_->count()-1;
     }
     if (projects.isEmpty()) {
@@ -199,6 +201,23 @@ void ProjectsPage::loadProjects(int preferred)
     details_->setEnabled(true);
     projectList_->setCurrentRow(row);
     selectProject(projectList_->item(row)->data(Qt::UserRole).toInt());
+}
+
+void ProjectsPage::openProjectDirectory(const QString &directory)
+{
+    if (directory.isEmpty()) return;
+    const QFileInfo folder(directory);
+    if (!folder.isDir()) {
+        QMessageBox::warning(this, QStringLiteral("无法打开项目目录"),
+            QStringLiteral("目录不存在、无法访问或不是文件夹，请在“项目设置”中更新目录。\n\n%1")
+                .arg(QDir::toNativeSeparators(directory)));
+        return;
+    }
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(folder.absoluteFilePath()))) {
+        QMessageBox::warning(this, QStringLiteral("无法打开项目目录"),
+            QStringLiteral("系统未能打开项目目录。\n\n%1")
+                .arg(QDir::toNativeSeparators(folder.absoluteFilePath())));
+    }
 }
 
 bool ProjectsPage::saveOutline()
@@ -277,7 +296,25 @@ void ProjectsPage::projectDialog(bool creating)
     save->setText(creating ? QStringLiteral("新建") : QStringLiteral("保存"));
     buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消"));
     save->setEnabled(!name->text().trimmed().isEmpty());
-    layout->addWidget(buttons);
+    auto *footer = new QHBoxLayout;
+    if (!creating) {
+        auto *remove = new QPushButton(QStringLiteral("删除项目…"), &dialog);
+        remove->setObjectName(QStringLiteral("deleteProjectButton"));
+        remove->setAutoDefault(false);
+        remove->setAccessibleDescription(QStringLiteral("打开删除确认，须输入完整确认文字"));
+        remove->setStyleSheet(QStringLiteral(
+            "QPushButton#deleteProjectButton { color: #b42318; background: transparent; border: 1px solid transparent; padding: 7px 8px; }"
+            "QPushButton#deleteProjectButton:hover { color: #912018; background: #fff1f0; }"
+            "QPushButton#deleteProjectButton:pressed { color: #7a271a; background: #fee4e2; }"
+            "QPushButton#deleteProjectButton:focus { border-color: #fda29b; }"));
+        footer->addWidget(remove);
+        connect(remove, &QPushButton::clicked, &dialog, [this, &dialog] {
+            if (deleteProject(&dialog)) dialog.reject();
+        });
+    }
+    footer->addStretch();
+    footer->addWidget(buttons);
+    layout->addLayout(footer);
     connect(name,&QLineEdit::textChanged,&dialog,[name,save]{ save->setEnabled(!name->text().trimmed().isEmpty()); });
     connect(browse,&QPushButton::clicked,&dialog,[&dialog,directory] {
         const QString selected=QFileDialog::getExistingDirectory(&dialog,QStringLiteral("选择项目目录"),directory->text());
@@ -298,13 +335,13 @@ void ProjectsPage::projectDialog(bool creating)
     dialog.exec();
 }
 
-void ProjectsPage::deleteProject()
+bool ProjectsPage::deleteProject(QWidget *parent)
 {
-    if (current_.id<=0) return;
+    if (current_.id<=0) return false;
     const int projectId = current_.id;
     const QString projectName = current_.name;
     const QString required = QStringLiteral("我确认删除（%1）").arg(projectName);
-    QDialog dialog(this);
+    QDialog dialog(parent);
     dialog.setObjectName(QStringLiteral("deleteProjectDialog"));
     dialog.setWindowTitle(QStringLiteral("确认删除项目"));
     dialog.resize(580, 240);
@@ -342,7 +379,7 @@ void ProjectsPage::deleteProject()
         loadProjects();
     });
     confirmation->setFocus();
-    dialog.exec();
+    return dialog.exec() == QDialog::Accepted;
 }
 
 void ProjectsPage::refreshWorkRecords()
@@ -437,12 +474,6 @@ void ProjectsPage::deleteWorkRecord()
 }
 bool ProjectsPage::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == deleteProjectButton_ && event->type() == QEvent::MouseButtonDblClick
-        && static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton
-        && deleteProjectButton_->isEnabled()) {
-        deleteProject();
-        return true;
-    }
     if (watched == outlineTitle_ && outlineTitle_->isEnabled()) {
         if (event->type() == QEvent::MouseButtonDblClick &&
             static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton) {

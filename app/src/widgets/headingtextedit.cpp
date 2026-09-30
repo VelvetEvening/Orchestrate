@@ -3,13 +3,16 @@
 
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QFontInfo>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QStackedWidget>
 #include <QTabBar>
 #include <QTextDocument>
 #include <QTextEdit>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 
 HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
 {
@@ -43,6 +46,10 @@ HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
     preview_->setReadOnly(true);
     preview_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
     preview_->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    for (auto *viewport : {source_->viewport(), preview_->viewport()}) {
+        viewport->installEventFilter(this);
+        viewport->setToolTip(QStringLiteral("Ctrl + 鼠标滚轮缩放文字"));
+    }
     pages_->addWidget(source_);
     pages_->addWidget(preview_);
     layout->addWidget(pages_, 1);
@@ -69,8 +76,56 @@ bool HeadingTextEdit::isPreviewMode() const { return tabs_->currentIndex() == 1;
 
 void HeadingTextEdit::updatePreview()
 {
-    preview_->document()->setDefaultFont(source_->font());
+    QFont font = source_->font();
+    if (font.pointSizeF() <= 0) font.setPointSizeF(QFontInfo(font).pointSizeF());
+    preview_->document()->setDefaultFont(font);
     HeadingText::render(*preview_->document(), source_->toPlainText());
+}
+
+bool HeadingTextEdit::eventFilter(QObject *watched, QEvent *event)
+{
+    if ((watched == source_->viewport() || watched == preview_->viewport())
+        && event->type() == QEvent::Wheel) {
+        auto *wheel = static_cast<QWheelEvent *>(event);
+        if (wheel->modifiers().testFlag(Qt::ControlModifier)) {
+            const qreal steps = wheel->angleDelta().y() != 0
+                ? wheel->angleDelta().y() / 120.0 : wheel->pixelDelta().y() / 40.0;
+            zoomText(steps);
+            wheel->accept();
+            return true;
+        }
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+void HeadingTextEdit::zoomText(qreal steps)
+{
+    if (qFuzzyIsNull(steps)) return;
+    QFont font = source_->font();
+    const qreal size = font.pointSizeF() > 0 ? font.pointSizeF() : QFontInfo(font).pointSizeF();
+    const qreal newSize = qBound(6.0, size + steps, 72.0);
+    if (qFuzzyCompare(size, newSize)) return;
+
+    const int position = preview_->textCursor().position();
+    const int anchor = preview_->textCursor().anchor();
+    const auto topCursor = preview_->cursorForPosition(QPoint(0, 0));
+    const int topPosition = topCursor.position();
+    const int topOffset = preview_->cursorRect(topCursor).top();
+
+    // Change only the display font, keeping the source text and undo history.
+    font.setPointSizeF(newSize);
+    source_->setFont(font);
+    if (!isPreviewMode()) return;
+    updatePreview();
+
+    // Rendering headings rebuilds the preview; retain its selection and visible text.
+    QTextCursor cursor(preview_->document());
+    cursor.setPosition(anchor);
+    cursor.setPosition(position, QTextCursor::KeepAnchor);
+    preview_->setTextCursor(cursor);
+    cursor.setPosition(topPosition);
+    auto *scroll = preview_->verticalScrollBar();
+    scroll->setValue(scroll->value() + preview_->cursorRect(cursor).top() - topOffset);
 }
 
 QString HeadingTextEdit::getText(QWidget *parent, const QString &title,

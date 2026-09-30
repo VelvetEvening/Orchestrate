@@ -17,6 +17,7 @@
 #include <QTemporaryDir>
 #include <QCalendarWidget>
 #include <QClipboard>
+#include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDateTimeEdit>
@@ -47,6 +48,8 @@
 #include <QTextEdit>
 #include <QTimer>
 #include <QUuid>
+#include <QUrl>
+#include <QWheelEvent>
 #include <QtMath>
 #include <functional>
 #include <memory>
@@ -109,6 +112,7 @@ void interact(const QString &title, const std::function<void(QDialog &)> &handle
             return;
         }
         handled = true;
+        timer.stop(); // Allow the handler to exercise a nested confirmation dialog.
         try { handler(*dialog); }
         catch (const std::exception &failure) {
             error = QString::fromUtf8(failure.what());
@@ -139,8 +143,26 @@ void enterEdit(HeadingTextEdit *editor)
     QTest::mouseClick(tabs,Qt::LeftButton,Qt::NoModifier,tabs->tabRect(0).center());
     require(!editor->isPreviewMode(),QStringLiteral("Edit tab did not activate"));
 }
+void sendWheel(QWidget *viewport, int angleDelta, Qt::KeyboardModifiers modifiers = Qt::ControlModifier,
+               int pixelDelta = 0)
+{
+    const QPoint position = viewport->rect().center();
+    QWheelEvent event(position, viewport->mapToGlobal(position), QPoint(0, pixelDelta), QPoint(0, angleDelta),
+                      Qt::NoButton, modifiers, Qt::NoScrollPhase, false);
+    QApplication::sendEvent(viewport, &event);
+    QCoreApplication::processEvents();
+}
 const QString sample = QStringLiteral("# 今日进展\n完成基础验证。\n## 下一阶段\n继续整理资料。\n### 注意事项\n保留原文 <b>不是粗体</b> 与 **星号**。");
 }
+
+class DirectoryUrlRecorder final : public QObject
+{
+    Q_OBJECT
+public:
+    QList<QUrl> urls;
+public slots:
+    void record(const QUrl &url) { urls.append(url); }
+};
 
 class HeadingTextTest final : public QObject
 {
@@ -445,6 +467,111 @@ private slots:
         QVERIFY(!editor.isPreviewMode());
         QVERIFY(editor.toPlainText().isEmpty());
     }
+    void editorWheelZoomPreservesState_data()
+    {
+        QTest::addColumn<bool>("pixelFont");
+        QTest::newRow("point-font") << false;
+        QTest::newRow("pixel-font") << true;
+    }
+    void editorWheelZoomPreservesState()
+    {
+        QFETCH(bool, pixelFont);
+        HeadingTextEdit editor, other;
+        QFont font = editor.font();
+        if (pixelFont) font.setPixelSize(20);
+        else font.setPointSizeF(12);
+        editor.setFont(font);
+        editor.resize(600, 400);
+        editor.show();
+        editor.setPlainText(sample);
+        auto *source = editor.findChild<QPlainTextEdit *>();
+        auto *preview = editor.findChild<QTextEdit *>();
+        auto *tabs = editor.findChild<QTabBar *>();
+        const QFont tabsFont = tabs->font();
+        const QFont otherFont = other.findChild<QPlainTextEdit *>()->font();
+        editor.setPreviewMode(true);
+        const qreal initialSize = preview->document()->defaultFont().pointSizeF();
+        editor.setPreviewMode(false);
+        source->moveCursor(QTextCursor::End);
+        source->insertPlainText(QStringLiteral("补充"));
+        QTextCursor selection = source->textCursor();
+        selection.movePosition(QTextCursor::PreviousCharacter, QTextCursor::KeepAnchor, 2);
+        source->setTextCursor(selection);
+        const int position = selection.position(), anchor = selection.anchor();
+        const bool modified = source->document()->isModified();
+        QSignalSpy changes(&editor, &HeadingTextEdit::textChanged);
+
+        sendWheel(source->viewport(), 120);
+        QCOMPARE(source->font().pointSizeF(), initialSize + 1);
+        QCOMPARE(editor.toPlainText(), sample + QStringLiteral("补充"));
+        QCOMPARE(source->textCursor().position(), position);
+        QCOMPARE(source->textCursor().anchor(), anchor);
+        QCOMPARE(source->document()->isModified(), modified);
+        editor.setPreviewMode(true);
+        selection = preview->textCursor();
+        selection.setPosition(0);
+        selection.setPosition(4, QTextCursor::KeepAnchor);
+        preview->setTextCursor(selection);
+        const QString selected = preview->textCursor().selectedText();
+        sendWheel(preview->viewport(), 120);
+        QCOMPARE(preview->textCursor().selectedText(), selected);
+        QCOMPARE(source->font().pointSizeF(), initialSize + 2);
+        QCOMPARE(preview->document()->defaultFont().pointSizeF(), initialSize + 2);
+        const qreal scales[] = {1.6, 1.35, 1.15};
+        for (int level = 0; level < 3; ++level) {
+            const auto format = preview->document()->findBlockByNumber(level * 2).begin().fragment().charFormat();
+            QCOMPARE(format.fontPointSize(), (initialSize + 2) * scales[level]);
+        }
+        QCOMPARE(changes.count(), 0);
+        QCOMPARE(tabs->font(), tabsFont);
+        QCOMPARE(other.findChild<QPlainTextEdit *>()->font(), otherFont);
+        editor.setPreviewMode(false);
+        QCOMPARE(source->textCursor().position(), position);
+        QCOMPARE(source->textCursor().anchor(), anchor);
+        source->undo();
+        QCOMPARE(editor.toPlainText(), sample);
+        source->redo();
+        QCOMPARE(editor.toPlainText(), sample + QStringLiteral("补充"));
+    }
+    void editorWheelZoomScrollingAndLimits()
+    {
+        HeadingTextEdit editor;
+        editor.resize(500, 320);
+        editor.show();
+        editor.setPlainText(sample.repeated(30));
+        auto *source = editor.findChild<QPlainTextEdit *>();
+        auto *preview = editor.findChild<QTextEdit *>();
+        const qreal initialSize = source->font().pointSizeF();
+        sendWheel(source->viewport(), -120, Qt::NoModifier);
+        QVERIFY(source->verticalScrollBar()->value() > 0);
+        QCOMPARE(source->font().pointSizeF(), initialSize);
+        sendWheel(source->viewport(), 60);
+        QCOMPARE(source->font().pointSizeF(), initialSize + 0.5);
+        sendWheel(source->viewport(), 0, Qt::ControlModifier, -20);
+        QCOMPARE(source->font().pointSizeF(), initialSize);
+        editor.setPreviewMode(true);
+        auto *scroll = preview->verticalScrollBar();
+        scroll->setValue(scroll->maximum() / 2);
+        const auto top = preview->cursorForPosition(QPoint(0, 0));
+        const int topPosition = top.position();
+        const int topOffset = preview->cursorRect(top).top();
+        sendWheel(preview->viewport(), 120);
+        QTextCursor restored(preview->document());
+        restored.setPosition(topPosition);
+        QVERIFY(qAbs(preview->cursorRect(restored).top() - topOffset) <= 1);
+        const int beforeScroll = scroll->value();
+        sendWheel(preview->viewport(), -120, Qt::NoModifier);
+        QVERIFY(scroll->value() > beforeScroll);
+        QCOMPARE(source->font().pointSizeF(), initialSize + 1);
+        sendWheel(preview->viewport(), 12000);
+        QCOMPARE(source->font().pointSizeF(), 72.0);
+        sendWheel(preview->viewport(), -12000);
+        QCOMPARE(source->font().pointSizeF(), 6.0);
+        sendWheel(preview->viewport(), 120);
+        QCOMPARE(source->font().pointSizeF(), 7.0);
+        QCOMPARE(editor.toPlainText(), sample.repeated(30));
+        QVERIFY(!source->document()->isModified());
+    }
     void listWrappingAndSelection()
     {
         QListWidget list;
@@ -690,6 +817,93 @@ private slots:
         QCOMPARE(collection->findChild<QListWidget *>(QStringLiteral("diaryCollectionList"))->count(),0);
     }
 
+    void projectDirectoryDoubleClick()
+    {
+        QTemporaryDir folder;
+        QVERIFY(folder.isValid());
+        const QString firstPath = folder.filePath(QStringLiteral("项目 中文 #100%"));
+        const QString secondPath = folder.filePath(QStringLiteral("另一项目"));
+        QVERIFY(QDir().mkpath(firstPath));
+        QVERIFY(QDir().mkpath(secondPath));
+        int first = 0, second = 0;
+        QVERIFY(database_->addProject(QStringLiteral("项目一"), firstPath, sample, &first));
+        QVERIFY(database_->addProject(QStringLiteral("项目二"), secondPath, sample, &second));
+        QVERIFY(database_->setSetting("projects.last_selected", QString::number(first)));
+        DirectoryUrlRecorder opened;
+        QDesktopServices::setUrlHandler("file", &opened, "record");
+        const auto resetHandler = qScopeGuard([] { QDesktopServices::unsetUrlHandler("file"); });
+        MainWindow window;
+        window.show();
+        button(window, QStringLiteral("项目记录"))->click();
+        auto *list = window.findChild<QListWidget *>(QStringLiteral("projectList"));
+        const auto findItem = [list](int id) -> QListWidgetItem * {
+            for (int row = 0; row < list->count(); ++row)
+                if (list->item(row)->data(Qt::UserRole).toInt() == id) return list->item(row);
+            return nullptr;
+        };
+        for (const auto id : {second, first}) {
+            auto *item = findItem(id);
+            QVERIFY(item);
+            const QPoint position = list->visualItemRect(item).center();
+            const int count = opened.urls.size();
+            QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, position);
+            QCOMPARE(opened.urls.size(), count);
+            QCOMPARE(list->currentItem()->data(Qt::UserRole).toInt(), id);
+            QTest::mouseDClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, position);
+            QCOMPARE(opened.urls.size(), count + 1);
+            QCOMPARE(opened.urls.last(), QUrl::fromLocalFile(id == first ? firstPath : secondPath));
+        }
+        // Changing the directory refreshes the target used by the existing list.
+        interact(QStringLiteral("项目设置"), [&](QDialog &dialog) {
+            dialog.findChild<QLineEdit *>(QStringLiteral("projectDirectory"))->setText(secondPath);
+            dialog.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Save)->click();
+        }, [&] { button(window, QStringLiteral("项目设置"))->click(); });
+        auto *item = findItem(first);
+        QVERIFY(item);
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, list->visualItemRect(item).center());
+        QTest::mouseDClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, list->visualItemRect(item).center());
+        QCOMPARE(opened.urls.size(), 3);
+        QCOMPARE(opened.urls.last(), QUrl::fromLocalFile(secondPath));
+    }
+    void projectDirectoryMissingOrNotFolder()
+    {
+        QTemporaryDir folder;
+        QVERIFY(folder.isValid());
+        QFile file(folder.filePath(QStringLiteral("普通文件.txt")));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.close();
+        int empty = 0, missing = 0, notFolder = 0;
+        QVERIFY(database_->addProject(QStringLiteral("未设置目录"), QString(), sample, &empty));
+        QVERIFY(database_->addProject(QStringLiteral("目录已移走"), folder.filePath("missing"), sample, &missing));
+        QVERIFY(database_->addProject(QStringLiteral("路径是文件"), file.fileName(), sample, &notFolder));
+        DirectoryUrlRecorder opened;
+        QDesktopServices::setUrlHandler("file", &opened, "record");
+        const auto resetHandler = qScopeGuard([] { QDesktopServices::unsetUrlHandler("file"); });
+        MainWindow window;
+        window.show();
+        button(window, QStringLiteral("项目记录"))->click();
+        auto *list = window.findChild<QListWidget *>(QStringLiteral("projectList"));
+        for (int row = 0; row < list->count(); ++row) {
+            auto *item = list->item(row);
+            const QPoint position = list->visualItemRect(item).center();
+            QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, position);
+            const auto open = [&] { QTest::mouseDClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, position); };
+            if (item->data(Qt::UserRole).toInt() == empty) {
+                open();
+                QVERIFY(!QApplication::activeModalWidget());
+            } else {
+                interact(QStringLiteral("无法打开项目目录"), [](QDialog &dialog) {
+                    auto *message = qobject_cast<QMessageBox *>(&dialog);
+                    require(message && message->text().contains(QStringLiteral("项目设置")), "Missing folder guidance");
+                    message->accept();
+                }, open);
+            }
+        }
+        QVERIFY(opened.urls.isEmpty());
+        QCOMPARE(database_->projects().size(), 3);
+        QVERIFY(QFileInfo::exists(file.fileName()));
+    }
+
     void projectDeletionRequiresExactConfirmation()
     {
         QTemporaryDir folder;
@@ -709,36 +923,51 @@ private slots:
         window.show();
         button(window, QStringLiteral("项目记录"))->click();
         auto *page = window.findChild<ProjectsPage *>();
-        auto *remove = page->findChild<QPushButton *>(QStringLiteral("deleteProjectButton"));
-        QVERIFY(remove);
-        QTest::mouseClick(remove, Qt::LeftButton);
-        QVERIFY(!QApplication::activeModalWidget());
-        QCOMPARE(database_->projects().size(), 2);
-        interact(QStringLiteral("确认删除项目"), [&](QDialog &dialog) {
-            auto *input = dialog.findChild<QLineEdit *>(QStringLiteral("deleteProjectConfirmation"));
-            auto *buttons = dialog.findChild<QDialogButtonBox *>();
-            auto *confirm = buttons->button(QDialogButtonBox::Ok);
-            require(input && input->text().isEmpty() && !confirm->isEnabled(), "Initial confirmation must be empty");
-            for (const auto &wrong : {QStringLiteral("我确认删除"), QStringLiteral("我确认删除（保留项目）"),
-                                      required + QStringLiteral(" "), QStringLiteral("我确认删除(%1)").arg(name)}) {
-                input->setText(wrong);
-                require(!confirm->isEnabled(), "Incorrect confirmation was accepted");
-                QMetaObject::invokeMethod(buttons, "accepted", Qt::DirectConnection);
-                require(dialog.isVisible() && database_->projects().size() == 2, "Guard was bypassed");
-            }
-            input->setText(required);
-            require(confirm->isEnabled(), "Exact project name should enable confirmation");
-            capture(dialog, QStringLiteral("project-delete-confirmation"));
-            buttons->button(QDialogButtonBox::Cancel)->click();
-        }, [&] { QTest::mouseDClick(remove, Qt::LeftButton); });
+        QVERIFY(!page->findChild<QPushButton *>(QStringLiteral("deleteProjectButton")));
+        capture(window, QStringLiteral("projects-delete-hidden"));
+        interact(QStringLiteral("项目设置"), [&](QDialog &settings) {
+            auto *remove = settings.findChild<QPushButton *>(QStringLiteral("deleteProjectButton"));
+            require(remove && remove->isVisible() && !remove->autoDefault() && !remove->isDefault(),
+                    "Delete entry must be in settings and must not be the default action");
+            capture(settings, QStringLiteral("project-settings-delete"));
+            auto *nameInput = settings.findChild<QLineEdit *>(QStringLiteral("projectName"));
+            nameInput->setText(QStringLiteral("尚未保存的新名称"));
+            interact(QStringLiteral("确认删除项目"), [&](QDialog &dialog) {
+                require(dialog.parentWidget() == &settings, "Confirmation must belong to project settings");
+                auto *input = dialog.findChild<QLineEdit *>(QStringLiteral("deleteProjectConfirmation"));
+                auto *buttons = dialog.findChild<QDialogButtonBox *>();
+                auto *confirm = buttons->button(QDialogButtonBox::Ok);
+                require(input && input->text().isEmpty() && !confirm->isEnabled(), "Initial confirmation must be empty");
+                for (const auto &wrong : {QStringLiteral("我确认删除"), QStringLiteral("我确认删除（保留项目）"),
+                                          required + QStringLiteral(" "), QStringLiteral("我确认删除(%1)").arg(name)}) {
+                    input->setText(wrong);
+                    require(!confirm->isEnabled(), "Incorrect confirmation was accepted");
+                    QMetaObject::invokeMethod(buttons, "accepted", Qt::DirectConnection);
+                    require(dialog.isVisible() && database_->projects().size() == 2, "Guard was bypassed");
+                }
+                input->setText(required);
+                require(confirm->isEnabled(), "Exact project name should enable confirmation");
+                capture(dialog, QStringLiteral("project-delete-confirmation"));
+                buttons->button(QDialogButtonBox::Cancel)->click();
+            }, [&] { QTest::mouseClick(remove, Qt::LeftButton); });
+            require(settings.isVisible() && nameInput->text() == QStringLiteral("尚未保存的新名称"),
+                    "Cancelling deletion must preserve unfinished settings");
+            settings.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Cancel)->click();
+        }, [&] { button(*page, QStringLiteral("项目设置"))->click(); });
         QCOMPARE(database_->projects().size(), 2);
         QCOMPARE(database_->workRecords(id).size(), 1);
-        interact(QStringLiteral("确认删除项目"), [&](QDialog &dialog) {
-            auto *input = dialog.findChild<QLineEdit *>(QStringLiteral("deleteProjectConfirmation"));
-            require(input->text().isEmpty(), "Reopened dialog retained confirmation");
-            input->setText(required);
-            dialog.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
-        }, [&] { QTest::mouseDClick(remove, Qt::LeftButton); });
+        interact(QStringLiteral("项目设置"), [&](QDialog &settings) {
+            require(settings.findChild<QLineEdit *>(QStringLiteral("projectName"))->text() == name,
+                    "Cancelling settings must not rename the project");
+            auto *remove = settings.findChild<QPushButton *>(QStringLiteral("deleteProjectButton"));
+            interact(QStringLiteral("确认删除项目"), [&](QDialog &dialog) {
+                auto *input = dialog.findChild<QLineEdit *>(QStringLiteral("deleteProjectConfirmation"));
+                require(input->text().isEmpty(), "Reopened dialog retained confirmation");
+                input->setText(required);
+                dialog.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+            }, [&] { QTest::mouseClick(remove, Qt::LeftButton); });
+            require(!settings.isVisible(), "Deleting the project must also close its settings");
+        }, [&] { button(*page, QStringLiteral("项目设置"))->click(); });
         QCOMPARE(database_->projects().size(), 1);
         QCOMPARE(database_->projects().first().id, other);
         QVERIFY(database_->workRecords(id).isEmpty());
@@ -814,6 +1043,7 @@ private slots:
         QVERIFY(page);
         QVERIFY(!page->findChild<QLineEdit *>(QStringLiteral("projectName")));
         interact(QStringLiteral("新建项目"), [&](QDialog &dialog) {
+            require(!dialog.findChild<QPushButton *>(QStringLiteral("deleteProjectButton")), "New projects must not offer deletion");
             require(!button(dialog,QStringLiteral("新建"))->isEnabled(),QStringLiteral("Blank project enabled"));
             dialog.findChild<QLineEdit *>(QStringLiteral("projectName"))->setText(QStringLiteral("# 项目名称仍是普通字段"));
             button(dialog,QStringLiteral("新建"))->click();
@@ -949,15 +1179,28 @@ private slots:
         QCOMPARE(page->findChildren<QDialog *>(QStringLiteral("outlineWindow")).size(),1);
         capture(*floating,QStringLiteral("project-outline-window"));
         QVERIFY(outline->height()>400);
+        auto *preview=outline->findChild<QTextEdit *>();
+        const qreal originalSize=preview->document()->defaultFont().pointSizeF();
+        QSignalSpy zoomChanges(outline,&HeadingTextEdit::textChanged);
+        sendWheel(preview->viewport(),240);
+        QCOMPARE(preview->document()->defaultFont().pointSizeF(),originalSize+2);
+        QCOMPARE(zoomChanges.count(),0);
+        QCOMPARE(outline->toPlainText(),sample);
+        capture(*floating,QStringLiteral("project-outline-zoom-preview"));
         enterEdit(outline);
         auto *source=outline->findChild<QPlainTextEdit *>();
         QVERIFY(source);
+        sendWheel(source->viewport(),120);
+        QCOMPARE(source->font().pointSizeF(),originalSize+3);
+        QCOMPARE(zoomChanges.count(),0);
+        capture(*floating,QStringLiteral("project-outline-zoom-editor"));
         source->moveCursor(QTextCursor::End);
         source->insertPlainText(QStringLiteral("\n新增内容"));
         floating->close();
         QVERIFY(!outline->isVisible());
         QTest::keyClick(title,Qt::Key_Return);
         QVERIFY(floating->isVisible());
+        QCOMPARE(preview->document()->defaultFont().pointSizeF(),originalSize+3);
         enterEdit(outline);
         QVERIFY(source->document()->isUndoAvailable());
         source->undo();

@@ -27,8 +27,12 @@ signals:
     void textChanged();
     void previewModeChanged(bool preview);
 
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 private:
     void updatePreview();
+    void zoomText(qreal steps);
     QTabBar *tabs_;
     QStackedWidget *pages_;
     QPlainTextEdit *source_;

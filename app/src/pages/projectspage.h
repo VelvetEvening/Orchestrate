@@ -21,8 +21,9 @@ private:
     void loadProjects(int preferred = 0);
     void selectProject(int id);
     void projectDialog(bool creating);
+    void openProjectDirectory(const QString &directory);
     bool saveOutline();
-    void deleteProject();
+    bool deleteProject(QWidget *parent);
     void refreshWorkRecords();
     void recordDialog(bool creating);
     void deleteWorkRecord();
@@ -43,6 +44,5 @@ private:
     class QLineEdit *search_;
     QPushButton *editWorkButton_;
     QPushButton *deleteWorkButton_;
-    QPushButton *deleteProjectButton_;
     QPointer<QDialog> outlineWindow_;
 };
