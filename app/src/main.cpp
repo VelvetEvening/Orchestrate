@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "version.h"
 #include "platform/instancelock.h"
+#include "update/updatewidget.h"
 
 #include <QApplication>
 #include <QIcon>
@@ -11,6 +12,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSaveFile>
+#include <QTimer>
 
 int main(int argc, char *argv[])
 {
@@ -49,15 +51,19 @@ int main(int argc, char *argv[])
         if (healthFile.fileName() == QStringLiteral("startup.json")
             && workspace.fileName().startsWith(QStringLiteral(".Orchestrate-update-"))
             && workspace.dir().absolutePath() == QFileInfo(app.applicationDirPath()).dir().absolutePath()) {
-            QSaveFile file(healthFile.absoluteFilePath());
-            const QJsonObject health {{QStringLiteral("version"), app.applicationVersion()},
-                                      {QStringLiteral("process_id"), app.applicationPid()}};
-            if (file.open(QIODevice::WriteOnly)) {
-                file.write(QJsonDocument(health).toJson());
-                file.commit();
-            }
+            // Confirm only once the initialized window's event loop is running.
+            QTimer::singleShot(0, &window, [healthFile] {
+                QSaveFile file(healthFile.absoluteFilePath());
+                const QJsonObject health {{QStringLiteral("version"), QCoreApplication::applicationVersion()},
+                                          {QStringLiteral("process_id"), QCoreApplication::applicationPid()}};
+                if (file.open(QIODevice::WriteOnly)) {
+                    file.write(QJsonDocument(health).toJson());
+                    file.commit();
+                }
+            });
         }
     }
+    if (window.ready()) scheduleCompletedUpdateCleanup();
 
     return app.exec();
 }

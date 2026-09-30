@@ -125,6 +125,10 @@ if (WIN32)
     find_program(WINDOWS_POWERSHELL NAMES powershell.exe)
     if (WINDOWS_POWERSHELL)
         add_test(NAME portable_update COMMAND "${WINDOWS_POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/Test-PortableUpdate.ps1")
+        add_test(NAME update_tasks COMMAND "${WINDOWS_POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/Test-UpdateTasks.ps1")
+        add_test(NAME update_startup COMMAND "${WINDOWS_POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/Test-UpdateStartup.ps1"
+            -Application "$<TARGET_FILE:Orchestrate>")
+        set_tests_properties(update_startup PROPERTIES ENVIRONMENT "PATH=${test_path};QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
         add_test(NAME shutdown_process_identity
             COMMAND "${WINDOWS_POWERSHELL}" -NoProfile -File "${CMAKE_CURRENT_SOURCE_DIR}/Test-ShutdownProcessIdentity.ps1")
         add_test(NAME shutdown_disable

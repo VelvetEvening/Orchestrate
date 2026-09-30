@@ -18,6 +18,7 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QShowEvent>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 
@@ -38,6 +39,28 @@ QStringList scriptArguments(const QString &workspace, const QString &mode)
             QStringLiteral("Bypass"), QStringLiteral("-File"), QDir::toNativeSeparators(workspace + QStringLiteral("/Update-Orchestrate.ps1")),
             QStringLiteral("-PlanPath"), QDir::toNativeSeparators(workspace + QStringLiteral("/plan.json")), mode};
 }
+}
+
+void scheduleCompletedUpdateCleanup()
+{
+    const QString install = QCoreApplication::applicationDirPath();
+    const QDir parent = QFileInfo(install).dir();
+    const QString script = install + QStringLiteral("/updater/Update-Orchestrate.ps1");
+    if (!QFileInfo::exists(script)
+        || parent.entryList({QStringLiteral(".Orchestrate-update-*")}, QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot).isEmpty()) return;
+    QTimer::singleShot(1500, QCoreApplication::instance(), [install, parent, script] {
+        QProcess cleanup;
+        cleanup.setProgram(powershell());
+        cleanup.setArguments({QStringLiteral("-NoProfile"), QStringLiteral("-NonInteractive"),
+            QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"), QStringLiteral("-File"),
+            QDir::toNativeSeparators(script), QStringLiteral("-CleanupCompleted"),
+            QStringLiteral("-InstallDirectory"), QDir::toNativeSeparators(install)});
+        cleanup.setWorkingDirectory(parent.absolutePath());
+#ifdef Q_OS_WIN
+        cleanup.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args) { args->flags |= CREATE_NO_WINDOW; });
+#endif
+        cleanup.startDetached();
+    });
 }
 
 UpdateWidget::UpdateWidget(QWidget *parent) : QWidget(parent)
@@ -98,7 +121,10 @@ void UpdateWidget::refreshResult()
     const QByteArray data = file.read(64 * 1024);
     if (data == lastResult_) return;
     lastResult_ = data;
-    const QString message = QJsonDocument::fromJson(data).object().value(QStringLiteral("message")).toString();
+    const QJsonObject result = QJsonDocument::fromJson(data).object();
+    QString message = result.value(QStringLiteral("message")).toString();
+    const QString cleanupError = result.value(QStringLiteral("cleanup_error")).toString();
+    if (!cleanupError.isEmpty()) message += QStringLiteral("\n") + cleanupError;
     if (!message.isEmpty()) status_->setText(message);
 }
 
@@ -282,7 +308,7 @@ bool UpdateWidget::startInstaller(QString *error)
     QProcess installer;
     installer.setProgram(powershell());
     installer.setArguments(scriptArguments(workspace_->path(), QStringLiteral("-Apply")));
-    installer.setWorkingDirectory(workspace_->path());
+    installer.setWorkingDirectory(QFileInfo(QCoreApplication::applicationDirPath()).dir().absolutePath());
 #ifdef Q_OS_WIN
     installer.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args) { args->flags |= CREATE_NO_WINDOW; });
 #endif

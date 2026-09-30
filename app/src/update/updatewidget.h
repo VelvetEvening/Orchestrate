@@ -16,6 +16,8 @@ class QCryptographicHash;
 class QProcess;
 class QShowEvent;
 
+void scheduleCompletedUpdateCleanup();
+
 class UpdateWidget final : public QWidget {
     Q_OBJECT
 public:

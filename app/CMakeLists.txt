@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Orchestrate VERSION 1.1.1 LANGUAGES CXX)
+project(Orchestrate VERSION 1.1.2 LANGUAGES CXX)
 
 configure_file(src/version.h.in generated/version.h @ONLY)
 
@@ -59,6 +59,10 @@ qt_add_executable(Orchestrate WIN32
 
 if (WIN32)
     target_sources(Orchestrate PRIVATE resources/app.rc)
+    # MinGW's resource compiler does not track included headers in Ninja.
+    # Rebuild Explorer's version resource whenever the CMake version changes.
+    set_property(SOURCE resources/app.rc APPEND PROPERTY OBJECT_DEPENDS
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/version.h")
     # 标题栏配色通过 DWM 设置
     target_link_libraries(Orchestrate PRIVATE dwmapi)
 endif()
@@ -86,14 +90,11 @@ add_custom_target(SyncBuiltinTools
             "-DTOOL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tools"
             "-DTOOL_DESTINATION=$<TARGET_FILE_DIR:Orchestrate>/tools"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/SyncBuiltinTools.cmake"
-    COMMENT "Syncing built-in tools without runtime state"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/updater" "$<TARGET_FILE_DIR:Orchestrate>/updater"
+    COMMENT "Syncing built-in tools and updater without runtime state"
     VERBATIM
 )
 add_dependencies(Orchestrate SyncBuiltinTools)
-add_custom_command(TARGET Orchestrate POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/updater" "$<TARGET_FILE_DIR:Orchestrate>/updater"
-    VERBATIM
-)
 
 install(TARGETS Orchestrate
     RUNTIME DESTINATION bin
