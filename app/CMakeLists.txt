@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Orchestrate VERSION 1.0.0 LANGUAGES CXX)
+project(Orchestrate VERSION 1.1.0 LANGUAGES CXX)
 
 configure_file(src/version.h.in generated/version.h @ONLY)
 
@@ -10,7 +10,15 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 6.11.2 REQUIRED COMPONENTS Widgets Sql)
+find_package(Qt6 6.11.2 REQUIRED COMPONENTS Widgets Sql Network)
+
+add_library(OrchestrateUpdate STATIC
+    src/update/releaseinfo.cpp src/update/releaseinfo.h
+    src/update/updatewidget.cpp src/update/updatewidget.h
+    src/platform/instancelock.cpp src/platform/instancelock.h
+)
+target_link_libraries(OrchestrateUpdate PUBLIC Qt6::Widgets Qt6::Network)
+target_include_directories(OrchestrateUpdate PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_library(OrchestrateAutoStart STATIC src/platform/autostart.cpp src/platform/autostart.h)
 target_link_libraries(OrchestrateAutoStart PUBLIC Qt6::Widgets)
@@ -55,7 +63,7 @@ if (WIN32)
     target_link_libraries(Orchestrate PRIVATE dwmapi)
 endif()
 
-target_link_libraries(Orchestrate PRIVATE Qt6::Widgets Qt6::Sql OrchestrateText OrchestrateShortcut OrchestrateAutoStart)
+target_link_libraries(Orchestrate PRIVATE Qt6::Widgets Qt6::Sql OrchestrateText OrchestrateShortcut OrchestrateAutoStart OrchestrateUpdate)
 
 target_include_directories(Orchestrate PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/generated
@@ -82,6 +90,10 @@ add_custom_target(SyncBuiltinTools
     VERBATIM
 )
 add_dependencies(Orchestrate SyncBuiltinTools)
+add_custom_command(TARGET Orchestrate POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/updater" "$<TARGET_FILE_DIR:Orchestrate>/updater"
+    VERBATIM
+)
 
 install(TARGETS Orchestrate
     RUNTIME DESTINATION bin
@@ -90,6 +102,7 @@ install(DIRECTORY tools/
     DESTINATION bin/tools
     PATTERN "state" EXCLUDE
 )
+install(DIRECTORY updater/ DESTINATION bin/updater)
 
 include(CTest)
 if (BUILD_TESTING)

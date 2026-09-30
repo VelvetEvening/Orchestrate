@@ -201,6 +201,9 @@ private slots:
             QVERIFY(check->isChecked());
             QVERIFY(status->text().contains(QStringLiteral("已开启")));
             capture(window, QStringLiteral("settings-autostart"));
+            auto *updateCheck = window.findChild<QPushButton *>(QStringLiteral("checkUpdatesButton"));
+            QVERIFY(updateCheck && updateCheck->isVisible());
+            QVERIFY(window.findChild<QLabel *>(QStringLiteral("updateStatus")));
             window.resize(980, 640);
             QCoreApplication::processEvents();
             auto *retry = button(window, QStringLiteral("重试注册 Alt+X"));
@@ -675,6 +678,7 @@ private slots:
             QVERIFY(sql.open());
             QSqlQuery query(sql);
             QVERIFY2(query.exec(QStringLiteral("ALTER TABLE diary_entries DROP COLUMN title")),qPrintable(query.lastError().text()));
+            QVERIFY(query.exec(QStringLiteral("PRAGMA user_version = 0")));
         }
         QSqlDatabase::removeDatabase(connection);
         AppDatabase migrated;
@@ -1252,6 +1256,7 @@ private slots:
             QVERIFY(sql.open());
             QSqlQuery query(sql);
             QVERIFY2(query.exec(QStringLiteral("ALTER TABLE project_work_records DROP COLUMN title")),qPrintable(query.lastError().text()));
+            QVERIFY(query.exec(QStringLiteral("PRAGMA user_version = 0")));
         }
         QSqlDatabase::removeDatabase(connection);
         AppDatabase migrated;

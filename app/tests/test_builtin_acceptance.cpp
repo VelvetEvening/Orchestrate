@@ -270,6 +270,7 @@ void seedLegacy(bool grouped)
         require(sql.open(), sql.lastError().text());
         QSqlQuery query(sql);
         require(query.exec(QStringLiteral("ALTER TABLE automation_tools DROP COLUMN builtin")), query.lastError().text());
+        require(query.exec(QStringLiteral("PRAGMA user_version = 0")), query.lastError().text());
         sql.close();
     }
     QSqlDatabase::removeDatabase(connection);

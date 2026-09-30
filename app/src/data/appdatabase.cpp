@@ -59,6 +59,7 @@ bool AppDatabase::open(QString *errorMessage)
     }
 
     databasePath_ = QDir(portableDataDirectory).filePath(QStringLiteral("orchestrate.sqlite3"));
+    const bool existingDatabase = QFileInfo(databasePath_).size() > 0;
 
     // 早期版本曾使用 Qt 的 AppDataLocation。第一次切换到便携目录时，
     // 尝试把已有数据库迁移过来，避免丢失已经录入的内容。
@@ -103,9 +104,53 @@ bool AppDatabase::open(QString *errorMessage)
         return false;
     }
 
-    if (!initializeSchema(errorMessage)) {
+    QSqlQuery schemaVersion(database);
+    if (!schemaVersion.exec(QStringLiteral("PRAGMA user_version")) || !schemaVersion.next()) {
+        setError(errorMessage, schemaVersion);
         database.close();
         return false;
+    }
+    const int version = schemaVersion.value(0).toInt();
+    schemaVersion.finish();
+    if (version > 1) {
+        database.close();
+        return fail(errorMessage, QStringLiteral("数据库来自更新版本的 Orchestrate。请使用新版程序，或同时恢复旧版程序与数据库备份。"));
+    }
+    if (version == 1) return true;
+
+    if (existingDatabase || QFileInfo(databasePath_).size() > 0) {
+        const QString backupDirectory = QDir(portableDataDirectory).filePath(QStringLiteral("backups"));
+        if (!QDir().mkpath(backupDirectory)) {
+            database.close();
+            return fail(errorMessage, QStringLiteral("无法创建数据库迁移备份目录。"));
+        }
+        const QString backupPath = QDir(backupDirectory).filePath(QStringLiteral("schema-0-%1-%2.sqlite3")
+            .arg(QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-HHmmss")), QUuid::createUuid().toString(QUuid::Id128)));
+        QSqlQuery backup(database);
+        backup.prepare(QStringLiteral("VACUUM INTO ?"));
+        backup.addBindValue(backupPath);
+        if (!backup.exec()) {
+            setError(errorMessage, backup);
+            database.close();
+            return false;
+        }
+    }
+    if (!database.transaction()) {
+        database.close();
+        return fail(errorMessage, QStringLiteral("无法开始数据库迁移事务。"));
+    }
+    QSqlQuery setVersion(database);
+    if (!initializeSchema(errorMessage) || !setVersion.exec(QStringLiteral("PRAGMA user_version = 1"))) {
+        if (errorMessage && errorMessage->isEmpty()) setError(errorMessage, setVersion);
+        database.rollback();
+        database.close();
+        return false;
+    }
+    if (!database.commit()) {
+        const QString message = database.lastError().text();
+        database.rollback();
+        database.close();
+        return fail(errorMessage, message);
     }
     return true;
 }

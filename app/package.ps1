@@ -1,5 +1,5 @@
 param(
-    [string]$ReleaseTag = 'v1.0.0',
+    [string]$ReleaseTag = 'v1.1.0',
     [string]$QtRoot = 'D:/CodeTools/Qt/Qt/6.11.2/mingw_64',
     [string]$MinGWRoot = 'D:/CodeTools/Qt/Qt/Tools/mingw1310_64',
     [string]$CMakeExe = 'D:/CodeTools/Qt/Qt/Tools/CMake_64/bin/cmake.exe',
@@ -72,7 +72,7 @@ try {
         Where-Object { $_.BaseName -ne 'qsqlite' } | ForEach-Object { $_.BaseName })
     # This Widgets application uses raster rendering and SQLite only.
     Run "$QtRoot/bin/windeployqt.exe" @('--release', '--no-translations', '--compiler-runtime',
-        '--no-opengl-sw', '--no-system-d3d-compiler', '--skip-plugin-types', 'generic,networkinformation,tls',
+        '--no-opengl-sw', '--no-system-d3d-compiler', '--skip-plugin-types', 'generic,networkinformation',
         '--exclude-plugins', ($extraSqlPlugins -join ','), '--dir', $packageRoot, $executable)
     Write-Utf8 (Join-Path $packageRoot 'qt.conf') "[Paths]`nPrefix=.`nPlugins=.`n"
 
@@ -105,9 +105,10 @@ try {
         compiler = 'MinGW GCC'; built_at_utc = [DateTime]::UtcNow.ToString('o') }
     Write-Utf8 (Join-Path $packageRoot 'build-info.json') (($info | ConvertTo-Json) + "`n")
 
-    foreach ($required in @('Orchestrate.exe', 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Sql.dll',
+    foreach ($required in @('Orchestrate.exe', 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Sql.dll', 'Qt6Network.dll',
             'libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll', 'platforms/qwindows.dll',
-            'sqldrivers/qsqlite.dll', 'tools/scheduled-shutdown/orchestrate-tool.json')) {
+            'sqldrivers/qsqlite.dll', 'tls/qschannelbackend.dll', 'updater/Update-Orchestrate.ps1',
+            'tools/scheduled-shutdown/orchestrate-tool.json')) {
         if (-not (Test-Path -LiteralPath (Join-Path $packageRoot $required))) { throw "Missing runtime file: $required" }
     }
     if ((Get-Item -LiteralPath $executable).VersionInfo.ProductVersion -ne $version) { throw 'Executable product version differs from CMake version.' }

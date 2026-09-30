@@ -1029,6 +1029,14 @@ QString AutomationPage::ungroupedName() const
     return name.isEmpty() ? QStringLiteral("未分组") : name;
 }
 
+bool AutomationPage::hasRunningCommands() const
+{
+    for (const auto &process : runningProcesses_) {
+        if (process && process->state() != QProcess::NotRunning) return true;
+    }
+    return false;
+}
+
 int AutomationPage::builtinToolGroupId()
 {
     // The group is created once, on first start. If the user later deletes it,

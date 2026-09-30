@@ -36,6 +36,7 @@ public:
     // Re-read every registered tool state once when the application starts.
     // This is intentionally separate from showing/restoring the tray window.
     void refreshAllStates();
+    bool hasRunningCommands() const;
 
 private:
     friend class AutomationContractTest;

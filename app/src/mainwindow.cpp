@@ -4,6 +4,7 @@
 #include "pages/automationpage.h"
 #include "pages/projectspage.h"
 #include "platform/globalshortcut.h"
+#include "update/updatewidget.h"
 
 #include <QAction>
 #include <QApplication>
@@ -18,6 +19,7 @@
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QSignalBlocker>
+#include <QScrollArea>
 #include <QStackedWidget>
 #include <QStyle>
 #include <QSystemTrayIcon>
@@ -646,8 +648,15 @@ void MainWindow::switchToPage(int index)
 
 
         settingsLayout->addWidget(settingsCard);
+        auto *update = new UpdateWidget(settingsPage);
+        connect(update, &UpdateWidget::installRequested, this, &MainWindow::installUpdate);
+        settingsLayout->addWidget(update);
         settingsLayout->addStretch(1);
-        pageStack_->addWidget(settingsPage);
+        auto *settingsScroll = new QScrollArea(pageStack_);
+        settingsScroll->setWidgetResizable(true);
+        settingsScroll->setFrameShape(QFrame::NoFrame);
+        settingsScroll->setWidget(settingsPage);
+        pageStack_->addWidget(settingsScroll);
     }
 
     if (index < 0 || index >= pageStack_->count()) {
@@ -687,6 +696,29 @@ void MainWindow::quitApplication()
     if (trayIcon_) {
         trayIcon_->hide();
     }
+    qApp->quit();
+}
+
+void MainWindow::installUpdate()
+{
+    for (auto *page : findChildren<AutomationPage *>()) {
+        if (page->hasRunningCommands()) {
+            QMessageBox::warning(this, QStringLiteral("暂时无法更新"), QStringLiteral("请等待运行中的工具命令结束后再安装更新。"));
+            return;
+        }
+    }
+    if (QMessageBox::question(this, QStringLiteral("安装更新"),
+            QStringLiteral("安装更新将退出并重启 Orchestrate。个人数据会保留，并在程序旁保存完整旧版备份。\n\n是否继续？"),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes) return;
+    if (!savePendingChanges()) return;
+    auto *update = findChild<UpdateWidget *>();
+    QString error;
+    if (!update || !update->startInstaller(&error)) {
+        QMessageBox::warning(this, QStringLiteral("无法安装更新"), error);
+        return;
+    }
+    allowQuit_ = true;
+    if (trayIcon_) trayIcon_->hide();
     qApp->quit();
 }
 

@@ -24,6 +24,7 @@ class MainWindow final : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr, std::unique_ptr<AutoStart> autoStart = nullptr);
     ~MainWindow() override = default;
+    bool ready() const { return database_.isOpen(); }
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -38,6 +39,7 @@ private:
     void toggleSidebar();
     void showMainWindow();
     void quitApplication();
+    void installUpdate();
     void refreshAutoStartSettings(const QString &error = QString());
 
     std::unique_ptr<AutoStart> autoStart_;
