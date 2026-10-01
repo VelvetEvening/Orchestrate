@@ -262,14 +262,31 @@ function New-ShutdownStateItem {
     return ([ordered]@{ name = $Name; result = $Result; summary = $Summary })
 }
 
+function Get-ShutdownLastRunCode {
+    param($Snapshot)
+    if ($Snapshot.LastTaskResult -eq $null) { return $null }
+    # Task Scheduler exposes a DWORD (UInt32), not a signed Int32. Normalize
+    # signed representations too, without overflowing on codes such as FFFD0000.
+    return ([long]$Snapshot.LastTaskResult -band [long]4294967295)
+}
+
+function Get-ShutdownLastRunResult {
+    param($Snapshot)
+    $code = Get-ShutdownLastRunCode $Snapshot
+    if ($null -eq $code -or $code -eq 267011) { return 'skipped' }
+    if ($code -eq 267009) { return 'running' }
+    if ($code -eq 0) { return 'success' }
+    return 'failure'
+}
+
 function Get-ShutdownLastRunText {
     param($Snapshot)
     if ($Snapshot.LastTaskResult -eq $null) { return '未获取到执行记录' }
-    $code = [int]$Snapshot.LastTaskResult
+    $code = Get-ShutdownLastRunCode $Snapshot
     if ($code -eq 0) { return '上次弹窗已正常走完' }
     if ($code -eq 267009) { return '当前有一次弹窗正在运行' }
     if ($code -eq 267011) { return '尚未执行过' }
-    return "上次退出码 $code"
+    return ('上次退出码 {0}（0x{0:X8}）' -f $code)
 }
 
 function Get-ShutdownSnapshotItems {
@@ -307,7 +324,7 @@ function Get-ShutdownSnapshotItems {
     }
 
     if ($Snapshot.Exists) {
-        [void]$items.Add((New-ShutdownStateItem -Name '最近一次执行' -Result 'success' -Summary (Get-ShutdownLastRunText $Snapshot)))
+        [void]$items.Add((New-ShutdownStateItem -Name '最近一次执行' -Result (Get-ShutdownLastRunResult $Snapshot) -Summary (Get-ShutdownLastRunText $Snapshot)))
     }
 
     return $items.ToArray()
