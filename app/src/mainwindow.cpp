@@ -728,7 +728,7 @@ void MainWindow::installUpdate()
         }
     }
     if (QMessageBox::question(this, QStringLiteral("安装更新"),
-            QStringLiteral("安装更新将退出并重启 Orchestrate。引用本目录的计划任务会临时暂停，结束后恢复原状态。个人数据和完整旧版备份会保留；成功后自动清理更新临时文件。\n\n是否继续？"),
+            QStringLiteral("安装更新将退出并重启 Orchestrate。引用本目录的计划任务会临时暂停，结束后恢复原状态。个人数据会保留；新版启动确认且任务恢复后，自动清理本次旧版备份及临时文件。失败或恢复未完成则保留恢复材料。\n\n是否继续？"),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes) return;
     if (!savePendingChanges()) return;
     auto *update = findChild<UpdateWidget *>();

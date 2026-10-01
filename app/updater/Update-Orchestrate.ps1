@@ -203,7 +203,7 @@ function Assert-ToolsStopped([string]$Install, [switch]$AllowEnabledTasks) {
     }
 }
 
-function Remove-UpdateWorkspace($Plan) {
+function Assert-UpdateCleanupWorkspace($Plan) {
     $install = [IO.Path]::GetFullPath([string]$Plan.install_directory).TrimEnd('\', '/')
     $workspace = [IO.Path]::GetFullPath([string]$Plan.workspace).TrimEnd('\', '/')
     $parent = Split-Path $install -Parent
@@ -214,6 +214,13 @@ function Remove-UpdateWorkspace($Plan) {
     if (-not (Test-Path -LiteralPath $workspace)) { return }
     if ((Get-Item -LiteralPath $workspace -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Linked cleanup directory.' }
     Assert-NoLinks $workspace
+}
+
+function Remove-UpdateWorkspace($Plan) {
+    Assert-UpdateCleanupWorkspace $Plan
+    $workspace = [IO.Path]::GetFullPath([string]$Plan.workspace).TrimEnd('\', '/')
+    $parent = Split-Path ([IO.Path]::GetFullPath([string]$Plan.install_directory).TrimEnd('\', '/')) -Parent
+    if (-not (Test-Path -LiteralPath $workspace)) { return }
     # The old launcher used the workspace as its native working directory,
     # which locks that directory on Windows even after Set-Location alone.
     Set-Location -LiteralPath $parent
@@ -227,24 +234,102 @@ function Remove-UpdateWorkspace($Plan) {
     Remove-Item -LiteralPath $workspace -Recurse -Force
 }
 
+function Remove-UpdateBackup($Plan, $Result) {
+    # No task-restoration proof means no permission to discard rollback data.
+    if ($Result.success -ne $true -or $Result.tasks_restored -ne $true) { return $false }
+    $install = [IO.Path]::GetFullPath([string]$Plan.install_directory).TrimEnd('\', '/')
+    $backup = [IO.Path]::GetFullPath([string]$Result.backup_directory).TrimEnd('\', '/')
+    $parent = Split-Path $install -Parent
+    $pattern = '^' + [regex]::Escape((Split-Path $install -Leaf)) + '-backup-[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$'
+    if (-not $parent -or (Split-Path $backup -Parent) -ne $parent -or
+        (Split-Path $backup -Leaf) -notmatch $pattern -or $backup -eq $install) {
+        throw 'Unsafe rollback backup cleanup path.'
+    }
+    # Reject linked ancestors and all links inside the snapshot before recursion.
+    $ancestor = $parent
+    while ($ancestor) {
+        if ((Get-Item -LiteralPath $ancestor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw 'Linked backup parent requires manual cleanup.'
+        }
+        $ancestor = Split-Path $ancestor -Parent
+    }
+    if ((Get-Item -LiteralPath $install -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Linked installation.' }
+    $info = Get-Content -LiteralPath (Join-Path $install 'build-info.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($Result.version -ne $Plan.version -or $info.version -ne $Plan.version) { throw 'Backup cleanup version mismatch.' }
+    if (-not (Test-Path -LiteralPath $backup)) { return $true }
+    $item = Get-Item -LiteralPath $backup -Force
+    if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Invalid backup directory.' }
+    Assert-NoLinks $backup
+    $entries = @(Get-ChildItem -LiteralPath $backup -Force)
+    if ($entries.Count) {
+        $oldInfo = Get-Content -LiteralPath (Join-Path $backup 'build-info.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ([version]$oldInfo.version -ge [version]$Plan.version) { throw 'Backup does not contain an older version.' }
+    }
+    Set-Location -LiteralPath $parent
+    [Environment]::CurrentDirectory = $parent
+    # Preserve the identity file on a locked payload, enabling a safe retry.
+    foreach ($entry in $entries) {
+        if ($entry.Name -eq 'build-info.json') { continue }
+        Remove-Item -LiteralPath $entry.FullName -Recurse -Force
+    }
+    Remove-Item -LiteralPath $backup -Recurse -Force
+    return $true
+}
+
+function Invoke-WithUpdateCleanupLock([string]$Install, [scriptblock]$Action) {
+    $canonical = [IO.Path]::GetFullPath($Install).TrimEnd('\', '/').Replace('\', '/').ToLowerInvariant()
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $digest = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical)) } finally { $sha.Dispose() }
+    $name = 'Local\Orchestrate-cleanup-' + ([BitConverter]::ToString($digest).Replace('-', '').ToLowerInvariant())
+    $guard = [Threading.Mutex]::new($false, $name)
+    $held = $false
+    try {
+        try { $held = $guard.WaitOne(5000) } catch [Threading.AbandonedMutexException] { $held = $true }
+        if (-not $held) { throw 'Another update or cleanup is still running.' }
+        & $Action
+    } finally {
+        if ($held) { $guard.ReleaseMutex() }
+        $guard.Dispose()
+    }
+}
+
 function Complete-UpdateCleanup($Plan, $Result) {
+    Invoke-WithUpdateCleanupLock $Plan.install_directory { Complete-UpdateCleanupCore $Plan $Result }
+}
+
+function Complete-UpdateCleanupCore($Plan, $Result) {
+    if ($Result.success -ne $true -or ($Result.ContainsKey('tasks_restored') -and $Result.tasks_restored -ne $true)) { return }
     $resultPath = Join-Path $Plan.install_directory 'data/update-result.json'
     $Result.cleanup_pending = $true
     $Result.workspace = $Plan.workspace
     $Result.cleanup_plan = $Plan
     Write-UpdateJson $resultPath $Result
     try {
+        Assert-UpdateCleanupWorkspace $Plan
+        $journal = Join-Path $Plan.workspace 'suspended-tasks.json'
+        if (Test-Path -LiteralPath $journal) {
+            $pending = @(Get-Content -LiteralPath $journal -Raw -Encoding UTF8 | ConvertFrom-Json | Where-Object { -not $_.restored })
+            if ($pending.Count) { throw 'Pending task restoration; backup retained.' }
+        }
+        if ($Result.ContainsKey('tasks_restored') -and (Remove-UpdateBackup $Plan $Result)) {
+            $Result.backup_removed = $true
+            $Result.message = "已更新至 $($Plan.version)。启动及计划任务恢复已确认，旧版回滚备份已清理。"
+        }
         Remove-UpdateWorkspace $Plan
         $Result.cleanup_pending = $false
         $Result.Remove('cleanup_error')
         $Result.Remove('cleanup_plan')
     } catch {
-        $Result.cleanup_error = "更新已成功，临时文件稍后重试清理：$($_.Exception.Message)"
+        $Result.cleanup_error = "更新已成功，旧版备份或临时文件未清理完，将在下次启动时重试：$($_.Exception.Message)"
     }
     Write-UpdateJson $resultPath $Result
 }
 
 function Remove-CompletedUpdateWorkspaces([string]$Install) {
+    Invoke-WithUpdateCleanupLock $Install { Remove-CompletedUpdateWorkspacesCore $Install }
+}
+
+function Remove-CompletedUpdateWorkspacesCore([string]$Install) {
     $install = [IO.Path]::GetFullPath($Install).TrimEnd('\', '/')
     $parent = Split-Path $install -Parent
     # Also handles the first upgrade performed by a pre-cleanup updater.
@@ -271,7 +356,8 @@ function Remove-CompletedUpdateWorkspaces([string]$Install) {
             $result = Get-Content -LiteralPath (Join-Path $plan.workspace 'result.json') -Raw -Encoding UTF8 | ConvertFrom-Json
             $health = Get-Content -LiteralPath (Join-Path $plan.workspace 'startup.json') -Raw -Encoding UTF8 | ConvertFrom-Json
             $info = Get-Content -LiteralPath (Join-Path $install 'build-info.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-            if ($result.success -ne $true -or $health.version -ne $plan.version -or
+            if (($result.PSObject.Properties['tasks_restored'] -and $result.tasks_restored -ne $true) -or
+                $result.success -ne $true -or $health.version -ne $plan.version -or
                 [version]$info.version -lt [version]$plan.version -or -not $result.backup_directory) { continue }
             $backup = [IO.Path]::GetFullPath([string]$result.backup_directory)
             if ((Split-Path $backup -Parent) -ne $parent -or
@@ -295,6 +381,28 @@ function Remove-CompletedUpdateWorkspaces([string]$Install) {
             continue
         }
     }
+    # Older updaters may remove the workspace but leave the latest successful
+    # backup. Never sweep historical backup directories by name alone.
+    try {
+        $current = Get-Content -LiteralPath (Join-Path $install 'data/update-result.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($current.success -ne $true -or -not $current.PSObject.Properties['tasks_restored'] -or
+            $current.tasks_restored -ne $true -or -not $current.PSObject.Properties['version'] -or
+            -not $current.PSObject.Properties['workspace'] -or -not $current.PSObject.Properties['backup_directory'] -or
+            ($current.PSObject.Properties['backup_removed'] -and $current.backup_removed -and
+                (-not $current.PSObject.Properties['cleanup_pending'] -or -not $current.cleanup_pending)) -or
+            (Test-Path -LiteralPath $current.workspace)) { return }
+        $workspace = [IO.Path]::GetFullPath([string]$current.workspace).TrimEnd('\', '/')
+        if ((Split-Path $workspace -Parent) -ne $parent -or
+            (Split-Path $workspace -Leaf) -notmatch '^\.Orchestrate-update-[a-zA-Z0-9]+$') { return }
+        $running = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" -ErrorAction Stop |
+            Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and
+                $_.CommandLine.Replace('/', '\').IndexOf($workspace, [StringComparison]::OrdinalIgnoreCase) -ge 0 })
+        if ($running.Count) { return }
+        $saved = @{}
+        foreach ($property in $current.PSObject.Properties) { $saved[$property.Name] = $property.Value }
+        $cleanupPlan = @{ install_directory = $install; workspace = $workspace; version = $current.version }
+        Complete-UpdateCleanup $cleanupPlan $saved
+    } catch { Write-Verbose "Retained completed backup: $($_.Exception.Message)" }
 }
 
 function Move-UpdateDirectory([string]$Source, [string]$Destination) {
@@ -376,6 +484,11 @@ function Confirm-UpdatedStartup($Process, [string]$HealthPath, [string]$Version)
 }
 
 function Invoke-UpdatePlan([string]$Path, [switch]$PrepareOnly) {
+    $initialPlan = Read-UpdatePlan $Path
+    Invoke-WithUpdateCleanupLock $initialPlan.install_directory { Invoke-UpdatePlanCore $Path -PrepareOnly:$PrepareOnly }
+}
+
+function Invoke-UpdatePlanCore([string]$Path, [switch]$PrepareOnly) {
     $plan = Read-UpdatePlan $Path
     if ($PrepareOnly) {
         Assert-NoLinks $plan.install_directory

@@ -46,8 +46,17 @@ void scheduleCompletedUpdateCleanup()
     const QString install = QCoreApplication::applicationDirPath();
     const QDir parent = QFileInfo(install).dir();
     const QString script = install + QStringLiteral("/updater/Update-Orchestrate.ps1");
-    if (!QFileInfo::exists(script)
-        || parent.entryList({QStringLiteral(".Orchestrate-update-*")}, QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot).isEmpty()) return;
+    if (!QFileInfo::exists(script)) return;
+    QFile resultFile(install + QStringLiteral("/data/update-result.json"));
+    QJsonObject result;
+    if (resultFile.open(QIODevice::ReadOnly))
+        result = QJsonDocument::fromJson(resultFile.read(64 * 1024)).object();
+    const bool backupPending = result.value(QStringLiteral("success")).toBool()
+        && result.value(QStringLiteral("tasks_restored")).toBool()
+        && !result.value(QStringLiteral("backup_directory")).toString().isEmpty()
+        && !result.value(QStringLiteral("backup_removed")).toBool();
+    if (!backupPending && !result.value(QStringLiteral("cleanup_pending")).toBool()
+        && parent.entryList({QStringLiteral(".Orchestrate-update-*")}, QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot).isEmpty()) return;
     QTimer::singleShot(1500, QCoreApplication::instance(), [install, parent, script] {
         QProcess cleanup;
         cleanup.setProgram(powershell());

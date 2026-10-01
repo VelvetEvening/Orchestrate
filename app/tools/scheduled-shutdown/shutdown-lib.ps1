@@ -420,11 +420,22 @@ function Set-ShutdownTask {
         $trigger = New-ScheduledTaskTrigger -Daily -At $parsed
     }
 
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 1)
-
     $existing = $null
-    try { $existing = Get-ScheduledTask -TaskName $script:ShutdownTaskName -ErrorAction Stop } catch { }
+    try { $existing = Get-ScheduledTask -TaskName $script:ShutdownTaskName -ErrorAction Stop }
+    catch {
+        # Only a genuinely missing task may be installed with the default enabled
+        # state. A permission/service error must not erase an unknown preference.
+        if ($_.CategoryInfo.Category -ne [System.Management.Automation.ErrorCategory]::ObjectNotFound) {
+            throw "无法读取定时关机原状态，未重新登记任务：$($_.Exception.Message)"
+        }
+    }
+    if ($null -ne $existing -and [string]$existing.State -notin @('Disabled', 'Ready', 'Running', 'Queued')) {
+        throw '无法确认定时关机原来的启用状态，未重新登记任务。'
+    }
     $wasDisabled = ($existing -ne $null -and [string]$existing.State -eq 'Disabled')
+    # Preserve disabled state in every registration attempt itself, avoiding an
+    # enabled interval while editing a task the user has explicitly turned off.
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 1) -Disable:$wasDisabled -ErrorAction Stop
 
     $registered = $false
     if ($existing -ne $null) {
@@ -451,12 +462,29 @@ function Set-ShutdownTask {
         }
     }
 
-    # 重新登记会把任务恢复为启用状态，这里保持用户此前停用的选择。
     if ($wasDisabled) {
-        Disable-ScheduledTask -TaskName $script:ShutdownTaskName -ErrorAction SilentlyContinue | Out-Null
+        try {
+            $verified = Get-ScheduledTask -TaskName $script:ShutdownTaskName -ErrorAction Stop
+            if ($null -eq $verified -or [string]$verified.State -ne 'Disabled') {
+                # Defensive recovery if Windows or another writer did not retain
+                # the requested disabled setting. Never hide a recovery failure.
+                Disable-ScheduledTask -TaskName $script:ShutdownTaskName -ErrorAction Stop | Out-Null
+                $verified = Get-ScheduledTask -TaskName $script:ShutdownTaskName -ErrorAction Stop
+            }
+            if ($null -eq $verified -or [string]$verified.State -ne 'Disabled') {
+                throw '重新读取后任务仍不是停用状态。'
+            }
+        } catch {
+            throw "设置已登记，但无法确认定时关机仍处于停用状态；任务可能已启用，请立即在任务计划程序中核对并停用。$($_.Exception.Message)"
+        }
     }
 
-    return (Get-ShutdownTaskSnapshot)
+    $snapshot = Get-ShutdownTaskSnapshot
+    if (-not $snapshot.Exists) { throw '设置已登记，但无法读取任务状态，不能确认修改成功；请在任务计划程序中核对。' }
+    if ($wasDisabled -and $snapshot.Enabled) {
+        throw '设置已登记，但最后复核发现定时关机已启用；请立即在任务计划程序中核对并停用。'
+    }
+    return $snapshot
 }
 
 function Write-ShutdownSnapshotLines {
