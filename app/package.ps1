@@ -1,5 +1,5 @@
 param(
-    [string]$ReleaseTag = 'v1.1.3',
+    [string]$ReleaseTag = 'v1.1.4',
     [string]$QtRoot = 'D:/CodeTools/Qt/Qt/6.11.2/mingw_64',
     [string]$MinGWRoot = 'D:/CodeTools/Qt/Qt/Tools/mingw1310_64',
     [string]$CMakeExe = 'D:/CodeTools/Qt/Qt/Tools/CMake_64/bin/cmake.exe',
@@ -58,11 +58,10 @@ try {
     $qtVersion = (& "$QtRoot/bin/qtpaths.exe" --query QT_VERSION).Trim()
     if ($LASTEXITCODE -ne 0) { throw 'Could not identify Qt version.' }
     Run $CMakeExe @('-S', "$sourceRoot/app", '-B', $buildRoot, '-G', 'Ninja',
-        '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_TESTING=ON', "-DCMAKE_PREFIX_PATH=$QtRoot",
+        '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_TESTING=OFF', "-DCMAKE_PREFIX_PATH=$QtRoot",
         "-DCMAKE_MAKE_PROGRAM=$NinjaExe", "-DCMAKE_CXX_COMPILER=$MinGWRoot/bin/g++.exe")
     Run $CMakeExe @('--build', $buildRoot, '--parallel', '3')
-    $ctest = Join-Path (Split-Path $CMakeExe -Parent) 'ctest.exe'
-    Run $ctest @('--test-dir', $buildRoot, '--output-on-failure')
+    # Tests remain local and are run in app/build-qt before packaging.
     # CMake installs only the executable and tool sources, excluding tool state.
     Run $CMakeExe @('--install', $buildRoot, '--prefix', $installRoot, '--config', 'Release')
     $null = New-Item -ItemType Directory -Path $packageRoot

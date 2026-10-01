@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Orchestrate VERSION 1.1.3 LANGUAGES CXX)
+project(Orchestrate VERSION 1.1.4 LANGUAGES CXX)
 
 configure_file(src/version.h.in generated/version.h @ONLY)
 
@@ -106,6 +106,6 @@ install(DIRECTORY tools/
 install(DIRECTORY updater/ DESTINATION bin/updater)
 
 include(CTest)
-if (BUILD_TESTING)
+if (BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
     add_subdirectory(tests)
 endif()

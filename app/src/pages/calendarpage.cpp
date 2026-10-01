@@ -1,4 +1,5 @@
 #include "calendarpage.h"
+#include "widgets/persistenttextzoom.h"
 #include "widgets/headingtext.h"
 #include "widgets/headingtextedit.h"
 #include "widgets/workspacecalendar.h"
@@ -336,6 +337,7 @@ bool CalendarPage::showReminderDialog(AppDatabase::Reminder *reminder, bool edit
     form->addRow(QStringLiteral("标题："), titleEdit);
 
     auto *contentEdit = new HeadingTextEdit(&dialog);
+    bindPersistentTextZoom(contentEdit, database_, QStringLiteral("text_zoom.reminder"));
     contentEdit->setObjectName(QStringLiteral("reminderContent"));
     contentEdit->setPlainText(reminder->content);
     contentEdit->setPlaceholderText(QStringLiteral("可选：补充说明"));
@@ -607,6 +609,7 @@ void CalendarPage::diaryDialog(AppDatabase::DiaryEntry entry, bool creating, QWi
     layout->addWidget(dateLabel);
     auto *title=addSummaryField(layout,&dialog,QStringLiteral("diaryTitle"));
     auto *editor=new HeadingTextEdit(&dialog);
+    bindPersistentTextZoom(editor, database_, QStringLiteral("text_zoom.diary"));
     layout->addWidget(editor,1);
     if (!creating) {
         title->setText(summaryText(entry.title,entry.content));

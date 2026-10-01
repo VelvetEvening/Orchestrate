@@ -1,4 +1,5 @@
 #include "projectspage.h"
+#include "widgets/persistenttextzoom.h"
 #include "widgets/headingtextedit.h"
 #include "widgets/summaryfield.h"
 #include <QDesktopServices>
@@ -108,6 +109,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     auto *outlineLayout = new QVBoxLayout(outlineWindow_);
     outlineLayout->setContentsMargins(24,24,24,24);
     outlineEdit_ = new HeadingTextEdit(outlineWindow_);
+    bindPersistentTextZoom(outlineEdit_, database_, QStringLiteral("text_zoom.outline"));
     outlineEdit_->setObjectName(QStringLiteral("projectOutline"));
     outlineEdit_->setMinimumHeight(150);
     outlineLayout->addWidget(outlineEdit_, 1);
@@ -431,6 +433,7 @@ void ProjectsPage::recordDialog(bool creating)
     auto *layout=new QVBoxLayout(&dialog);
     auto *title=addSummaryField(layout,&dialog,QStringLiteral("workRecordTitle"));
     auto *editor=new HeadingTextEdit(&dialog);
+    bindPersistentTextZoom(editor, database_, QStringLiteral("text_zoom.work_record"));
     layout->addWidget(editor,1);
     if(!creating) { title->setText(recordTitle(record)); editor->setPlainText(record.content); }
     connect(editor,&HeadingTextEdit::previewModeChanged,title,&QLineEdit::setReadOnly);

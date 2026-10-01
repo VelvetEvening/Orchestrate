@@ -19,12 +19,14 @@ public:
     void clear();
     void setPreviewMode(bool preview);
     bool isPreviewMode() const;
+    void setTextPointSize(qreal size);
 
     static QString getText(QWidget *parent, const QString &title,
                            const QString &initial, bool *accepted, bool previewFirst = false);
 
 signals:
     void textChanged();
+    void textPointSizeChanged(qreal size);
     void previewModeChanged(bool preview);
 
 protected:

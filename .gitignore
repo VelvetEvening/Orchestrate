@@ -31,3 +31,6 @@ __pycache__/
 *.sqlite3
 *.sqlite3-*
 *.log
+
+# Local-only regression tests; do not publish test scripts or artifacts.
+/app/tests/

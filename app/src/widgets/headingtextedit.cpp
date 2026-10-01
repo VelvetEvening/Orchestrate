@@ -13,6 +13,12 @@
 #include <QTextEdit>
 #include <QVBoxLayout>
 #include <QWheelEvent>
+#include <QtMath>
+
+namespace {
+constexpr int PreviewTab = 0;
+constexpr int EditTab = 1;
+}
 
 HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
 {
@@ -27,8 +33,10 @@ HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
         "QTabBar::tab { font-size: 14px; min-width: 48px; min-height: 20px; padding: 8px 14px; margin-right: 4px; border: 1px solid #d4deeb; border-radius: 6px; background: #f5f7fb; color: #526176; }"
         "QTabBar::tab:selected { background: #e8f0ff; color: #2456a6; border-color: #9bbbe8; font-weight: 600; }"
         "QTabBar::tab:hover { background: #edf3ff; }"));
-    tabs_->addTab(QStringLiteral("编辑"));
     tabs_->addTab(QStringLiteral("预览"));
+    tabs_->addTab(QStringLiteral("编辑"));
+    // New content starts editable; existing documents explicitly select preview.
+    tabs_->setCurrentIndex(EditTab);
     layout->addWidget(tabs_);
     pages_ = new QStackedWidget(this);
     // QTextEdit's default size hint is tall. Let embedded editors shrink while
@@ -56,10 +64,12 @@ HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
     setMinimumHeight(170);
     setFocusProxy(source_);
     connect(tabs_, &QTabBar::currentChanged, this, [this](int index) {
-        if (index == 1) updatePreview();
-        pages_->setCurrentIndex(index);
-        setFocusProxy(index == 0 ? static_cast<QWidget *>(source_) : preview_);
-        emit previewModeChanged(index == 1);
+        const bool preview = index == PreviewTab;
+        if (preview) updatePreview();
+        QWidget *page = preview ? static_cast<QWidget *>(preview_) : source_;
+        pages_->setCurrentWidget(page);
+        setFocusProxy(page);
+        emit previewModeChanged(preview);
     });
     connect(source_, &QPlainTextEdit::textChanged, this, [this] {
         if (isPreviewMode()) updatePreview();
@@ -71,8 +81,8 @@ void HeadingTextEdit::setPlainText(const QString &text) { source_->setPlainText(
 QString HeadingTextEdit::toPlainText() const { return source_->toPlainText(); }
 void HeadingTextEdit::setPlaceholderText(const QString &text) { source_->setPlaceholderText(text); }
 void HeadingTextEdit::clear() { source_->clear(); setPreviewMode(false); }
-void HeadingTextEdit::setPreviewMode(bool preview) { tabs_->setCurrentIndex(preview ? 1 : 0); }
-bool HeadingTextEdit::isPreviewMode() const { return tabs_->currentIndex() == 1; }
+void HeadingTextEdit::setPreviewMode(bool preview) { tabs_->setCurrentIndex(preview ? PreviewTab : EditTab); }
+bool HeadingTextEdit::isPreviewMode() const { return tabs_->currentIndex() == PreviewTab; }
 
 void HeadingTextEdit::updatePreview()
 {
@@ -103,7 +113,15 @@ void HeadingTextEdit::zoomText(qreal steps)
     if (qFuzzyIsNull(steps)) return;
     QFont font = source_->font();
     const qreal size = font.pointSizeF() > 0 ? font.pointSizeF() : QFontInfo(font).pointSizeF();
-    const qreal newSize = qBound(6.0, size + steps, 72.0);
+    setTextPointSize(size + steps);
+}
+
+void HeadingTextEdit::setTextPointSize(qreal requestedSize)
+{
+    if (!qIsFinite(requestedSize)) return;
+    QFont font = source_->font();
+    const qreal size = font.pointSizeF() > 0 ? font.pointSizeF() : QFontInfo(font).pointSizeF();
+    const qreal newSize = qBound(6.0, requestedSize, 72.0);
     if (qFuzzyCompare(size, newSize)) return;
 
     const int position = preview_->textCursor().position();
@@ -115,6 +133,7 @@ void HeadingTextEdit::zoomText(qreal steps)
     // Change only the display font, keeping the source text and undo history.
     font.setPointSizeF(newSize);
     source_->setFont(font);
+    emit textPointSizeChanged(newSize);
     if (!isPreviewMode()) return;
     updatePreview();
 
