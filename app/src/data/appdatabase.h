@@ -66,6 +66,14 @@ public:
         QString registrationPath;
         QString statePath;
         QString sshHost;
+        QString sshUser;
+        QString wslDistribution;
+        QString wslUser;
+        bool sameExecutionTarget(const AutomationTool &other) const
+        {
+            return targetType == other.targetType && sshHost == other.sshHost && sshUser == other.sshUser
+                && wslDistribution == other.wslDistribution && wslUser == other.wslUser;
+        }
         QString workingDirectory;
         bool refreshEnabled = false;
         QString refreshMode = QStringLiteral("interval");

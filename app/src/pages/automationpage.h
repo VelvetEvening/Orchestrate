@@ -33,6 +33,8 @@ class AutomationPage final : public QWidget
 public:
     explicit AutomationPage(AppDatabase *database, QWidget *parent = nullptr);
 
+    ~AutomationPage() override;
+
     // Re-read every registered tool state once when the application starts.
     // This is intentionally separate from showing/restoring the tray window.
     void refreshAllStates();
@@ -70,18 +72,26 @@ private:
     void deleteGroup();
     void importTool();
     void importRemoteTool();
+    void importWslTool();
+    void finishManifestReload(const AppDatabase::AutomationTool &tool, const QByteArray &data);
     bool readManifest(const QString &sourcePath,
                       const QString &sshHost,
                       QByteArray *data,
-                      QString *errorMessage) const;
+                      QString *errorMessage, const QString &sshUser = QString()) const;
     bool parseManifest(const QByteArray &manifestData,
                        const QString &sourcePath,
                        const QString &sshHost,
                        ParsedManifest *manifest,
-                       QString *errorMessage) const;
+                       QString *errorMessage,
+                       const QString &wslDistribution = QString(),
+                       const QString &wslUser = QString(),
+                       const QString &sshUser = QString()) const;
     void registerToolManifest(const QByteArray &manifestData,
                               const QString &sourcePath,
-                              const QString &sshHost = QString());
+                              const QString &sshHost = QString(),
+                              const QString &wslDistribution = QString(),
+                              const QString &wslUser = QString(),
+                              const QString &sshUser = QString());
     bool applyManifestUpdate(int toolId, ParsedManifest manifest);
     int builtinToolGroupId();
     void syncBuiltinTools();
@@ -91,12 +101,13 @@ private:
     bool runSshCapture(const QString &host,
                        const QStringList &arguments,
                        QByteArray *output,
-                       QString *errorMessage) const;
+                       QString *errorMessage, const QString &sshUser = QString()) const;
 
     bool readToolState(const AppDatabase::AutomationTool &tool,
                        QJsonObject *state,
                        QString *errorMessage) const;
     bool readStateFile(const QString &path, const QString &toolId, QJsonObject *state, QString *errorMessage) const;
+    void startAsyncWslStateRead(const AppDatabase::AutomationTool &tool, bool updateVisibleState);
     void startAsyncSshStateRead(const AppDatabase::AutomationTool &tool, bool updateVisibleState);
     void startStateReadProcess(const AppDatabase::AutomationTool &tool, bool updateVisibleState,
                                QProcess *process, int timeoutMs = 30000);
@@ -121,6 +132,8 @@ private:
     void appendRunOutput(int toolId, const QString &text);
     static constexpr qsizetype maxRunOutputChars = 256 * 1024;
     void showError(const QString &message);
+
+    QSet<int> manifestReadsInFlight_;
 
     QTreeWidget *tree_ = nullptr;
     QPushButton *renameGroupButton_ = nullptr;

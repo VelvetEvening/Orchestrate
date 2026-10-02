@@ -50,7 +50,7 @@ function Invoke-ReminderShutdown {
     $previous = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        $null = & shutdown.exe /s /f /t 30 /c '定时关机将在 30 秒后执行。如需取消，请在 Orchestrate 里运行「取消本次关机」，或双击工具目录里的 cancel-shutdown.bat' 2>&1
+        $null = & shutdown.exe /s /f /t 30 /c '定时关机将在 30 秒后执行。如需仅取消本次，请双击工具目录里的 cancel-shutdown.bat；也可在 Orchestrate 里运行「关闭定时关机」（同时关闭后续定时任务）' 2>&1
         return ($LASTEXITCODE -eq 0)
     } finally {
         $ErrorActionPreference = $previous
