@@ -112,11 +112,11 @@ bool AppDatabase::open(QString *errorMessage)
     }
     const int version = schemaVersion.value(0).toInt();
     schemaVersion.finish();
-    if (version > 1) {
+    if (version > 3) {
         database.close();
         return fail(errorMessage, QStringLiteral("数据库来自更新版本的 Orchestrate。请使用新版程序，或同时恢复旧版程序与数据库备份。"));
     }
-    if (version == 1) return true;
+    if (version == 3) return true;
 
     if (existingDatabase || QFileInfo(databasePath_).size() > 0) {
         const QString backupDirectory = QDir(portableDataDirectory).filePath(QStringLiteral("backups"));
@@ -124,8 +124,8 @@ bool AppDatabase::open(QString *errorMessage)
             database.close();
             return fail(errorMessage, QStringLiteral("无法创建数据库迁移备份目录。"));
         }
-        const QString backupPath = QDir(backupDirectory).filePath(QStringLiteral("schema-0-%1-%2.sqlite3")
-            .arg(QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-HHmmss")), QUuid::createUuid().toString(QUuid::Id128)));
+        const QString backupPath = QDir(backupDirectory).filePath(QStringLiteral("schema-%1-%2-%3.sqlite3")
+            .arg(version).arg(QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-HHmmss")), QUuid::createUuid().toString(QUuid::Id128)));
         QSqlQuery backup(database);
         backup.prepare(QStringLiteral("VACUUM INTO ?"));
         backup.addBindValue(backupPath);
@@ -140,7 +140,23 @@ bool AppDatabase::open(QString *errorMessage)
         return fail(errorMessage, QStringLiteral("无法开始数据库迁移事务。"));
     }
     QSqlQuery setVersion(database);
-    if (!initializeSchema(errorMessage) || !setVersion.exec(QStringLiteral("PRAGMA user_version = 1"))) {
+    // Version 1 adds WSL; version 2 adds explicit SSH usernames.
+    bool migrated = true;
+    if (version == 0) {
+        migrated = initializeSchema(errorMessage);
+    } else {
+        QStringList columns {QStringLiteral("ssh_user")};
+        if (version == 1) columns << QStringLiteral("wsl_distribution") << QStringLiteral("wsl_user");
+        for (const auto &column : columns) {
+            QSqlQuery migration(database);
+            if (!migration.exec(QStringLiteral("ALTER TABLE automation_tools ADD COLUMN %1 TEXT NOT NULL DEFAULT ''").arg(column))) {
+                setError(errorMessage, migration);
+                migrated = false;
+                break;
+            }
+        }
+    }
+    if (!migrated || !setVersion.exec(QStringLiteral("PRAGMA user_version = 3"))) {
         if (errorMessage && errorMessage->isEmpty()) setError(errorMessage, setVersion);
         database.rollback();
         database.close();
@@ -293,6 +309,9 @@ bool AppDatabase::initializeSchema(QString *errorMessage)
         QStringLiteral("ALTER TABLE project_work_records ADD COLUMN title TEXT NOT NULL DEFAULT ''"),
         QStringLiteral("ALTER TABLE automation_tools ADD COLUMN external_id TEXT NOT NULL DEFAULT ''"),
         QStringLiteral("ALTER TABLE automation_tools ADD COLUMN ssh_host TEXT NOT NULL DEFAULT ''"),
+        QStringLiteral("ALTER TABLE automation_tools ADD COLUMN ssh_user TEXT NOT NULL DEFAULT ''"),
+        QStringLiteral("ALTER TABLE automation_tools ADD COLUMN wsl_distribution TEXT NOT NULL DEFAULT ''"),
+        QStringLiteral("ALTER TABLE automation_tools ADD COLUMN wsl_user TEXT NOT NULL DEFAULT ''"),
         QStringLiteral("ALTER TABLE automation_tools ADD COLUMN working_directory TEXT NOT NULL DEFAULT ''"),
         QStringLiteral("ALTER TABLE automation_tools ADD COLUMN refresh_enabled INTEGER NOT NULL DEFAULT 0"),
         QStringLiteral("ALTER TABLE automation_tools ADD COLUMN refresh_mode TEXT NOT NULL DEFAULT 'interval'"),
@@ -996,13 +1015,13 @@ QList<AppDatabase::AutomationTool> AppDatabase::automationTools(int groupId, QSt
     if (groupId > 0) {
         query.prepare(QStringLiteral(
             "SELECT id, external_id, COALESCE(group_id, 0), name, description, target_type, registration_path, state_path, "
-            "ssh_host, working_directory, refresh_enabled, refresh_mode, refresh_interval_seconds, daily_refresh_time, builtin "
+            "ssh_host, working_directory, refresh_enabled, refresh_mode, refresh_interval_seconds, daily_refresh_time, builtin, wsl_distribution, wsl_user, ssh_user "
             "FROM automation_tools WHERE group_id = ? ORDER BY name"));
         query.addBindValue(groupId);
     } else {
         query.prepare(QStringLiteral(
             "SELECT id, external_id, COALESCE(group_id, 0), name, description, target_type, registration_path, state_path, "
-            "ssh_host, working_directory, refresh_enabled, refresh_mode, refresh_interval_seconds, daily_refresh_time, builtin "
+            "ssh_host, working_directory, refresh_enabled, refresh_mode, refresh_interval_seconds, daily_refresh_time, builtin, wsl_distribution, wsl_user, ssh_user "
             "FROM automation_tools ORDER BY name"));
     }
     if (!query.exec()) {
@@ -1032,6 +1051,9 @@ QList<AppDatabase::AutomationTool> AppDatabase::automationTools(int groupId, QSt
             tool.dailyRefreshTime = QStringLiteral("08:00");
         }
         tool.builtin = query.value(14).toInt() != 0;
+        tool.wslDistribution = query.value(15).toString();
+        tool.wslUser = query.value(16).toString();
+        tool.sshUser = query.value(17).toString();
         result.append(tool);
     }
     return result;
@@ -1047,8 +1069,8 @@ bool AppDatabase::addAutomationTool(const AutomationTool &tool,
     QSqlQuery query(QSqlDatabase::database(connectionName_));
     query.prepare(QStringLiteral(
         "INSERT INTO automation_tools(external_id, group_id, name, description, target_type, registration_path, state_path, "
-        "ssh_host, working_directory, refresh_enabled, refresh_mode, refresh_interval_seconds, daily_refresh_time, builtin) "
-        "VALUES (?, NULLIF(?, 0), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        "ssh_host, working_directory, refresh_enabled, refresh_mode, refresh_interval_seconds, daily_refresh_time, builtin, wsl_distribution, wsl_user, ssh_user) "
+        "VALUES (?, NULLIF(?, 0), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     query.addBindValue(text(tool.externalId));
     query.addBindValue(tool.groupId);
     query.addBindValue(text(tool.name));
@@ -1063,6 +1085,9 @@ bool AppDatabase::addAutomationTool(const AutomationTool &tool,
     query.addBindValue(qMax(60, tool.refreshIntervalSeconds));
     query.addBindValue(tool.dailyRefreshTime.isEmpty() ? QStringLiteral("08:00") : tool.dailyRefreshTime);
     query.addBindValue(tool.builtin ? 1 : 0);
+    query.addBindValue(text(tool.wslDistribution));
+    query.addBindValue(text(tool.wslUser));
+    query.addBindValue(text(tool.sshUser));
     if (!query.exec()) {
         setError(errorMessage, query);
         return false;
@@ -1084,7 +1109,7 @@ bool AppDatabase::updateAutomationTool(const AutomationTool &tool, QString *erro
     query.prepare(QStringLiteral(
         "UPDATE automation_tools SET external_id = ?, name = ?, description = ?, target_type = ?, "
         "registration_path = ?, state_path = ?, ssh_host = ?, working_directory = ?, "
-        "builtin = MAX(builtin, ?) WHERE id = ?"));
+        "builtin = MAX(builtin, ?), wsl_distribution = ?, wsl_user = ?, ssh_user = ? WHERE id = ?"));
     query.addBindValue(text(tool.externalId));
     query.addBindValue(text(tool.name));
     query.addBindValue(text(tool.description));
@@ -1094,6 +1119,9 @@ bool AppDatabase::updateAutomationTool(const AutomationTool &tool, QString *erro
     query.addBindValue(text(tool.sshHost));
     query.addBindValue(text(tool.workingDirectory));
     query.addBindValue(tool.builtin ? 1 : 0);
+    query.addBindValue(text(tool.wslDistribution));
+    query.addBindValue(text(tool.wslUser));
+    query.addBindValue(text(tool.sshUser));
     query.addBindValue(tool.id);
     if (!query.exec()) {
         setError(errorMessage, query);

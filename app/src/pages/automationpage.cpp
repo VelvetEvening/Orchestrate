@@ -1,6 +1,8 @@
 #include "automationpage.h"
 #include "automation/commandarguments.h"
 #include "automation/toolstate.h"
+#include "automation/wslprocess.h"
+#include "automation/sshconnection.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -723,7 +725,15 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     deleteGroupButton_->setEnabled(false);
     toolbar->addWidget(deleteGroupButton_);
     toolbar->addStretch(1);
-    auto *importRemoteButton = new QPushButton(QStringLiteral("注册服务器工具"), this);
+    auto *importRemoteButton = new QPushButton(QStringLiteral("注册远程工具"), this);
+    importRemoteButton->setObjectName(QStringLiteral("importRemoteTool"));
+    importRemoteButton->setToolTip(QStringLiteral("选择 WSL 本地 Linux 环境或 SSH 服务器，注册其中的工具。"));
+    auto *remoteMenu = new QMenu(importRemoteButton);
+    auto *importWslAction = remoteMenu->addAction(QStringLiteral("WSL 工具…"));
+    importWslAction->setObjectName(QStringLiteral("importWslAction"));
+    auto *importSshAction = remoteMenu->addAction(QStringLiteral("SSH 服务器工具…"));
+    importSshAction->setObjectName(QStringLiteral("importSshAction"));
+    importRemoteButton->setMenu(remoteMenu);
     toolbar->addWidget(importRemoteButton);
     auto *importButton = new QPushButton(QStringLiteral("注册本地工具"), this);
     importButton->setObjectName(QStringLiteral("primaryButton"));
@@ -817,7 +827,9 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     toolSource_->setObjectName(QStringLiteral("sourceText"));
     toolSource_->setWordWrap(true);
     toolSource_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    toolSource_->setTextFormat(Qt::PlainText);
     toolSource_->hide();
+    headerLayout->addWidget(toolSource_);
     columnLayout->addWidget(headerCard);
 
     // Current state.
@@ -985,7 +997,8 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     connect(renameGroupButton_, &QPushButton::clicked, this, &AutomationPage::renameGroup);
     connect(deleteGroupButton_, &QPushButton::clicked, this, &AutomationPage::deleteGroup);
     connect(importButton, &QPushButton::clicked, this, &AutomationPage::importTool);
-    connect(importRemoteButton, &QPushButton::clicked, this, &AutomationPage::importRemoteTool);
+    connect(importWslAction, &QAction::triggered, this, &AutomationPage::importWslTool);
+    connect(importSshAction, &QAction::triggered, this, &AutomationPage::importRemoteTool);
     connect(tree_, &QTreeWidget::itemSelectionChanged, this, &AutomationPage::handleTreeSelection);
     connect(tree_, &QTreeWidget::customContextMenuRequested, this, &AutomationPage::showTreeContextMenu);
     connect(refreshButton_, &QPushButton::clicked, this, &AutomationPage::refreshState);
@@ -1099,7 +1112,8 @@ void AutomationPage::syncBuiltinTools()
         // A local tool registered by hand before it was bundled becomes the built-in one.
         const AppDatabase::AutomationTool *existing = nullptr;
         for (const AppDatabase::AutomationTool &candidate : tools) {
-            if (candidate.sshHost.isEmpty() && candidate.externalId == manifest.tool.externalId
+            if (candidate.targetType == QStringLiteral("windows-local") && candidate.sshHost.isEmpty()
+                && candidate.wslDistribution.isEmpty() && candidate.externalId == manifest.tool.externalId
                 && (existing == nullptr || candidate.builtin)) {
                 existing = &candidate;
             }
@@ -1126,6 +1140,20 @@ void AutomationPage::syncBuiltinTools()
     }
     if (!problems.isEmpty()) {
         showError(QStringLiteral("内置工具加载失败：\n%1").arg(problems.join(QLatin1Char('\n'))));
+    }
+}
+
+AutomationPage::~AutomationPage()
+{
+    // QProcess can emit finished while being destroyed. Disconnect callbacks
+    // before C++ members (state caches and run records) have been destroyed.
+    for (auto *process : findChildren<QProcess *>()) {
+        process->blockSignals(true);
+        if (process->state() != QProcess::NotRunning) {
+            process->kill();
+            process->waitForFinished(1000);
+        }
+        delete process;
     }
 }
 
@@ -1382,11 +1410,16 @@ void AutomationPage::loadToolDetails(int toolId)
     if (tool.builtin) {
         toolSource_->setText(QStringLiteral("内置工具 · %1").arg(QDir::toNativeSeparators(
             QDir(QCoreApplication::applicationDirPath()).relativeFilePath(tool.registrationPath))));
+    } else if (tool.targetType == QStringLiteral("wsl")) {
+        toolSource_->setText(QStringLiteral("WSL %1 · 用户 %2 · %3")
+                                 .arg(tool.wslDistribution, tool.wslUser, tool.registrationPath));
     } else {
         toolSource_->setText(tool.sshHost.isEmpty()
                                  ? QStringLiteral("本地工具 · %1").arg(QDir::toNativeSeparators(tool.registrationPath))
-                                 : QStringLiteral("服务器 %1 · %2").arg(tool.sshHost, tool.registrationPath));
+                                 : QStringLiteral("SSH %1 · 用户 %2 · %3").arg(tool.sshHost,
+                                     tool.sshUser.isEmpty() ? QStringLiteral("SSH 配置默认用户") : tool.sshUser, tool.registrationPath));
     }
+    toolSource_->setVisible(tool.targetType == QStringLiteral("wsl") || tool.targetType == QStringLiteral("ssh"));
     deleteToolButton_->setVisible(!tool.builtin);
     configureRefreshControls(tool);
 
@@ -1542,62 +1575,284 @@ void AutomationPage::importTool()
 
 void AutomationPage::importRemoteTool()
 {
-    if (database_ == nullptr) {
-        return;
-    }
+    if (database_ == nullptr) return;
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("注册 SSH 服务器工具"));
+    dialog.setObjectName(QStringLiteral("sshRegistrationDialog"));
+    dialog.resize(640, 330);
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->addWidget(makeMuted(QStringLiteral("选择默认 SSH 配置中直接声明的服务器，再选择或填写登录用户。注册只读取声明，不运行工具命令。"), &dialog));
+    auto *form = new QFormLayout;
+    auto *host = new QComboBox(&dialog);
+    host->setObjectName(QStringLiteral("sshHost"));
+    host->setToolTip(QStringLiteral("列表只显示默认 ~/.ssh/config 直接声明的 Host，不列出 Include 引入的工具或扩展连接。实际 SSH 连接仍使用完整配置。"));
+    host->setEditable(true);
+    host->lineEdit()->setPlaceholderText(QStringLiteral("仅列出 ~/.ssh/config 直接声明的别名，也可输入主机"));
+    auto *refresh = new QPushButton(QStringLiteral("刷新列表"), &dialog);
+    auto *hostRow = new QHBoxLayout;
+    hostRow->addWidget(host, 1);
+    hostRow->addWidget(refresh);
+    form->addRow(QStringLiteral("服务器别名"), hostRow);
+    auto *user = new QComboBox(&dialog);
+    user->setObjectName(QStringLiteral("sshUser"));
+    user->setEditable(true);
+    user->lineEdit()->setPlaceholderText(QStringLiteral("留空沿用 SSH 配置；也可选择或输入已有用户名"));
+    form->addRow(QStringLiteral("登录用户"), user);
+    auto *path = new QLineEdit(&dialog);
+    path->setObjectName(QStringLiteral("sshManifestPath"));
+    path->setPlaceholderText(QStringLiteral("~/work/my-tool 或 /home/user/my-tool/orchestrate-tool.json"));
+    form->addRow(QStringLiteral("工具目录 / 声明"), path);
+    layout->addLayout(form);
+    auto *status = makeMuted(QString(), &dialog);
+    status->setObjectName(QStringLiteral("sshRegistrationStatus"));
+    status->setTextFormat(Qt::PlainText);
+    layout->addWidget(status);
+    layout->addStretch();
+    auto *buttons = new QHBoxLayout;
+    buttons->addStretch();
+    auto *cancel = new QPushButton(QStringLiteral("取消"), &dialog);
+    auto *submit = new QPushButton(QStringLiteral("读取并注册"), &dialog);
+    submit->setObjectName(QStringLiteral("sshRegisterSubmit"));
+    submit->setDefault(true);
+    buttons->addWidget(cancel);
+    buttons->addWidget(submit);
+    layout->addLayout(buttons);
+    connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
 
-    bool accepted = false;
-    const QString host = QInputDialog::getText(
-                             this,
-                             QStringLiteral("注册服务器工具"),
-                             QStringLiteral("SSH 主机别名（例如 jdcloud）："),
-                             QLineEdit::Normal,
-                             QString(),
-                             &accepted)
-                             .trimmed();
-    if (!accepted || host.isEmpty()) {
-        return;
-    }
-    if (host.startsWith(QLatin1Char('-')) || host.contains(QRegularExpression(QStringLiteral("\\s")))) {
-        showError(QStringLiteral("SSH 主机应为单个主机别名或 user@host，不能包含命令选项或空白。"));
-        return;
-    }
-
-    const QString manifestPath = QInputDialog::getText(
-                                     this,
-                                     QStringLiteral("注册服务器工具"),
-                                     QStringLiteral("服务器上的接入声明路径（建议使用绝对路径）："),
-                                     QLineEdit::Normal,
-                                     QStringLiteral("/home/lingling/work/automation/lottery/orchestrate-tool.json"),
-                                     &accepted)
-                                     .trimmed();
-    if (!accepted || manifestPath.isEmpty()) {
-        return;
-    }
-    if (!isAbsoluteRemotePath(manifestPath)) {
-        showError(QStringLiteral("服务器接入声明路径必须是以 / 开头的绝对路径。"));
-        return;
-    }
-
+    auto config = SshConnection::Config::load();
+    const auto updateUsers = [&] {
+        const QString alias = host->currentText().trimmed();
+        QStringList users {QString()};
+        const QString hint = config.userHint(alias);
+        if (!hint.isEmpty()) users << hint;
+        for (const auto &tool : database_->automationTools())
+            if (tool.targetType == QStringLiteral("ssh") && tool.sshHost == alias
+                && !tool.sshUser.isEmpty() && !users.contains(tool.sshUser)) users << tool.sshUser;
+        const QSignalBlocker blocker(user);
+        user->clear();
+        user->addItems(users);
+        user->setCurrentIndex(0); // empty means let SSH evaluate its real config, including Match
+        status->setText(hint.isEmpty()
+            ? QStringLiteral("用户可留空使用 SSH 配置。注册成功后显示并保存实际用户名；这里不会创建服务器账号。")
+            : QStringLiteral("配置中的用户提示：%1。留空由 SSH 决定实际用户，或显式选择；不会创建账号。").arg(hint));
+    };
+    const auto loadAliases = [&] {
+        const QString previous = host->currentText();
+        config = SshConnection::Config::load();
+        {
+            const QSignalBlocker blocker(host);
+            host->clear();
+            host->addItems(config.aliases);
+            if (!previous.isEmpty()) host->setCurrentText(previous);
+        }
+        updateUsers();
+        if (!config.warnings.isEmpty()) status->setText(config.warnings.join(QLatin1Char('\n')));
+        else if (config.aliases.isEmpty()) status->setText(QStringLiteral("默认 ~/.ssh/config 中没有直接声明的 Host 别名。可输入主机；Include 中的连接不会加入列表。"));
+    };
+    connect(host, &QComboBox::currentTextChanged, &dialog, updateUsers);
+    connect(refresh, &QPushButton::clicked, &dialog, loadAliases);
+    loadAliases();
+    QString registeredHost, registeredUser, registeredPath;
     QByteArray manifestData;
-    QString error;
-    if (!readManifest(manifestPath, host, &manifestData, &error)) {
-        showError(QStringLiteral("无法读取服务器接入声明：%1").arg(error));
-        return;
-    }
-    registerToolManifest(manifestData, manifestPath, host);
+    connect(submit, &QPushButton::clicked, &dialog, [&] {
+        const QString alias = host->currentText().trimmed();
+        const QString username = user->currentText().trimmed();
+        const QString source = path->text().trimmed();
+        if (!SshConnection::validHost(alias) || alias.contains(QLatin1Char('@'))
+            || (!username.isEmpty() && !PosixRegistration::validUser(username))) {
+            status->setText(QStringLiteral("请填写服务器别名或主机，用户名在第二行单独填写；不能拼入 SSH 选项。"));
+            return;
+        }
+        if (!PosixRegistration::validPath(source) || !(source.startsWith(QLatin1Char('/'))
+            || source == QStringLiteral("~") || source.startsWith(QStringLiteral("~/")))) {
+            status->setText(QStringLiteral("请使用服务器上的 Linux 绝对路径或 ~/ 路径，可填写工具目录。"));
+            return;
+        }
+        for (QWidget *widget : QList<QWidget *> {host, user, path, refresh, submit}) widget->setEnabled(false);
+        status->setText(QStringLiteral("正在连接 %1 并读取声明…请提前完成主机密钥确认和免交互认证。").arg(alias));
+        const QString command = QStringLiteral("sh -c %1 orchestrate-register %2")
+            .arg(PosixRegistration::quote(PosixRegistration::registrationScript()), PosixRegistration::quote(source));
+        SshConnection::capture(&dialog, alias, username, command,
+            [&, alias](bool ok, const QByteArray &bytes, const QString &error) {
+                QString readError = error;
+                if (ok) {
+                    ok = PosixRegistration::registrationResult(bytes, &registeredUser, &registeredPath, &manifestData);
+                    if (!ok) readError = QStringLiteral("服务器返回了无效的路径或用户名，请检查登录脚本是否向 stdout 输出额外文本。");
+                }
+                ParsedManifest manifest;
+                if (ok) ok = parseManifest(manifestData, registeredPath, alias, &manifest, &readError, {}, {}, registeredUser);
+                if (ok) { registeredHost = alias; dialog.accept(); return; }
+                for (QWidget *widget : QList<QWidget *> {host, user, path, refresh, submit}) widget->setEnabled(true);
+                status->setText(readError);
+            });
+    });
+    if (dialog.exec() == QDialog::Accepted)
+        registerToolManifest(manifestData, registeredPath, registeredHost, {}, {}, registeredUser);
+}
+
+void AutomationPage::importWslTool()
+{
+    if (database_ == nullptr) return;
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral("注册 WSL 工具"));
+    dialog.setObjectName(QStringLiteral("wslRegistrationDialog"));
+    dialog.resize(600, 330);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *help = makeMuted(QStringLiteral("选择工具所在的 WSL 发行版。注册只读取接入声明，不运行工具命令。"), &dialog);
+    layout->addWidget(help);
+    auto *form = new QFormLayout;
+    auto *distribution = new QComboBox(&dialog);
+    distribution->setObjectName(QStringLiteral("wslDistribution"));
+    distribution->setEditable(true);
+    auto *refresh = new QPushButton(QStringLiteral("刷新列表"), &dialog);
+    auto *distributionRow = new QHBoxLayout;
+    distributionRow->addWidget(distribution, 1);
+    distributionRow->addWidget(refresh);
+    form->addRow(QStringLiteral("发行版"), distributionRow);
+    auto *user = new QComboBox(&dialog);
+    user->setObjectName(QStringLiteral("wslUser"));
+    user->setEditable(true);
+    user->lineEdit()->setPlaceholderText(QStringLiteral("选择或输入已有用户；留空使用发行版默认用户"));
+    auto *refreshUsers = new QPushButton(QStringLiteral("读取用户"), &dialog);
+    refreshUsers->setObjectName(QStringLiteral("wslRefreshUsers"));
+    auto *userRow = new QHBoxLayout;
+    userRow->addWidget(user, 1);
+    userRow->addWidget(refreshUsers);
+    form->addRow(QStringLiteral("Linux 用户"), userRow);
+    auto *path = new QLineEdit(&dialog);
+    path->setObjectName(QStringLiteral("wslManifestPath"));
+    path->setPlaceholderText(QStringLiteral("~/work/my-tool 或 /home/user/my-tool/orchestrate-tool.json"));
+    form->addRow(QStringLiteral("工具目录 / 声明"), path);
+    layout->addLayout(form);
+    auto *status = makeMuted(QStringLiteral("支持 ~/ 和 Linux 绝对路径；目录会自动补上 orchestrate-tool.json。"), &dialog);
+    status->setTextFormat(Qt::PlainText);
+    layout->addWidget(status);
+    layout->addStretch();
+    auto *buttons = new QHBoxLayout;
+    buttons->addStretch();
+    auto *cancel = new QPushButton(QStringLiteral("取消"), &dialog);
+    auto *submit = new QPushButton(QStringLiteral("读取并注册"), &dialog);
+    submit->setObjectName(QStringLiteral("wslRegisterSubmit"));
+    submit->setDefault(true);
+    buttons->addWidget(cancel);
+    buttons->addWidget(submit);
+    layout->addLayout(buttons);
+    connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
+
+    connect(distribution, &QComboBox::currentTextChanged, &dialog, [this, distribution, user] {
+        const QSignalBlocker blocker(user);
+        user->clear();
+        user->addItem(QString());
+        for (const auto &tool : database_->automationTools())
+            if (tool.targetType == QStringLiteral("wsl") && tool.wslDistribution == distribution->currentText()
+                && !tool.wslUser.isEmpty() && user->findText(tool.wslUser) < 0) user->addItem(tool.wslUser);
+        user->setCurrentIndex(0);
+    });
+    connect(refreshUsers, &QPushButton::clicked, &dialog, [&, distribution, user, refreshUsers, refresh, submit, status] {
+        const QString distro = distribution->currentText().trimmed();
+        if (!WslProcess::validDistribution(distro)) {
+            status->setText(QStringLiteral("请先选择一个有效的发行版。"));
+            return;
+        }
+        for (QWidget *widget : QList<QWidget *> {distribution, user, refreshUsers, refresh, submit}) widget->setEnabled(false);
+        status->setText(QStringLiteral("正在读取所选发行版的已有用户（会启动该发行版），不会创建或修改账号…"));
+        WslProcess::capture(&dialog, WslProcess::arguments(distro, {}, QStringLiteral("sh"),
+            {QStringLiteral("-c"), QStringLiteral("id -un && cat /etc/passwd")}),
+            [distribution, user, refreshUsers, refresh, submit, status](bool ok, const QByteArray &bytes, const QString &error) {
+                for (QWidget *widget : QList<QWidget *> {distribution, user, refreshUsers, refresh, submit}) widget->setEnabled(true);
+                if (!ok) { status->setText(error); return; }
+                const QString previous = user->currentText();
+                const auto names = WslProcess::users(bytes);
+                user->clear();
+                user->addItem(QString());
+                user->addItems(names);
+                user->setCurrentText(previous.isEmpty() ? names.value(0) : previous);
+                status->setText(QStringLiteral("已读取 %1 个用户；可选择或手动输入已有用户名。注册后固定并显示实际用户，不会创建账号。").arg(names.size()));
+            });
+    });
+    QString resolvedDistribution, resolvedUser, resolvedPath;
+    QByteArray manifestData;
+    const auto discover = [&dialog, distribution, refresh, refreshUsers, submit, status] {
+        refresh->setEnabled(false);
+        refreshUsers->setEnabled(false);
+        submit->setEnabled(false);
+        status->setText(QStringLiteral("正在读取已安装的 WSL 发行版…"));
+        WslProcess::capture(&dialog, {QStringLiteral("--list"), QStringLiteral("--quiet")},
+            [distribution, refresh, refreshUsers, submit, status](bool ok, const QByteArray &bytes, const QString &error) {
+                const QString previous = distribution->currentText();
+                const QStringList names = ok ? WslProcess::distributions(bytes) : QStringList();
+                distribution->clear();
+                distribution->addItems(names);
+                if (!previous.isEmpty()) distribution->setCurrentText(previous);
+                refresh->setEnabled(true);
+                refreshUsers->setEnabled(true);
+                submit->setEnabled(true);
+                status->setText(!ok ? error : names.isEmpty()
+                    ? QStringLiteral("未找到发行版。请先安装并初始化 WSL，或输入已有发行版名称后重试。")
+                    : QStringLiteral("填写 Linux 工具目录或声明路径；读取可能启动所选发行版。"));
+            });
+    };
+    connect(refresh, &QPushButton::clicked, &dialog, discover);
+    connect(submit, &QPushButton::clicked, &dialog, [&, distribution, user, path, submit, refresh, status] {
+        const QString distro = distribution->currentText().trimmed();
+        const QString username = user->currentText().trimmed();
+        const QString source = path->text().trimmed();
+        if (!WslProcess::validDistribution(distro) || (!username.isEmpty() && !WslProcess::validName(username))) {
+            status->setText(QStringLiteral("请填写有效的发行版和 Linux 用户名，不能以 - 开头或包含控制字符；用户名不能含空白。"));
+            return;
+        }
+        if (!WslProcess::validPath(source) || !(source.startsWith(QLatin1Char('/'))
+            || source == QStringLiteral("~") || source.startsWith(QStringLiteral("~/")))) {
+            status->setText(QStringLiteral("请使用 Linux 绝对路径或 ~/ 路径，不支持 Windows 路径或 ~其他用户。"));
+            return;
+        }
+        distribution->setEnabled(false);
+        refreshUsers->setEnabled(false);
+        user->setEnabled(false);
+        path->setEnabled(false);
+        submit->setEnabled(false);
+        refresh->setEnabled(false);
+        status->setText(QStringLiteral("正在 WSL 中读取接入声明…首次启动可能需要一些时间。"));
+        const auto args = WslProcess::arguments(distro, username, QStringLiteral("sh"),
+            {QStringLiteral("-c"), WslProcess::registrationScript(), QStringLiteral("orchestrate-register"), source});
+        WslProcess::capture(&dialog, args, [&, distro, distribution, user, path, submit, refresh, status]
+                            (bool ok, const QByteArray &bytes, const QString &error) {
+            QString readError = error;
+            if (ok) {
+                ok = WslProcess::registrationResult(bytes, &resolvedUser, &resolvedPath, &manifestData);
+                if (!ok) readError = QStringLiteral("WSL 返回了无效的路径或用户信息。");
+            }
+            ParsedManifest manifest;
+            if (ok) ok = parseManifest(manifestData, resolvedPath, {}, &manifest, &readError, distro, resolvedUser);
+            if (ok) {
+                resolvedDistribution = distro;
+                dialog.accept();
+                return;
+            }
+            distribution->setEnabled(true);
+            refreshUsers->setEnabled(true);
+            user->setEnabled(true);
+            path->setEnabled(true);
+            submit->setEnabled(true);
+            refresh->setEnabled(true);
+            status->setText(readError);
+        });
+    });
+    discover();
+    if (dialog.exec() == QDialog::Accepted)
+        registerToolManifest(manifestData, resolvedPath, {}, resolvedDistribution, resolvedUser);
 }
 
 bool AutomationPage::readManifest(const QString &sourcePath,
                                   const QString &sshHost,
                                   QByteArray *data,
-                                  QString *errorMessage) const
+                                  QString *errorMessage, const QString &sshUser) const
 {
     if (!sshHost.isEmpty()) {
         return runSshCapture(sshHost,
                              {QStringLiteral("cat"), QStringLiteral("--"), shellQuote(sourcePath)},
                              data,
-                             errorMessage);
+                             errorMessage, sshUser);
     }
     QFile file(sourcePath);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -1614,7 +1869,10 @@ bool AutomationPage::parseManifest(const QByteArray &manifestData,
                                    const QString &sourcePath,
                                    const QString &sshHost,
                                    ParsedManifest *manifest,
-                                   QString *errorMessage) const
+                                   QString *errorMessage,
+                                   const QString &wslDistribution,
+                                   const QString &wslUser,
+                                   const QString &sshUser) const
 {
     const auto fail = [errorMessage](const QString &message) {
         if (errorMessage != nullptr) {
@@ -1641,12 +1899,27 @@ bool AutomationPage::parseManifest(const QByteArray &manifestData,
     }
 
     const bool remote = !sshHost.isEmpty();
-    if (targetType != (remote ? QStringLiteral("ssh") : QStringLiteral("windows-local"))) {
-        return fail(remote ? QStringLiteral("服务器工具的 target_type 必须是 ssh。")
-                           : QStringLiteral("本地工具的 target_type 必须是 windows-local；WSL 尚未支持，ssh 工具请使用“注册服务器工具”。"));
+    if ((remote && !SshConnection::validHost(sshHost)) || (!sshUser.isEmpty()
+        && (!remote || !PosixRegistration::validUser(sshUser))))
+        return fail(QStringLiteral("SSH 服务器与用户配置无效；用户名须单独填写。"));
+    const bool wsl = !wslDistribution.isEmpty();
+    if ((wsl && (remote || !WslProcess::validDistribution(wslDistribution) || !WslProcess::validName(wslUser)))
+        || (!wsl && !wslUser.isEmpty())) {
+        return fail(QStringLiteral("WSL 注册必须指定有效的发行版和 Linux 用户，且不能同时指定 SSH 主机。"));
     }
-    if (remote && (!isAbsoluteRemotePath(sourcePath) || statePath.contains(QLatin1Char('\\')))) {
-        return fail(QStringLiteral("服务器路径须使用 / 分隔，接入声明路径必须是绝对路径。"));
+    const QString expectedTarget = wsl ? QStringLiteral("wsl")
+        : (remote ? QStringLiteral("ssh") : QStringLiteral("windows-local"));
+    if (targetType != expectedTarget) {
+        return fail(QStringLiteral("此注册入口的 target_type 必须是 %1；请使用对应的本地、WSL 或服务器注册入口。")
+                        .arg(expectedTarget));
+    }
+    if (wsl && (!WslProcess::validPath(sourcePath) || !WslProcess::validPath(statePath)
+                || statePath.startsWith(QLatin1Char('~'))
+                || (QDir::isAbsolutePath(statePath) && !statePath.startsWith(QLatin1Char('/'))))) {
+        return fail(QStringLiteral("WSL 声明和状态须使用 Linux 路径；声明内不展开 ~ 或 Windows 路径。"));
+    }
+    if ((remote || wsl) && (!isAbsoluteRemotePath(sourcePath) || statePath.contains(QLatin1Char('\\')))) {
+        return fail(QStringLiteral("Linux 路径须使用 / 分隔，接入声明路径必须是绝对路径。"));
     }
     if (object.contains(QStringLiteral("commands")) && !object.value(QStringLiteral("commands")).isArray()) {
         return fail(QStringLiteral("commands 必须是数组；只读监测工具请使用空数组 []。"));
@@ -1654,7 +1927,15 @@ bool AutomationPage::parseManifest(const QByteArray &manifestData,
 
     const QDir manifestDirectory = QFileInfo(sourcePath).dir();
     QString workingDirectory = jsonString(object, QStringLiteral("working_directory")).trimmed();
-    if (remote) {
+    if (wsl) {
+        const QString base = remoteDirectory(sourcePath);
+        if (workingDirectory.isEmpty()) workingDirectory = base;
+        if (!WslProcess::validPath(workingDirectory) || workingDirectory.startsWith(QLatin1Char('~'))
+            || (QDir::isAbsolutePath(workingDirectory) && !workingDirectory.startsWith(QLatin1Char('/'))))
+            return fail(QStringLiteral("WSL working_directory 必须是 Linux 绝对路径或相对于声明目录的路径，不能使用 ~。"));
+        if (!isAbsoluteRemotePath(workingDirectory)) workingDirectory = base + QLatin1Char('/') + workingDirectory;
+        workingDirectory = QDir::cleanPath(workingDirectory);
+    } else if (remote) {
         if (workingDirectory.isEmpty()) {
             workingDirectory = remoteDirectory(sourcePath);
         }
@@ -1672,8 +1953,12 @@ bool AutomationPage::parseManifest(const QByteArray &manifestData,
     tool.targetType = targetType;
     tool.registrationPath = sourcePath;
     tool.sshHost = sshHost;
+    tool.sshUser = sshUser;
+    tool.wslDistribution = wslDistribution;
+    tool.wslUser = wslUser;
     tool.workingDirectory = workingDirectory;
-    tool.statePath = remote
+    tool.statePath = wsl ? QDir::cleanPath(isAbsoluteRemotePath(statePath)
+        ? statePath : remoteDirectory(sourcePath) + QLatin1Char('/') + statePath) : remote
         ? resolveRemotePath(workingDirectory, statePath)
         : (QFileInfo(statePath).isAbsolute() ? statePath : manifestDirectory.filePath(statePath));
     manifest->group = jsonString(object, QStringLiteral("group")).trimmed();
@@ -1708,6 +1993,13 @@ bool AutomationPage::parseManifest(const QByteArray &manifestData,
         if (command.name.trimmed().isEmpty() || command.executable.trimmed().isEmpty()) {
             return fail(QStringLiteral("每条命令都必须提供非空 name 和 executable。"));
         }
+        if (wsl) {
+            if (!WslProcess::validPath(command.executable) || command.executable.startsWith(QLatin1Char('~'))
+                || (QDir::isAbsolutePath(command.executable) && !command.executable.startsWith(QLatin1Char('/'))))
+                return fail(QStringLiteral("WSL executable 必须是 Linux 程序名或路径，不能使用 ~。"));
+            for (const auto &argument : command.arguments)
+                if (argument.contains(QChar::Null)) return fail(QStringLiteral("WSL 参数不能包含 NUL。"));
+        }
         if (!validateParameters(command.name, command.parameters, errorMessage)) {
             return false;
         }
@@ -1718,7 +2010,10 @@ bool AutomationPage::parseManifest(const QByteArray &manifestData,
 
 void AutomationPage::registerToolManifest(const QByteArray &manifestData,
                                            const QString &sourcePath,
-                                           const QString &sshHost)
+                                           const QString &sshHost,
+                                           const QString &wslDistribution,
+                                           const QString &wslUser,
+                                           const QString &sshUser)
 {
     if (database_ == nullptr) {
         return;
@@ -1726,7 +2021,7 @@ void AutomationPage::registerToolManifest(const QByteArray &manifestData,
 
     ParsedManifest manifest;
     QString error;
-    if (!parseManifest(manifestData, sourcePath, sshHost, &manifest, &error)) {
+    if (!parseManifest(manifestData, sourcePath, sshHost, &manifest, &error, wslDistribution, wslUser, sshUser)) {
         showError(error);
         return;
     }
@@ -1734,7 +2029,7 @@ void AutomationPage::registerToolManifest(const QByteArray &manifestData,
     // Registering the same tool again updates it instead of creating a duplicate.
     const QList<AppDatabase::AutomationTool> tools = database_->automationTools(0, &error);
     for (const AppDatabase::AutomationTool &existing : tools) {
-        if (existing.externalId != manifest.tool.externalId || existing.sshHost != sshHost) {
+        if (existing.externalId != manifest.tool.externalId || !existing.sameExecutionTarget(manifest.tool)) {
             continue;
         }
         if (QMessageBox::question(this, QStringLiteral("工具已注册"),
@@ -1804,17 +2099,53 @@ bool AutomationPage::applyManifestUpdate(int toolId, ParsedManifest manifest)
 void AutomationPage::reloadManifest()
 {
     AppDatabase::AutomationTool tool;
-    if (!findTool(selectedToolId_, &tool)) {
+    if (!findTool(selectedToolId_, &tool) || manifestReadsInFlight_.contains(tool.id)) return;
+    if (tool.targetType == QStringLiteral("wsl") || tool.targetType == QStringLiteral("ssh")) {
+        manifestReadsInFlight_.insert(tool.id);
+        commandHint_->setText(QStringLiteral("正在重新读取远程声明…"));
+        commandHint_->show();
+        const auto complete = [this, tool](bool ok, const QByteArray &data, const QString &error) {
+            manifestReadsInFlight_.remove(tool.id);
+            AppDatabase::AutomationTool current;
+            if (!findTool(tool.id, &current) || !current.sameExecutionTarget(tool)
+                || current.externalId != tool.externalId || current.registrationPath != tool.registrationPath) return;
+            if (!ok) {
+                if (selectedToolId_ == tool.id) {
+                    commandHint_->setText(QStringLiteral("声明读取失败，可重试。"));
+                    commandHint_->show();
+                }
+                showError(error);
+                return;
+            }
+            finishManifestReload(tool, data);
+        };
+        if (tool.targetType == QStringLiteral("wsl"))
+            WslProcess::capture(this, WslProcess::arguments(tool.wslDistribution, tool.wslUser,
+                QStringLiteral("cat"), {QStringLiteral("--"), tool.registrationPath}), complete);
+        else
+            SshConnection::capture(this, tool.sshHost, tool.sshUser,
+                QStringLiteral("cat -- %1").arg(shellQuote(tool.registrationPath)), complete);
         return;
     }
     QByteArray data;
     QString error;
-    ParsedManifest manifest;
     if (!readManifest(tool.registrationPath, tool.sshHost, &data, &error)) {
         showError(QStringLiteral("无法读取接入声明：%1").arg(error));
         return;
     }
-    if (!parseManifest(data, tool.registrationPath, tool.sshHost, &manifest, &error)) {
+    finishManifestReload(tool, data);
+}
+
+void AutomationPage::finishManifestReload(const AppDatabase::AutomationTool &tool, const QByteArray &data)
+{
+    QString error;
+    ParsedManifest manifest;
+    if (!parseManifest(data, tool.registrationPath, tool.sshHost, &manifest, &error,
+                       tool.wslDistribution, tool.wslUser, tool.sshUser)) {
+        if (selectedToolId_ == tool.id) {
+            commandHint_->setText(QStringLiteral("声明校验失败，保留原有工具信息。"));
+            commandHint_->show();
+        }
         showError(error);
         return;
     }
@@ -1830,7 +2161,9 @@ void AutomationPage::reloadManifest()
     if (!applyManifestUpdate(tool.id, manifest)) {
         return;
     }
-    loadAll(tool.id);
+    const bool stillSelected = selectedToolId_ == tool.id;
+    loadAll(stillSelected ? tool.id : selectedToolId_);
+    if (!stillSelected) return;
     commandHint_->setText(QStringLiteral("已重新读取声明，共 %1 条命令").arg(commandCount));
     commandHint_->show();
     QTimer::singleShot(4000, this, [this] {
@@ -1853,17 +2186,11 @@ void AutomationPage::moveToolToGroup(int toolId, int groupId)
 bool AutomationPage::runSshCapture(const QString &host,
                                     const QStringList &arguments,
                                     QByteArray *output,
-                                    QString *errorMessage) const
+                                    QString *errorMessage, const QString &sshUser) const
 {
     QProcess process;
     process.setProgram(QStringLiteral("ssh"));
-    QStringList sshArguments {
-        QStringLiteral("-o"), QStringLiteral("BatchMode=yes"),
-        QStringLiteral("-o"), QStringLiteral("ConnectTimeout=10"),
-        host,
-        arguments.join(QLatin1Char(' '))
-    };
-    process.setArguments(sshArguments);
+    process.setArguments(SshConnection::arguments(host, sshUser, arguments.join(QLatin1Char(' '))));
     process.setProcessChannelMode(QProcess::SeparateChannels);
     process.start();
     if (!process.waitForStarted(5000)) {
@@ -2027,6 +2354,10 @@ bool AutomationPage::readToolState(const AppDatabase::AutomationTool &tool,
                                     QJsonObject *state,
                                     QString *errorMessage) const
 {
+    if (tool.targetType == QStringLiteral("wsl")) {
+        if (errorMessage) *errorMessage = QStringLiteral("WSL 状态须通过异步通道读取。");
+        return false;
+    }
     if (tool.sshHost.isEmpty()) {
         return readStateFile(tool.statePath, tool.externalId, state, errorMessage);
     }
@@ -2035,7 +2366,7 @@ bool AutomationPage::readToolState(const AppDatabase::AutomationTool &tool,
     if (!runSshCapture(tool.sshHost,
                        {QStringLiteral("cat"), QStringLiteral("--"), shellQuote(tool.statePath)},
                        &data,
-                       errorMessage)) {
+                       errorMessage, tool.sshUser)) {
         return false;
     }
 
@@ -2065,6 +2396,17 @@ void AutomationPage::applyStateResult(int toolId,
     }
 }
 
+void AutomationPage::startAsyncWslStateRead(const AppDatabase::AutomationTool &tool, bool updateVisibleState)
+{
+    if (stateReadsInFlight_.contains(tool.id)) return;
+    auto *process = new QProcess(this);
+    process->setProgram(WslProcess::program());
+    process->setArguments(WslProcess::arguments(tool.wslDistribution, tool.wslUser,
+        QStringLiteral("cat"), {QStringLiteral("--"), tool.statePath}));
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+    startStateReadProcess(tool, updateVisibleState, process);
+}
+
 void AutomationPage::startAsyncSshStateRead(const AppDatabase::AutomationTool &tool,
                                             bool updateVisibleState)
 {
@@ -2074,12 +2416,8 @@ void AutomationPage::startAsyncSshStateRead(const AppDatabase::AutomationTool &t
 
     auto *process = new QProcess(this);
     process->setProgram(QStringLiteral("ssh"));
-    process->setArguments({
-        QStringLiteral("-o"), QStringLiteral("BatchMode=yes"),
-        QStringLiteral("-o"), QStringLiteral("ConnectTimeout=10"),
-        tool.sshHost,
-        QStringLiteral("cat -- %1").arg(shellQuote(tool.statePath))
-    });
+    process->setArguments(SshConnection::arguments(tool.sshHost, tool.sshUser,
+        QStringLiteral("cat -- %1").arg(shellQuote(tool.statePath))));
     process->setProcessChannelMode(QProcess::SeparateChannels);
     startStateReadProcess(tool, updateVisibleState, process);
 }
@@ -2093,8 +2431,9 @@ void AutomationPage::startStateReadProcess(const AppDatabase::AutomationTool &to
         return;
     }
     stateReadsInFlight_.insert(tool.id);
+    const QString channelName = tool.targetType == QStringLiteral("wsl") ? QStringLiteral("WSL") : QStringLiteral("SSH");
     if (updateVisibleState && selectedToolId_ == tool.id && !stateCache_.contains(tool.id))
-        renderStateMessage(QStringLiteral("读取中"), QStringLiteral("loading"), QStringLiteral("正在通过 SSH 读取服务器状态…"));
+        renderStateMessage(QStringLiteral("读取中"), QStringLiteral("loading"), QStringLiteral("正在通过 %1 读取工具状态…").arg(channelName));
 
     struct ReadBuffer { QByteArray output; QByteArray errors; bool completed = false; };
     const auto buffer = std::make_shared<ReadBuffer>();
@@ -2111,12 +2450,12 @@ void AutomationPage::startStateReadProcess(const AppDatabase::AutomationTool &to
         // A removed or reconfigured registration must not receive an old request's result.
         AppDatabase::AutomationTool current;
         if (findTool(tool.id, &current) && current.externalId == tool.externalId
-            && current.statePath == tool.statePath && current.sshHost == tool.sshHost)
+            && current.statePath == tool.statePath && current.sameExecutionTarget(tool))
             applyStateResult(tool.id, success, state, error, updateVisibleState);
         else if (current.id > 0)
             refreshStateForTool(current.id, updateVisibleState);
     };
-    const auto read = [process, buffer, complete] {
+    const auto read = [process, buffer, complete, channelName] {
         if (buffer->completed) return;
         for (auto channel : {QProcess::StandardOutput, QProcess::StandardError}) {
             process->setReadChannel(channel);
@@ -2124,7 +2463,7 @@ void AutomationPage::startStateReadProcess(const AppDatabase::AutomationTool &to
             while (process->bytesAvailable() > 0) {
                 destination += process->read(qMin<qint64>(64 * 1024, ToolState::maxBytes + 1 - destination.size()));
                 if (destination.size() > ToolState::maxBytes) {
-                    complete(false, {}, QStringLiteral("SSH 状态读取超过 1 MiB 上限。"));
+                    complete(false, {}, QStringLiteral("%1 状态读取超过 1 MiB 上限。").arg(channelName));
                     return;
                 }
             }
@@ -2133,15 +2472,17 @@ void AutomationPage::startStateReadProcess(const AppDatabase::AutomationTool &to
     connect(process, &QProcess::readyReadStandardOutput, this, read);
     connect(process, &QProcess::readyReadStandardError, this, read);
     connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
-            [process, buffer, read, complete, tool](int exitCode, QProcess::ExitStatus exitStatus) {
+            [process, buffer, read, complete, tool, channelName](int exitCode, QProcess::ExitStatus exitStatus) {
         if (buffer->completed) { process->deleteLater(); return; }
         read();
         if (buffer->completed) return;
         QJsonObject state;
         QString error;
         if (exitStatus != QProcess::NormalExit || exitCode != 0) {
-            error = decodeOutput(buffer->errors).trimmed();
-            if (error.isEmpty()) error = QStringLiteral("SSH 命令失败（退出码 %1）。").arg(exitCode);
+            error = tool.targetType == QStringLiteral("wsl")
+                ? WslProcess::diagnostic(buffer->errors.isEmpty() ? buffer->output : buffer->errors).trimmed()
+                : decodeOutput(buffer->errors).trimmed();
+            if (error.isEmpty()) error = QStringLiteral("%1 命令失败（退出码 %2）。").arg(channelName).arg(exitCode);
             complete(false, {}, error);
             return;
         }
@@ -2151,8 +2492,8 @@ void AutomationPage::startStateReadProcess(const AppDatabase::AutomationTool &to
     connect(process, &QProcess::errorOccurred, this, [process, complete](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart) complete(false, {}, process->errorString());
     });
-    connect(timer, &QTimer::timeout, this, [complete] {
-        complete(false, {}, QStringLiteral("SSH 状态读取超时，已结束本次读取；可重新刷新。"));
+    connect(timer, &QTimer::timeout, this, [complete, channelName] {
+        complete(false, {}, QStringLiteral("%1 状态读取超时，已结束本次读取；可重新刷新。").arg(channelName));
     });
     timer->start(timeoutMs);
     process->start();
@@ -2162,6 +2503,10 @@ void AutomationPage::refreshStateForTool(int toolId, bool updateVisibleState)
 {
     AppDatabase::AutomationTool tool;
     if (!findTool(toolId, &tool)) {
+        return;
+    }
+    if (tool.targetType == QStringLiteral("wsl")) {
+        startAsyncWslStateRead(tool, updateVisibleState);
         return;
     }
     if (!tool.sshHost.isEmpty()) {
@@ -2383,8 +2728,10 @@ void AutomationPage::runCommand(QListWidgetItem *item)
         showError(QStringLiteral("找不到当前工具注册信息。"));
         return;
     }
-    const QString expectedTarget = tool.sshHost.isEmpty() ? QStringLiteral("windows-local") : QStringLiteral("ssh");
-    if (tool.targetType != expectedTarget) {
+    const QString expectedTarget = !tool.wslDistribution.isEmpty() ? QStringLiteral("wsl")
+        : tool.sshHost.isEmpty() ? QStringLiteral("windows-local") : QStringLiteral("ssh");
+    if (tool.targetType != expectedTarget || (expectedTarget == QStringLiteral("wsl")
+        && (!tool.sshHost.isEmpty() || !WslProcess::validDistribution(tool.wslDistribution) || !WslProcess::validName(tool.wslUser)))) {
         showError(QStringLiteral("当前注册的执行目标不受支持，请修正 target_type 后重新读取声明。"));
         return;
     }
@@ -2424,19 +2771,30 @@ void AutomationPage::runCommand(QListWidgetItem *item)
     }
     const QStringList arguments = CommandArguments::expand(command.arguments, values);
 
+    if (tool.targetType == QStringLiteral("wsl")) {
+        for (const auto &argument : arguments) {
+            if (argument.contains(QChar::Null)) {
+                showError(QStringLiteral("WSL 参数不能包含 NUL。"));
+                return;
+            }
+        }
+    }
     auto *process = new QProcess(this);
     process->setProcessChannelMode(QProcess::MergedChannels);
     QString commandLine;
-    if (!tool.sshHost.isEmpty()) {
+    if (tool.targetType == QStringLiteral("wsl")) {
+        process->setProgram(WslProcess::program());
+        process->setArguments(WslProcess::arguments(tool.wslDistribution, tool.wslUser,
+            command.executable, arguments, tool.workingDirectory));
+        QStringList parts {command.executable};
+        for (const auto &argument : arguments) parts << displayArgument(argument);
+        commandLine = QStringLiteral("[WSL %1 / %2] %3").arg(tool.wslDistribution, tool.wslUser, parts.join(QLatin1Char(' ')));
+    } else if (!tool.sshHost.isEmpty()) {
         const QString remoteLine = remoteCommandLine(tool, command.executable, arguments);
         process->setProgram(QStringLiteral("ssh"));
-        process->setArguments({
-            QStringLiteral("-o"), QStringLiteral("BatchMode=yes"),
-            QStringLiteral("-o"), QStringLiteral("ConnectTimeout=10"),
-            tool.sshHost,
-            remoteLine
-        });
-        commandLine = QStringLiteral("[%1] %2").arg(tool.sshHost, remoteLine);
+        process->setArguments(SshConnection::arguments(tool.sshHost, tool.sshUser, remoteLine));
+        commandLine = QStringLiteral("[SSH %1 / %2] %3").arg(tool.sshHost,
+            tool.sshUser.isEmpty() ? QStringLiteral("SSH 配置默认用户") : tool.sshUser, remoteLine);
     } else {
         process->setProgram(command.executable);
         process->setArguments(arguments);
@@ -2510,6 +2868,7 @@ void AutomationPage::runCommand(QListWidgetItem *item)
         process->deleteLater();
     });
     process->start();
+    if (tool.targetType == QStringLiteral("wsl")) process->closeWriteChannel();
 }
 
 void AutomationPage::showError(const QString &message)
