@@ -2,6 +2,8 @@
 
 先读 [接入指南](../../automation-tool-contract-v1.md)。此样例只写自身目录内的 `state/current.json`，不联网、不操作系统任务。复制整个目录到自己的工具目录，使用 Python 3.9 或更新版本，无需安装第三方库。
 
+需要账号、设备或环境的动态选择时，参照指南第 7 节的 `options_state_key` 与 `readonly` 声明片段；这里的最小脚本只实现下文的生成结果与模拟失败命令，不实现账号切换。
+
 ```powershell
 python -u adapter.py run --message "你好 Orchestrate" --count 2
 python -u adapter.py fail

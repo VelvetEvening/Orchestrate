@@ -1,6 +1,8 @@
 #include "automationpage.h"
 #include "automation/commandarguments.h"
+#include "automation/commandform.h"
 #include "automation/toolstate.h"
+#include "automation/toolstatereader.h"
 #include "automation/wslprocess.h"
 #include "automation/sshconnection.h"
 
@@ -48,7 +50,6 @@
 #include <QTreeWidgetItem>
 #include <QVBoxLayout>
 
-#include <cmath>
 #include <memory>
 
 namespace {
@@ -102,35 +103,6 @@ QString jsonString(const QJsonObject &object, const QString &key, const QString 
 {
     const QJsonValue value = object.value(key);
     return value.isString() ? value.toString() : fallback;
-}
-
-QString jsonScalarText(const QJsonValue &value)
-{
-    if (value.isString()) {
-        return value.toString();
-    }
-    if (value.isDouble()) {
-        const double number = value.toDouble();
-        return number == std::floor(number) ? QString::number(static_cast<qint64>(number))
-                                            : QString::number(number);
-    }
-    if (value.isBool()) {
-        return value.toBool() ? QStringLiteral("true") : QStringLiteral("false");
-    }
-    return QString();
-}
-
-// Looks up a dotted path such as "settings.time" inside a state JSON object.
-QJsonValue jsonPath(const QJsonObject &object, const QString &path)
-{
-    QJsonValue current = object;
-    for (const QString &part : path.split(QLatin1Char('.'), Qt::SkipEmptyParts)) {
-        if (!current.isObject()) {
-            return QJsonValue(QJsonValue::Undefined);
-        }
-        current = current.toObject().value(part);
-    }
-    return current;
 }
 
 QString shellQuote(const QString &value)
@@ -268,250 +240,6 @@ void applyToolStatus(QTreeWidgetItem *item, const QJsonObject *state, const QStr
     item->setIcon(0, statusDot(color));
     item->setText(1, text);
     item->setForeground(1, color);
-}
-
-// ---- Command parameters -------------------------------------------------
-
-const QStringList kParameterTypes {
-    QStringLiteral("string"),
-    QStringLiteral("integer"),
-    QStringLiteral("time"),
-    QStringLiteral("choice"),
-    QStringLiteral("boolean")
-};
-
-QString parameterType(const QJsonObject &definition)
-{
-    const QString type = jsonString(definition, QStringLiteral("type"), QStringLiteral("string")).toLower();
-    return kParameterTypes.contains(type) ? type : QStringLiteral("string");
-}
-
-bool validateParameters(const QString &commandName, const QJsonArray &parameters, QString *errorMessage)
-{
-    static const QRegularExpression validKey(QStringLiteral("^[A-Za-z0-9_.-]+$"));
-    QSet<QString> keys;
-    for (const QJsonValue &value : parameters) {
-        const QJsonObject definition = value.toObject();
-        const QString key = jsonString(definition, QStringLiteral("key")).trimmed();
-        const QString type = jsonString(definition, QStringLiteral("type"), QStringLiteral("string")).toLower();
-        QString problem;
-        if (!value.isObject() || key.isEmpty()) {
-            problem = QStringLiteral("每个参数都必须是包含 key 的对象");
-        } else if (keys.contains(key)) {
-            problem = QStringLiteral("参数 key“%1”重复").arg(key);
-        } else if (!validKey.match(key).hasMatch()) {
-            problem = QStringLiteral("参数 key 只能包含英文字母、数字、下划线、点和连字符");
-        } else if (!kParameterTypes.contains(type)) {
-            problem = QStringLiteral("参数“%1”的类型“%2”不受支持（可用：%3）")
-                          .arg(key, type, kParameterTypes.join(QStringLiteral("、")));
-        } else if (type == QStringLiteral("choice")
-                   && definition.value(QStringLiteral("options")).toArray().isEmpty()) {
-            problem = QStringLiteral("选择型参数“%1”必须提供 options").arg(key);
-        }
-        if (!problem.isEmpty()) {
-            if (errorMessage != nullptr) {
-                *errorMessage = QStringLiteral("命令“%1”的参数定义无效：%2。").arg(commandName, problem);
-            }
-            return false;
-        }
-        keys.insert(key);
-    }
-    return true;
-}
-
-struct ParameterInput {
-    QString key;
-    QString type;
-    QString label;
-    bool required = false;
-    QJsonObject definition;
-    QWidget *widget = nullptr;
-};
-
-// Shows a form for the command's parameters. Defaults come from the manifest,
-// or from the tool's current state when the parameter names a state_key.
-bool promptParameters(QWidget *parent,
-                      const AppDatabase::ToolCommand &command,
-                      const QJsonObject &state,
-                      QHash<QString, QString> *values)
-{
-    QDialog dialog(parent);
-    dialog.setWindowTitle(command.name);
-    dialog.setMinimumWidth(460);
-    auto *layout = new QVBoxLayout(&dialog);
-    layout->setContentsMargins(26, 22, 26, 20);
-    layout->setSpacing(12);
-    layout->addWidget(makeCardTitle(command.name, &dialog));
-    if (!command.description.isEmpty()) {
-        layout->addWidget(makeMuted(command.description, &dialog));
-    }
-    if (command.highRisk) {
-        auto *warning = new QLabel(QStringLiteral("该命令被工具声明为高风险，请确认参数后再运行。"), &dialog);
-        warning->setObjectName(QStringLiteral("warningText"));
-        warning->setWordWrap(true);
-        layout->addWidget(warning);
-    }
-
-    auto *form = new QFormLayout;
-    form->setContentsMargins(0, 6, 0, 0);
-    form->setHorizontalSpacing(14);
-    form->setVerticalSpacing(12);
-    form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-
-    QList<ParameterInput> inputs;
-    for (const QJsonValue &value : command.parameters) {
-        const QJsonObject definition = value.toObject();
-        ParameterInput input;
-        input.key = jsonString(definition, QStringLiteral("key")).trimmed();
-        if (input.key.isEmpty()) {
-            continue;
-        }
-        input.type = parameterType(definition);
-        input.label = jsonString(definition, QStringLiteral("label"), input.key);
-        input.required = definition.value(QStringLiteral("required")).toBool(false);
-        input.definition = definition;
-
-        QJsonValue initial = definition.value(QStringLiteral("default"));
-        const QString stateKey = jsonString(definition, QStringLiteral("state_key"));
-        if (!stateKey.isEmpty()) {
-            const QJsonValue fromState = jsonPath(state, stateKey);
-            if (!fromState.isUndefined() && !fromState.isNull()) {
-                initial = fromState;
-            }
-        }
-        const QString initialText = jsonScalarText(initial);
-
-        if (input.type == QStringLiteral("integer")) {
-            auto *spin = new QSpinBox(&dialog);
-            spin->setRange(definition.value(QStringLiteral("min")).toInt(0),
-                           definition.value(QStringLiteral("max")).toInt(1000000));
-            spin->setSingleStep(qMax(1, definition.value(QStringLiteral("step")).toInt(1)));
-            const QString unit = jsonString(definition, QStringLiteral("unit"));
-            if (!unit.isEmpty()) {
-                spin->setSuffix(QStringLiteral(" ") + unit);
-            }
-            bool ok = false;
-            const int number = initialText.toInt(&ok);
-            spin->setValue(ok ? number : spin->minimum());
-            input.widget = spin;
-        } else if (input.type == QStringLiteral("time")) {
-            auto *edit = new QTimeEdit(&dialog);
-            edit->setDisplayFormat(QStringLiteral("HH:mm"));
-            QTime time = QTime::fromString(initialText, QStringLiteral("HH:mm"));
-            if (!time.isValid()) {
-                time = QTime::fromString(initialText, QStringLiteral("H:mm"));
-            }
-            edit->setTime(time.isValid() ? time : QTime(0, 0));
-            input.widget = edit;
-        } else if (input.type == QStringLiteral("choice")) {
-            auto *combo = new QComboBox(&dialog);
-            for (const QJsonValue &option : definition.value(QStringLiteral("options")).toArray()) {
-                if (option.isObject()) {
-                    const QJsonObject optionObject = option.toObject();
-                    const QString optionValue = jsonScalarText(optionObject.value(QStringLiteral("value")));
-                    combo->addItem(jsonString(optionObject, QStringLiteral("label"), optionValue), optionValue);
-                } else {
-                    combo->addItem(jsonScalarText(option), jsonScalarText(option));
-                }
-            }
-            const int index = combo->findData(initialText);
-            if (index >= 0) {
-                combo->setCurrentIndex(index);
-            }
-            input.widget = combo;
-        } else if (input.type == QStringLiteral("boolean")) {
-            auto *check = new QCheckBox(jsonString(definition, QStringLiteral("text")), &dialog);
-            check->setChecked(initialText == QStringLiteral("true"));
-            input.widget = check;
-        } else {
-            auto *edit = new QLineEdit(&dialog);
-            edit->setPlaceholderText(jsonString(definition, QStringLiteral("placeholder")));
-            edit->setText(initialText);
-            input.widget = edit;
-        }
-
-        QWidget *field = input.widget;
-        const QString help = jsonString(definition, QStringLiteral("description"));
-        if (!help.isEmpty()) {
-            auto *box = new QWidget(&dialog);
-            auto *boxLayout = new QVBoxLayout(box);
-            boxLayout->setContentsMargins(0, 0, 0, 0);
-            boxLayout->setSpacing(4);
-            boxLayout->addWidget(input.widget);
-            auto *helpLabel = new QLabel(help, box);
-            helpLabel->setObjectName(QStringLiteral("fieldHelp"));
-            helpLabel->setWordWrap(true);
-            boxLayout->addWidget(helpLabel);
-            field = box;
-        }
-        form->addRow(input.label + (input.required ? QStringLiteral(" *") : QString()) + QStringLiteral("："),
-                     field);
-        inputs.append(input);
-    }
-    layout->addLayout(form);
-
-    auto *errorLabel = new QLabel(&dialog);
-    errorLabel->setObjectName(QStringLiteral("warningText"));
-    errorLabel->setWordWrap(true);
-    errorLabel->hide();
-    layout->addWidget(errorLabel);
-
-    layout->addSpacing(6);
-    auto *buttons = new QHBoxLayout;
-    buttons->addStretch(1);
-    auto *cancelButton = new QPushButton(QStringLiteral("取消"), &dialog);
-    buttons->addWidget(cancelButton);
-    auto *runButton = new QPushButton(command.highRisk ? QStringLiteral("确认运行") : QStringLiteral("运行"),
-                                      &dialog);
-    runButton->setObjectName(QStringLiteral("primaryButton"));
-    runButton->setDefault(true);
-    buttons->addWidget(runButton);
-    layout->addLayout(buttons);
-
-    QObject::connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
-    QObject::connect(runButton, &QPushButton::clicked, &dialog, [&dialog, &inputs, errorLabel] {
-        for (const ParameterInput &input : inputs) {
-            auto *edit = qobject_cast<QLineEdit *>(input.widget);
-            if (input.required && edit != nullptr && edit->text().trimmed().isEmpty()) {
-                errorLabel->setText(QStringLiteral("请填写“%1”。").arg(input.label));
-                errorLabel->show();
-                edit->setFocus();
-                return;
-            }
-        }
-        dialog.accept();
-    });
-
-    // With word-wrapped labels QDialog picks its height for a narrower width than it is
-    // finally shown at, and the spare height piles up around the title and description.
-    if (layout->hasHeightForWidth()) {
-        const int width = qMax(dialog.minimumWidth(), dialog.sizeHint().width());
-        dialog.resize(width, layout->totalHeightForWidth(width));
-    }
-
-    if (dialog.exec() != QDialog::Accepted) {
-        return false;
-    }
-
-    for (const ParameterInput &input : inputs) {
-        QString value;
-        if (auto *spin = qobject_cast<QSpinBox *>(input.widget)) {
-            value = QString::number(spin->value());
-        } else if (auto *timeEdit = qobject_cast<QTimeEdit *>(input.widget)) {
-            value = timeEdit->time().toString(QStringLiteral("HH:mm"));
-        } else if (auto *combo = qobject_cast<QComboBox *>(input.widget)) {
-            value = combo->currentData().toString();
-        } else if (auto *check = qobject_cast<QCheckBox *>(input.widget)) {
-            value = check->isChecked()
-                ? jsonString(input.definition, QStringLiteral("true_value"), QStringLiteral("true"))
-                : jsonString(input.definition, QStringLiteral("false_value"), QStringLiteral("false"));
-        } else if (auto *edit = qobject_cast<QLineEdit *>(input.widget)) {
-            value = edit->text().trimmed();
-        }
-        values->insert(input.key, value);
-    }
-    return true;
 }
 
 QWidget *makeCommandRow(const AppDatabase::ToolCommand &command, QStyle *style, QWidget *parent)
@@ -690,7 +418,16 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
             color: #94a3b8;
             font-size: 12px;
         }
-        QLabel#warningText {
+        QDialog#commandParametersDialog QLabel[formHint="true"],
+        QDialog#commandParametersDialog QLabel#fieldHelp {
+            color: #64748b;
+            font-size: 12px;
+        }
+        QLabel#commandContextTitle {
+            color: #334155;
+            font-weight: 600;
+        }
+        QLabel#warningText, QLabel#commandParameterError {
             color: #92400e;
             background: #fffbeb;
             border: 1px solid #fde68a;
@@ -2000,7 +1737,7 @@ bool AutomationPage::parseManifest(const QByteArray &manifestData,
             for (const auto &argument : command.arguments)
                 if (argument.contains(QChar::Null)) return fail(QStringLiteral("WSL 参数不能包含 NUL。"));
         }
-        if (!validateParameters(command.name, command.parameters, errorMessage)) {
+        if (!CommandParameters::validate(command.name, command.parameters, command.arguments, errorMessage)) {
             return false;
         }
         manifest->commands.append(command);
@@ -2759,14 +2496,46 @@ void AutomationPage::runCommand(QListWidgetItem *item)
     QHash<QString, QString> values;
     if (!command.parameters.isEmpty()) {
         // The parameter dialog doubles as the confirmation for high-risk commands.
-        if (!promptParameters(this, command, stateCache_.value(toolId), &values)) {
-            return;
-        }
+        CommandForm form(command, [this, tool](QObject *context, CommandForm::StateCallback callback) {
+            ToolStateReader::read(context, tool,
+                [this, tool, callback](bool success, const QJsonObject &state, const QString &error) {
+                    AppDatabase::AutomationTool current;
+                    if (!findTool(tool.id, &current) || current.externalId != tool.externalId
+                        || current.statePath != tool.statePath || !current.sameExecutionTarget(tool)) {
+                        callback(false, {}, QStringLiteral("工具注册已变化，请关闭表单后重新打开。"));
+                        return;
+                    }
+                    callback(success, state, error);
+                });
+        }, this);
+        if (form.exec() != QDialog::Accepted) return;
+        values = form.values();
     } else if (command.highRisk
                && QMessageBox::question(this, QStringLiteral("高风险命令"),
                                         QStringLiteral("“%1”被工具声明为高风险，确定运行吗？").arg(command.name),
                                         QMessageBox::Yes | QMessageBox::No, QMessageBox::No)
                       != QMessageBox::Yes) {
+        return;
+    }
+
+    // Modal dialogs process events: the registration or command may have been
+    // replaced while the user was filling in the form or confirming a command.
+    AppDatabase::AutomationTool current;
+    bool commandUnchanged = false;
+    for (const auto &candidate : database_->toolCommands(toolId)) {
+        if (candidate.id == command.id && candidate.name == command.name
+            && candidate.executable == command.executable && candidate.arguments == command.arguments
+            && candidate.parameters == command.parameters && candidate.highRisk == command.highRisk
+            && candidate.interactive == command.interactive) commandUnchanged = true;
+    }
+    if (!findTool(toolId, &current) || !current.sameExecutionTarget(tool)
+        || current.externalId != tool.externalId || current.statePath != tool.statePath
+        || current.workingDirectory != tool.workingDirectory || !commandUnchanged) {
+        showError(QStringLiteral("工具或命令已更新，请重新打开表单确认后运行。"));
+        return;
+    }
+    if (!runningProcesses_.value(toolId).isNull()) {
+        showError(QStringLiteral("这个工具已有命令在运行，请等它结束后再试。"));
         return;
     }
     const QStringList arguments = CommandArguments::expand(command.arguments, values);

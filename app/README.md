@@ -11,6 +11,8 @@ WSL 工具通过“注册远程工具 → WSL 工具”选择发行版和 Linux 
 
 工具作者从 [工具接入与适配指南](../docs/automation-tool-contract-v1.md) 开始；[最小样例](../docs/examples/tool-adapter/README.md) 可直接复制。指南列明当前能力和未实现部分。
 
+命令表单支持 `choice.options_state_key` 从工具状态读取动态选项，沿用 `state_key` 预选有效的当前值；失效时要求重选。`type: "readonly"` 将声明的状态字段显示在表单顶部，不传入命令。使用状态的表单打开时异步刷新，支持加载、失败重试和空列表提示；手动刷新保留有效选择和已编辑输入，运行前按本次快照校验。静态 `choice.options` 继续兼容，无需升级数据库结构。工具须自行发布脱敏选项，并在执行时再次核验账号与权限，具体格式见接入指南第 7 节。
+
 SSH 工具通过“注册远程工具 → SSH 服务器工具”在同一小窗选择本机 SSH 别名、选择或填写登录用户、填写工具目录/声明路径。用户留空会沿用 SSH 配置，注册后固定并显示实际用户名；别名下拉只显示默认 `~/.ssh/config` 直接声明的 Host，不列出 Include 引入的工具/扩展连接；只读、不联网，实际 SSH 连接仍使用完整配置。
 
 内置定时关机在界面只保留四条命令：**开启定时关机、关闭定时关机、设置弹窗时间、设置弹窗持续时间**。原有脚本维护入口保留；关闭定时关机会同时取消当前倒计时，并保留时间设置。仅取消本次可用弹窗取消按钮或工具目录的 `cancel-shutdown.bat`。
@@ -50,9 +52,9 @@ $env:PATH = "$qtRoot/bin;D:/CodeTools/Qt/Qt/Tools/mingw1310_64/bin;$env:PATH"
 
 ## Windows 便携包
 
-从仓库根目录运行 `./app/package.ps1 -ReleaseTag v1.2.0`。需要已提交且干净的工作树、Qt/MinGW/CMake/Ninja，以及与 Qt 对应的源码目录（用于收集第三方许可说明）；工具安装路径均支持脚本参数覆盖。
+从仓库根目录运行 `./app/package.ps1 -ReleaseTag v2.0.0`。需要已提交且干净的工作树、Qt/MinGW/CMake/Ninja，以及与 Qt 对应的源码目录（用于收集第三方许可说明）；工具安装路径均支持脚本参数覆盖。
 
-脚本先检查输出目录已被 Git 忽略，再从 `git archive HEAD` 解出源码，在 `dist/work-*` 中全新 Release 构建（不包含本地测试）。发布前先在 `app/build-qt` 执行本地回归；发布验证完成后可删除 `dist/work-*` 临时目录，只保留发布产物。仅安装程序、更新器与内置工具，再收集 Qt、MinGW 运行库、SQLite 插件、Windows Schannel TLS 插件及许可说明。最终生成 `dist/Orchestrate-v1.2.0-windows-x64.zip` 和 `.zip.sha256`，以及本机构建记录 `.build.json`。ZIP 内含源码提交信息和逐文件校验清单，用户完整解压即可运行。已有同名 ZIP 时拒绝覆盖；可通过 `-OutputDir` 指定另一个已忽略目录。
+脚本先检查输出目录已被 Git 忽略，再从 `git archive HEAD` 解出源码，在 `dist/work-*` 中全新 Release 构建（不包含本地测试）。发布前先在 `app/build-qt` 执行本地回归；发布验证完成后可删除 `dist/work-*` 临时目录，只保留发布产物。仅安装程序、更新器与内置工具，再收集 Qt、MinGW 运行库、SQLite 插件、Windows Schannel TLS 插件及许可说明。最终生成 `dist/Orchestrate-v2.0.0-windows-x64.zip` 和 `.zip.sha256`，以及本机构建记录 `.build.json`。ZIP 内含源码提交信息和逐文件校验清单，用户完整解压即可运行。已有同名 ZIP 时拒绝覆盖；可通过 `-OutputDir` 指定另一个已忽略目录。
 
 应用运行时版本和 Windows 文件属性版本统一由 CMake 的 `project(... VERSION ...)` 生成。打包会校验版本、必要运行库和个人数据排除，不启动内置工具，不修改现用数据库或开机启动配置；真正无 Qt 的干净 Windows 系统验收仍应在发布前完成。
 
