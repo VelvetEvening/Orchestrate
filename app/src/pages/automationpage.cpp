@@ -540,6 +540,11 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     auto *stateHeader = new QHBoxLayout;
     stateHeader->addWidget(makeCardTitle(QStringLiteral("当前状态"), stateCard));
     stateHeader->addStretch(1);
+    auto *refreshButton = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload),
+                                          QStringLiteral("刷新状态"), stateCard);
+    refreshButton->setObjectName(QStringLiteral("refreshStateButton"));
+    refreshButton->setToolTip(QStringLiteral("重新读取当前状态 JSON，不会运行工具命令。"));
+    stateHeader->addWidget(refreshButton);
     stateLayout->addLayout(stateHeader);
     auto *badgeRow = new QHBoxLayout;
     stateBadge_ = new QLabel(stateCard);
@@ -694,6 +699,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     connect(importSshAction, &QAction::triggered, this, &AutomationPage::importRemoteTool);
     connect(tree_, &QTreeWidget::itemSelectionChanged, this, &AutomationPage::handleTreeSelection);
     connect(tree_, &QTreeWidget::customContextMenuRequested, this, &AutomationPage::showTreeContextMenu);
+    connect(refreshButton, &QPushButton::clicked, this, &AutomationPage::refreshState);
     connect(reloadManifestButton_, &QPushButton::clicked, this, &AutomationPage::reloadManifest);
     connect(deleteToolButton_, &QPushButton::clicked, this, &AutomationPage::deleteTool);
     connect(commandList_, &QListWidget::itemActivated, this, &AutomationPage::runCommand);
