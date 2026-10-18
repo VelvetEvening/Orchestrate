@@ -145,7 +145,6 @@ private:
     QLabel *emptyMessage_ = nullptr;
 
     QLabel *toolName_ = nullptr;
-    QLabel *toolDescription_ = nullptr;
     QLabel *toolSource_ = nullptr;
     QPushButton *reloadManifestButton_ = nullptr;
     QPushButton *deleteToolButton_ = nullptr;

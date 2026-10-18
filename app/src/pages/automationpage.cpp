@@ -256,39 +256,19 @@ QWidget *makeCommandRow(const AppDatabase::ToolCommand &command, QStyle *style, 
     icon->setAlignment(Qt::AlignCenter);
     layout->addWidget(icon);
 
-    auto *textColumn = new QVBoxLayout;
-    textColumn->setSpacing(2);
-    auto *titleRow = new QHBoxLayout;
-    titleRow->setSpacing(6);
     auto *title = new QLabel(command.name, row);
     title->setObjectName(QStringLiteral("commandName"));
-    titleRow->addWidget(title);
+    layout->addWidget(title);
     if (!command.parameters.isEmpty()) {
-        titleRow->addWidget(makeTag(QStringLiteral("需填参数"), QStringLiteral("tag"), row));
+        layout->addWidget(makeTag(QStringLiteral("需填参数"), QStringLiteral("tag"), row));
     }
     if (command.highRisk) {
-        titleRow->addWidget(makeTag(QStringLiteral("高风险"), QStringLiteral("tagDanger"), row));
+        layout->addWidget(makeTag(QStringLiteral("高风险"), QStringLiteral("tagDanger"), row));
     }
     if (command.interactive) {
-        titleRow->addWidget(makeTag(QStringLiteral("交互式"), QStringLiteral("tagMuted"), row));
+        layout->addWidget(makeTag(QStringLiteral("交互式"), QStringLiteral("tagMuted"), row));
     }
-    titleRow->addStretch(1);
-    textColumn->addLayout(titleRow);
-
-    QString detail = command.description;
-    if (detail.isEmpty()) {
-        QStringList parts {command.executable};
-        for (const QString &argument : command.arguments) {
-            parts << displayArgument(argument);
-        }
-        detail = parts.join(QLatin1Char(' '));
-    }
-
-    auto *subtitle = new QLabel(detail, row);
-    subtitle->setObjectName(QStringLiteral("commandDetail"));
-    subtitle->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    textColumn->addWidget(subtitle);
-    layout->addLayout(textColumn, 1);
+    layout->addStretch(1);
     return row;
 }
 
@@ -367,10 +347,6 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
             color: #1f2937;
             font-size: 14px;
             font-weight: 600;
-        }
-        QLabel#commandDetail {
-            color: #6b7280;
-            font-size: 12px;
         }
         QLabel#tag, QLabel#tagDanger, QLabel#tagMuted {
             border-radius: 8px;
@@ -558,8 +534,6 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     deleteToolButton_->setObjectName(QStringLiteral("dangerButton"));
     headerRow->addWidget(deleteToolButton_);
     headerLayout->addLayout(headerRow);
-    toolDescription_ = makeMuted(QString(), headerCard);
-    headerLayout->addWidget(toolDescription_);
     toolSource_ = new QLabel(headerCard);
     toolSource_->setObjectName(QStringLiteral("sourceText"));
     toolSource_->setWordWrap(true);
@@ -982,9 +956,10 @@ void AutomationPage::loadAll(int preferredToolId)
         item->setText(0, tool.name);
         item->setData(0, Qt::UserRole, tool.id);
         item->setData(0, Qt::UserRole + 1, kToolItem);
-        item->setToolTip(0, tool.description.isEmpty()
-                                ? QStringLiteral("已注册工具：%1").arg(tool.name)
-                                : tool.description);
+        item->setToolTip(0, tool.description.isEmpty() ? QString()
+            : QStringLiteral("<qt>%1</qt>").arg(tool.description.toHtmlEscaped().replace(
+                QLatin1Char('\n'), QStringLiteral("<br>"))));
+        item->setData(0, Qt::AccessibleDescriptionRole, tool.description);
         item->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
         applyToolStatus(item,
                         stateCache_.contains(tool.id) ? &stateCache_[tool.id] : nullptr,
@@ -1143,7 +1118,10 @@ void AutomationPage::loadToolDetails(int toolId)
     detailsStack_->setCurrentIndex(1);
 
     toolName_->setText(tool.name);
-    toolDescription_->setText(tool.description.isEmpty() ? QStringLiteral("未填写工具作用。") : tool.description);
+    toolName_->setToolTip(tool.description.isEmpty() ? QString()
+        : QStringLiteral("<qt>%1</qt>").arg(tool.description.toHtmlEscaped().replace(
+            QLatin1Char('\n'), QStringLiteral("<br>"))));
+    toolName_->setAccessibleDescription(tool.description);
     if (tool.builtin) {
         toolSource_->setText(QStringLiteral("内置工具 · %1").arg(QDir::toNativeSeparators(
             QDir(QCoreApplication::applicationDirPath()).relativeFilePath(tool.registrationPath))));
@@ -1170,11 +1148,16 @@ void AutomationPage::loadToolDetails(int toolId)
         auto *item = new QListWidgetItem(commandList_);
         item->setData(Qt::UserRole, command.id);
         item->setData(Qt::AccessibleTextRole, command.name);
+        item->setData(Qt::AccessibleDescriptionRole, command.description);
         QStringList parts {command.executable};
         for (const QString &argument : command.arguments) {
             parts << displayArgument(argument);
         }
-        item->setToolTip(QStringLiteral("双击运行\n\n%1").arg(parts.join(QLatin1Char(' '))));
+        QStringList hints;
+        if (!command.description.isEmpty()) hints << command.description;
+        hints << QStringLiteral("双击运行") << parts.join(QLatin1Char(' '));
+        item->setToolTip(QStringLiteral("<qt>%1</qt>").arg(hints.join(QStringLiteral("\n\n"))
+            .toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br>"))));
         QWidget *row = makeCommandRow(command, style(), commandList_);
         item->setSizeHint(QSize(0, row->sizeHint().height()));
         commandList_->setItemWidget(item, row);
