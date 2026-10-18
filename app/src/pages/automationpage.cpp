@@ -152,15 +152,6 @@ QString decodeOutput(const QByteArray &data)
     return utf8.hasError() ? QString::fromLocal8Bit(data) : text;
 }
 
-QString displayTime(const QString &iso)
-{
-    QDateTime time = QDateTime::fromString(iso, Qt::ISODateWithMs);
-    if (!time.isValid()) {
-        time = QDateTime::fromString(iso, Qt::ISODate);
-    }
-    return time.isValid() ? time.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")) : iso;
-}
-
 QString resultLabel(const QString &result, const QString &toolId = QString())
 {
     if (result == QStringLiteral("success")) return QStringLiteral("成功");
@@ -526,7 +517,12 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     headerRow->setSpacing(8);
     toolName_ = new QLabel(headerCard);
     toolName_->setObjectName(QStringLiteral("toolName"));
-    headerRow->addWidget(toolName_, 1);
+    headerRow->addWidget(toolName_);
+    toolSource_ = makeTag(QString(), QStringLiteral("tagMuted"), headerCard);
+    toolSource_->setToolTip(QStringLiteral("在左侧右键工具，选择“查看工具信息”查看连接与位置。"));
+    toolSource_->hide();
+    headerRow->addWidget(toolSource_);
+    headerRow->addStretch(1);
     reloadManifestButton_ = new QPushButton(QStringLiteral("重新读取声明"), headerCard);
     reloadManifestButton_->setToolTip(QStringLiteral("重新读取接入声明，更新命令和工具信息；分组与刷新设置保留。"));
     headerRow->addWidget(reloadManifestButton_);
@@ -534,13 +530,6 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     deleteToolButton_->setObjectName(QStringLiteral("dangerButton"));
     headerRow->addWidget(deleteToolButton_);
     headerLayout->addLayout(headerRow);
-    toolSource_ = new QLabel(headerCard);
-    toolSource_->setObjectName(QStringLiteral("sourceText"));
-    toolSource_->setWordWrap(true);
-    toolSource_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    toolSource_->setTextFormat(Qt::PlainText);
-    toolSource_->hide();
-    headerLayout->addWidget(toolSource_);
     columnLayout->addWidget(headerCard);
 
     // Current state.
@@ -551,10 +540,6 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     auto *stateHeader = new QHBoxLayout;
     stateHeader->addWidget(makeCardTitle(QStringLiteral("当前状态"), stateCard));
     stateHeader->addStretch(1);
-    refreshButton_ = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload),
-                                     QStringLiteral("刷新状态"), stateCard);
-    refreshButton_->setToolTip(QStringLiteral("重新读取当前状态 JSON，不会运行工具命令。"));
-    stateHeader->addWidget(refreshButton_);
     stateLayout->addLayout(stateHeader);
     auto *badgeRow = new QHBoxLayout;
     stateBadge_ = new QLabel(stateCard);
@@ -566,9 +551,6 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     stateSummary_->setWordWrap(true);
     stateSummary_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     stateLayout->addWidget(stateSummary_);
-    stateMeta_ = new QLabel(stateCard);
-    stateMeta_->setObjectName(QStringLiteral("sourceText"));
-    stateLayout->addWidget(stateMeta_);
     stateItemsTitle_ = makeMuted(QStringLiteral("状态明细"), stateCard);
     stateItemsTitle_->setContentsMargins(0, 6, 0, 0);
     stateLayout->addWidget(stateItemsTitle_);
@@ -712,7 +694,6 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     connect(importSshAction, &QAction::triggered, this, &AutomationPage::importRemoteTool);
     connect(tree_, &QTreeWidget::itemSelectionChanged, this, &AutomationPage::handleTreeSelection);
     connect(tree_, &QTreeWidget::customContextMenuRequested, this, &AutomationPage::showTreeContextMenu);
-    connect(refreshButton_, &QPushButton::clicked, this, &AutomationPage::refreshState);
     connect(reloadManifestButton_, &QPushButton::clicked, this, &AutomationPage::reloadManifest);
     connect(deleteToolButton_, &QPushButton::clicked, this, &AutomationPage::deleteTool);
     connect(commandList_, &QListWidget::itemActivated, this, &AutomationPage::runCommand);
@@ -1044,6 +1025,8 @@ void AutomationPage::showTreeContextMenu(const QPoint &position)
         menu.addSeparator();
         menu.addAction(QStringLiteral("新建工具组"), this, &AutomationPage::createGroup);
     } else {
+        menu.addAction(QStringLiteral("查看工具信息"), this, [this, id] { showToolInformation(id); });
+        menu.addSeparator();
         menu.addAction(QStringLiteral("刷新状态"), this, &AutomationPage::refreshState);
         menu.addAction(QStringLiteral("重新读取声明"), this, &AutomationPage::reloadManifest);
         QMenu *moveMenu = menu.addMenu(QStringLiteral("移动到工具组"));
@@ -1071,6 +1054,55 @@ void AutomationPage::showTreeContextMenu(const QPoint &position)
         }
     }
     menu.exec(tree_->viewport()->mapToGlobal(position));
+}
+
+void AutomationPage::showToolInformation(int toolId)
+{
+    AppDatabase::AutomationTool tool;
+    if (!findTool(toolId, &tool)) return;
+
+    QDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("toolInformationDialog"));
+    dialog.setWindowTitle(QStringLiteral("工具信息"));
+    dialog.setMinimumWidth(520);
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(24, 20, 24, 20);
+    layout->setSpacing(16);
+    layout->addWidget(makeCardTitle(tool.name, &dialog));
+    auto *form = new QFormLayout;
+    form->setHorizontalSpacing(16);
+    form->setVerticalSpacing(12);
+    const auto addField = [&](const QString &name, const QString &value) {
+        auto *label = new QLabel(value, &dialog);
+        label->setTextFormat(Qt::PlainText);
+        label->setWordWrap(true);
+        label->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+        form->addRow(name, label);
+    };
+    const bool wsl = tool.targetType == QStringLiteral("wsl");
+    const bool ssh = tool.targetType == QStringLiteral("ssh");
+    addField(QStringLiteral("类型"), wsl ? QStringLiteral("WSL") : ssh ? QStringLiteral("SSH")
+        : tool.builtin ? QStringLiteral("内置工具") : QStringLiteral("本地工具"));
+    if (wsl) {
+        addField(QStringLiteral("发行版"), tool.wslDistribution);
+        addField(QStringLiteral("用户"), tool.wslUser);
+    } else if (ssh) {
+        addField(QStringLiteral("主机"), tool.sshHost);
+        addField(QStringLiteral("用户"), tool.sshUser.isEmpty()
+            ? QStringLiteral("SSH 配置默认用户") : tool.sshUser);
+    }
+    const auto displayPath = [&](const QString &path) {
+        return wsl || ssh ? path : QDir::toNativeSeparators(path);
+    };
+    addField(QStringLiteral("接入声明"), displayPath(tool.registrationPath));
+    addField(QStringLiteral("工作目录"), displayPath(tool.workingDirectory));
+    addField(QStringLiteral("状态文件"), displayPath(tool.statePath));
+    layout->addLayout(form);
+    auto *close = new QPushButton(QStringLiteral("关闭"), &dialog);
+    close->setDefault(true);
+    connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
+    layout->addWidget(close, 0, Qt::AlignRight);
+    dialog.exec();
 }
 
 void AutomationPage::updateToolIcon(int toolId)
@@ -1122,18 +1154,8 @@ void AutomationPage::loadToolDetails(int toolId)
         : QStringLiteral("<qt>%1</qt>").arg(tool.description.toHtmlEscaped().replace(
             QLatin1Char('\n'), QStringLiteral("<br>"))));
     toolName_->setAccessibleDescription(tool.description);
-    if (tool.builtin) {
-        toolSource_->setText(QStringLiteral("内置工具 · %1").arg(QDir::toNativeSeparators(
-            QDir(QCoreApplication::applicationDirPath()).relativeFilePath(tool.registrationPath))));
-    } else if (tool.targetType == QStringLiteral("wsl")) {
-        toolSource_->setText(QStringLiteral("WSL %1 · 用户 %2 · %3")
-                                 .arg(tool.wslDistribution, tool.wslUser, tool.registrationPath));
-    } else {
-        toolSource_->setText(tool.sshHost.isEmpty()
-                                 ? QStringLiteral("本地工具 · %1").arg(QDir::toNativeSeparators(tool.registrationPath))
-                                 : QStringLiteral("SSH %1 · 用户 %2 · %3").arg(tool.sshHost,
-                                     tool.sshUser.isEmpty() ? QStringLiteral("SSH 配置默认用户") : tool.sshUser, tool.registrationPath));
-    }
+    toolSource_->setText(tool.targetType == QStringLiteral("wsl") ? QStringLiteral("WSL")
+                                                               : QStringLiteral("SSH"));
     toolSource_->setVisible(tool.targetType == QStringLiteral("wsl") || tool.targetType == QStringLiteral("ssh"));
     deleteToolButton_->setVisible(!tool.builtin);
     configureRefreshControls(tool);
@@ -2013,21 +2035,12 @@ void AutomationPage::renderState(const QJsonObject &state)
     const QString result = ToolState::displayResult(state);
     const QString toolId = jsonString(state, QStringLiteral("tool_id"));
     const QString summary = jsonString(state, QStringLiteral("summary"));
-    const QString updatedAt = jsonString(state, QStringLiteral("updated_at"));
-    const QString currentDate = jsonString(state, QStringLiteral("current_date"));
 
     stateBadge_->setText(QStringLiteral("● %1").arg(resultLabel(result, toolId)));
     stateBadge_->setStyleSheet(badgeStyle(result));
     stateSummary_->setText(summary.isEmpty() ? QStringLiteral("状态文件没有提供摘要。") : summary);
     if (ToolState::expired(state))
         stateSummary_->setText(QStringLiteral("这份状态已超过工具声明的有效期，请刷新或检查工具。上次摘要：") + summary);
-    QStringList meta;
-    meta << QStringLiteral("更新于 %1").arg(updatedAt.isEmpty() ? QStringLiteral("未知时间") : displayTime(updatedAt));
-    if (!currentDate.isEmpty()) {
-        meta << QStringLiteral("状态日期 %1").arg(currentDate);
-    }
-    stateMeta_->setText(meta.join(QStringLiteral("  ·  ")));
-    stateMeta_->show();
 
     clearStateItems();
     const QJsonArray items = state.value(QStringLiteral("items")).toArray();
@@ -2065,8 +2078,6 @@ void AutomationPage::renderStateMessage(const QString &badge, const QString &res
     stateBadge_->setText(QStringLiteral("● %1").arg(badge));
     stateBadge_->setStyleSheet(badgeStyle(result));
     stateSummary_->setText(message);
-    stateMeta_->clear();
-    stateMeta_->hide();
     clearStateItems();
 }
 

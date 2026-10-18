@@ -66,6 +66,7 @@ private:
     bool findTool(int toolId, AppDatabase::AutomationTool *tool) const;
 
     void loadToolDetails(int toolId);
+    void showToolInformation(int toolId);
     void showEmptyDetails(int groupId = -1);
     void createGroup();
     void renameGroup();
@@ -151,8 +152,6 @@ private:
 
     QLabel *stateBadge_ = nullptr;
     QLabel *stateSummary_ = nullptr;
-    QLabel *stateMeta_ = nullptr;
-    QPushButton *refreshButton_ = nullptr;
     QLabel *stateItemsTitle_ = nullptr;
     QWidget *stateItemsBox_ = nullptr;
     QVBoxLayout *stateItemsLayout_ = nullptr;
