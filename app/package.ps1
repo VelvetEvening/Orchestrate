@@ -1,5 +1,5 @@
 param(
-    [string]$ReleaseTag = 'v2.0.0',
+    [string]$ReleaseTag = 'v2.1.0',
     [string]$QtRoot = 'D:/CodeTools/Qt/Qt/6.11.2/mingw_64',
     [string]$MinGWRoot = 'D:/CodeTools/Qt/Qt/Tools/mingw1310_64',
     [string]$CMakeExe = 'D:/CodeTools/Qt/Qt/Tools/CMake_64/bin/cmake.exe',

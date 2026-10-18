@@ -8,7 +8,7 @@ Windows 桌面工作台：时序记录、项目记录和自动化工具。使用
 - **[工具接入与适配指南](docs/automation-tool-contract-v1.md)**：给准备接入的工具作者和开发代理，包含字段表、路径、参数、状态、SSH、验收及排错。
 - [可运行的最小适配样例](docs/examples/tool-adapter/README.md)：本地、SSH 和只读监测三种声明。
 - [项目术语](CONTEXT.md)
-- [v2.0.0 发布说明](docs/releases/v2.0.0.md)
+- [v2.1.0 发布说明](docs/releases/v2.1.0.md)
 - [2026-10-15 发布前审查](docs/project-review-2026-10-15.md)
 - [2026-09-29 项目审查](docs/project-review-2026-09-29.md)
 
