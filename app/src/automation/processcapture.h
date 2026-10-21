@@ -21,18 +21,23 @@ using CaptureCallback = std::function<void(bool, const QByteArray &, const QStri
 inline void capture(QObject *context, QProcess *process, CaptureCallback callback,
                     const QString &channel, int timeoutMs = 30000)
 {
-    process->setParent(context);
+    // QWidget destroys its children before QObject clears its QPointers and
+    // disconnects incoming signals. A child QProcess can emit finished during
+    // that teardown, after a dialog's C++ members have already been destroyed.
+    // Use a plain QObject receiver that disconnects before deleting the process.
+    auto *request = new QObject(context);
+    process->setParent(request);
     process->setProcessChannelMode(QProcess::SeparateChannels);
     struct Buffer { QByteArray output; QByteArray errors; bool done = false; };
     const auto buffer = std::make_shared<Buffer>();
     auto *timer = new QTimer(process);
     timer->setSingleShot(true);
-    const auto finish = [process, timer, buffer, callback](bool ok, const QString &error) {
+    const auto finish = [request, process, timer, buffer, callback](bool ok, const QString &error) {
         if (buffer->done) return;
         buffer->done = true;
         timer->stop();
         if (process->state() != QProcess::NotRunning) process->kill();
-        else process->deleteLater();
+        else request->deleteLater();
         callback(ok, ok ? buffer->output : QByteArray(), error);
     };
     const auto drain = [process, buffer, finish, channel] {
@@ -50,11 +55,11 @@ inline void capture(QObject *context, QProcess *process, CaptureCallback callbac
             }
         }
     };
-    QObject::connect(process, &QProcess::readyReadStandardOutput, context, drain);
-    QObject::connect(process, &QProcess::readyReadStandardError, context, drain);
-    QObject::connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), context,
-                     [process, buffer, drain, finish, channel](int code, QProcess::ExitStatus status) {
-        if (buffer->done) { process->deleteLater(); return; }
+    QObject::connect(process, &QProcess::readyReadStandardOutput, request, drain);
+    QObject::connect(process, &QProcess::readyReadStandardError, request, drain);
+    QObject::connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished), request,
+                     [request, process, buffer, drain, finish, channel](int code, QProcess::ExitStatus status) {
+        if (buffer->done) { request->deleteLater(); return; }
         drain();
         if (buffer->done) return;
         if (status == QProcess::NormalExit && code == 0) finish(true, {});
@@ -63,11 +68,11 @@ inline void capture(QObject *context, QProcess *process, CaptureCallback callbac
             finish(false, QStringLiteral("%1 读取失败（退出码 %2）：%3").arg(channel).arg(code).arg(error));
         }
     });
-    QObject::connect(process, &QProcess::errorOccurred, context, [finish, process, channel](QProcess::ProcessError error) {
+    QObject::connect(process, &QProcess::errorOccurred, request, [finish, process, channel](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart)
             finish(false, QStringLiteral("无法启动 %1：%2。请确认已安装对应客户端。").arg(channel, process->errorString()));
     });
-    QObject::connect(timer, &QTimer::timeout, context, [finish, channel] {
+    QObject::connect(timer, &QTimer::timeout, request, [finish, channel] {
         finish(false, QStringLiteral("%1 读取超时；请检查执行环境或连接后重试。").arg(channel));
     });
     timer->start(timeoutMs);
