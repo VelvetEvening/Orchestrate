@@ -3,6 +3,7 @@
 #include <QPointer>
 #include "../data/appdatabase.h"
 class QListWidget;
+class QTreeWidget;
 class HeadingTextEdit;
 class QLabel;
 class QPushButton;
@@ -29,6 +30,13 @@ private:
     void deleteWorkRecord();
     void openOutline();
     void filterRecords();
+    void updateRecordActions();
+    void showProjectContextMenu(const QPoint &position);
+    void showRecordContextMenu(const QPoint &position);
+    void folderDialog(bool creating);
+    void deleteFolder();
+    void saveExpandedFolders();
+    int selectedFolderId() const;
     AppDatabase::WorkRecord currentWorkRecord() const;
     void showError(const QString &message);
     AppDatabase *database_;
@@ -40,7 +48,9 @@ private:
     HeadingTextEdit *outlineEdit_;
     QLabel *outlineTitle_;
     QVBoxLayout *detailsLayout_;
-    QListWidget *workList_;
+    QTreeWidget *workList_;
+    QLabel *recordHint_;
+    int recordsProjectId_ = 0;
     class QLineEdit *search_;
     QPushButton *editWorkButton_;
     QPushButton *deleteWorkButton_;

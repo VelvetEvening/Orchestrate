@@ -26,6 +26,13 @@ public:
         QString outline;
         QDateTime createdAt;
         QDateTime updatedAt;
+        bool completed = false;
+    };
+
+    struct RecordFolder {
+        int id = 0;
+        int projectId = 0;
+        QString name;
     };
 
     struct WorkRecord {
@@ -35,6 +42,7 @@ public:
         QString content;
         QDateTime createdAt;
         QDateTime updatedAt;
+        int folderId = 0;
     };
 
     struct Reminder {
@@ -141,9 +149,17 @@ public:
                        const QString &outline,
                        QString *errorMessage = nullptr);
     bool deleteProject(int id, QString *errorMessage = nullptr);
+    bool setProjectCompleted(int id, bool completed, QString *errorMessage = nullptr);
+    QList<RecordFolder> recordFolders(int projectId, QString *errorMessage = nullptr) const;
+    bool addRecordFolder(int projectId, const QString &name, int *folderId = nullptr, QString *errorMessage = nullptr);
+    bool renameRecordFolder(int id, const QString &name, QString *errorMessage = nullptr);
+    // Removing a folder keeps its records at the project root.
+    bool deleteRecordFolder(int id, QString *errorMessage = nullptr);
+    bool setWorkRecordFolder(int id, int folderId, QString *errorMessage = nullptr);
     QList<WorkRecord> workRecords(int projectId, QString *errorMessage = nullptr) const;
     bool addWorkRecord(int projectId, const QString &content, QString *errorMessage = nullptr);
     bool addWorkRecord(int projectId, const QString &title, const QString &content, QString *errorMessage = nullptr);
+    bool addWorkRecord(int projectId, const QString &title, const QString &content, int folderId, QString *errorMessage = nullptr);
     bool updateWorkRecord(int id, const QString &content, QString *errorMessage = nullptr);
     bool updateWorkRecord(int id, const QString &title, const QString &content, QString *errorMessage = nullptr);
     bool deleteWorkRecord(int id, QString *errorMessage = nullptr);
@@ -181,6 +197,7 @@ public:
 private:
     bool replaceToolCommandsInTransaction(int toolId, const QList<ToolCommand> &commands, QString *errorMessage);
     bool initializeSchema(QString *errorMessage);
+    bool initializeCollaborationSchema(QString *errorMessage);
     bool fail(QString *errorMessage, const QString &message) const;
     QString connectionName_;
     QString databasePath_;
