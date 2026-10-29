@@ -72,6 +72,7 @@ HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
         emit previewModeChanged(preview);
     });
     connect(source_, &QPlainTextEdit::textChanged, this, [this] {
+        previewDirty_ = true;
         if (isPreviewMode()) updatePreview();
         emit textChanged();
     });
@@ -83,13 +84,31 @@ void HeadingTextEdit::setPlaceholderText(const QString &text) { source_->setPlac
 void HeadingTextEdit::clear() { source_->clear(); setPreviewMode(false); }
 void HeadingTextEdit::setPreviewMode(bool preview) { tabs_->setCurrentIndex(preview ? PreviewTab : EditTab); }
 bool HeadingTextEdit::isPreviewMode() const { return tabs_->currentIndex() == PreviewTab; }
+void HeadingTextEdit::setModeControlsVisible(bool visible)
+{
+    tabs_->setVisible(visible);
+    setMinimumHeight(visible ? 170 : 80);
+}
+
+void HeadingTextEdit::setContentLabel(const QString &label)
+{
+    setAccessibleName(label);
+    source_->setAccessibleName(label + QStringLiteral("原文"));
+    preview_->setAccessibleName(label + QStringLiteral("阅读"));
+    tabs_->setAccessibleName(label + QStringLiteral("显示模式"));
+}
 
 void HeadingTextEdit::updatePreview()
 {
     QFont font = source_->font();
     if (font.pointSizeF() <= 0) font.setPointSizeF(QFontInfo(font).pointSizeF());
+    if (!previewDirty_ && preview_->document()->defaultFont() == font) return;
     preview_->document()->setDefaultFont(font);
     HeadingText::render(*preview_->document(), source_->toPlainText());
+    // Inserting rendered text moves the viewer's cursor to the end. New content
+    // starts at the top; an unchanged preview keeps its cursor and reading position.
+    preview_->moveCursor(QTextCursor::Start);
+    previewDirty_ = false;
 }
 
 bool HeadingTextEdit::eventFilter(QObject *watched, QEvent *event)
@@ -133,6 +152,7 @@ void HeadingTextEdit::setTextPointSize(qreal requestedSize)
     // Change only the display font, keeping the source text and undo history.
     font.setPointSizeF(newSize);
     source_->setFont(font);
+    previewDirty_ = true;
     emit textPointSizeChanged(newSize);
     if (!isPreviewMode()) return;
     updatePreview();

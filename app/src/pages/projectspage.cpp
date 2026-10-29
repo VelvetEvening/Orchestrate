@@ -1,4 +1,5 @@
 #include "projectspage.h"
+#include "collaborationrecorddialog.h"
 #include "widgets/persistenttextzoom.h"
 #include "widgets/headingtextedit.h"
 #include "widgets/summaryfield.h"
@@ -30,6 +31,7 @@
 
 namespace {
 constexpr int FolderRole = Qt::UserRole + 1;
+constexpr int SummaryRole = Qt::UserRole + 2;
 QString projectStatus(bool completed) {
     return completed ? QStringLiteral("已完结") : QStringLiteral("进行中");
 }
@@ -143,7 +145,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     records->addLayout(recordHeader);
     search_ = new QLineEdit(recordsPanel_);
     search_->setObjectName(QStringLiteral("recordSearch"));
-    search_->setPlaceholderText(QStringLiteral("搜索简介或文件夹"));
+    search_->setPlaceholderText(QStringLiteral("搜索标题、摘要或文件夹"));
     search_->setAccessibleName(QStringLiteral("搜索协作记录"));
     search_->setClearButtonEnabled(true);
     records->addWidget(search_);
@@ -175,7 +177,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     auto *actions = new QHBoxLayout;
     auto *add = new QPushButton(QStringLiteral("添加记录"), recordsPanel_);
     add->setObjectName(QStringLiteral("primaryButton"));
-    editWorkButton_ = new QPushButton(QStringLiteral("编辑"), recordsPanel_);
+    editWorkButton_ = new QPushButton(QStringLiteral("打开"), recordsPanel_);
     deleteWorkButton_ = new QPushButton(QStringLiteral("删除"), recordsPanel_);
     actions->addWidget(add);
     actions->addWidget(editWorkButton_);
@@ -497,6 +499,7 @@ void ProjectsPage::refreshWorkRecords()
         item->setSizeHint(0,QSize(0,44));
         item->setData(0,Qt::UserRole,record.id);
         item->setData(0,FolderRole,false);
+        item->setData(0,SummaryRole,record.summary);
         item->setToolTip(0,recordTitle(record)+QStringLiteral("\n")+record.createdAt.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")));
         if (!selectedFolder && record.id == selected) workList_->setCurrentItem(item);
     }
@@ -524,11 +527,13 @@ void ProjectsPage::filterRecords()
     for (int i=0; i<workList_->topLevelItemCount(); ++i) {
         auto *item = workList_->topLevelItem(i);
         const bool nameMatches = item->text(0).contains(query,Qt::CaseInsensitive);
-        bool visible = nameMatches;
+        bool visible = nameMatches || (!item->data(0,FolderRole).toBool()
+            && item->data(0,SummaryRole).toString().contains(query,Qt::CaseInsensitive));
         if (item->data(0,FolderRole).toBool()) {
             for (int j=0; j<item->childCount(); ++j) {
                 auto *child = item->child(j);
-                const bool match = nameMatches || child->text(0).contains(query,Qt::CaseInsensitive);
+                const bool match = nameMatches || child->text(0).contains(query,Qt::CaseInsensitive)
+                    || child->data(0,SummaryRole).toString().contains(query,Qt::CaseInsensitive);
                 child->setHidden(!match);
                 visible |= match;
             }
@@ -701,64 +706,31 @@ void ProjectsPage::showRecordContextMenu(const QPoint &position)
 
 void ProjectsPage::recordDialog(bool creating)
 {
-    const auto record=currentWorkRecord();
+    auto record=currentWorkRecord();
     if(current_.id<=0 || (!creating && record.id<=0)) return;
     const int projectId=current_.id;
     const int folderId=creating ? selectedFolderId() : record.folderId;
-    QDialog dialog(this);
-    dialog.setWindowTitle(creating ? QStringLiteral("添加协作记录") : QStringLiteral("编辑协作记录"));
-    dialog.setWindowFlag(Qt::WindowMaximizeButtonHint);
-    dialog.resize(800,620);
-    dialog.setMinimumSize(480,360);
-    auto *layout=new QVBoxLayout(&dialog);
+    if (creating) {
+        record = {};
+        record.projectId = projectId;
+        record.folderId = folderId;
+    }
     QString location = QStringLiteral("项目顶层");
     for (const auto &folder : database_->recordFolders(projectId))
         if (folder.id == folderId) location = folder.name;
-    auto *locationLabel = label(QStringLiteral("位置：%1").arg(location),QStringLiteral("recordLocation"),&dialog);
-    locationLabel->setWordWrap(true);
-    layout->addWidget(locationLabel);
-    auto *title=addSummaryField(layout,&dialog,QStringLiteral("workRecordTitle"));
-    auto *editor=new HeadingTextEdit(&dialog);
-    bindPersistentTextZoom(editor, database_, QStringLiteral("text_zoom.work_record"));
-    layout->addWidget(editor,1);
-    if(!creating) { title->setText(recordTitle(record)); editor->setPlainText(record.content); }
-    connect(editor,&HeadingTextEdit::previewModeChanged,title,&QLineEdit::setReadOnly);
-    editor->setPreviewMode(!creating);
-    auto *buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel,&dialog);
-    auto *save=buttons->button(QDialogButtonBox::Save);
-    save->setText(QStringLiteral("保存"));
-    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消"));
-    layout->addWidget(buttons);
-    auto validate=[=]{
-        const bool changed=title->text().trimmed()!=recordTitle(record) || editor->toPlainText()!=record.content;
-        save->setEnabled(!title->text().trimmed().isEmpty() && !editor->toPlainText().trimmed().isEmpty()
-                         && (creating || changed));
-    };
-    connect(title,&QLineEdit::textChanged,&dialog,validate);
-    connect(editor,&HeadingTextEdit::textChanged,&dialog,validate);
-    validate();
-    connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
-    connect(buttons,&QDialogButtonBox::accepted,&dialog,[&] {
-        QString error;
-        const bool ok=creating
-            ? database_->addWorkRecord(projectId,title->text().trimmed(),editor->toPlainText(),folderId,&error)
-            : database_->updateWorkRecord(record.id,title->text().trimmed(),editor->toPlainText(),&error);
-        if(!ok) { QMessageBox::critical(&dialog,QStringLiteral("保存失败"),error); return; }
-        dialog.accept();
-        if (creating) {
-            if (folderId > 0) {
-                auto expanded = database_->setting(expandedFoldersKey(projectId)).split(',',Qt::SkipEmptyParts);
-                if (!expanded.contains(QString::number(folderId))) expanded.append(QString::number(folderId));
-                database_->setSetting(expandedFoldersKey(projectId),expanded.join(','));
-            }
-            const QSignalBlocker blocker(search_);
-            search_->clear();
-        }
-        refreshWorkRecords();
-    });
-    if (creating) title->setFocus();
-    else editor->setFocus();
+    CollaborationRecordDialog dialog(database_, record, location, this);
     dialog.exec();
+    if (!dialog.hasSaved()) return;
+    if (creating) {
+        if (folderId > 0) {
+            auto expanded = database_->setting(expandedFoldersKey(projectId)).split(',',Qt::SkipEmptyParts);
+            if (!expanded.contains(QString::number(folderId))) expanded.append(QString::number(folderId));
+            database_->setSetting(expandedFoldersKey(projectId),expanded.join(','));
+        }
+        const QSignalBlocker blocker(search_);
+        search_->clear();
+    }
+    refreshWorkRecords();
 }
 void ProjectsPage::deleteWorkRecord()
 {

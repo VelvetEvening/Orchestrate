@@ -112,11 +112,11 @@ bool AppDatabase::open(QString *errorMessage)
     }
     const int version = schemaVersion.value(0).toInt();
     schemaVersion.finish();
-    if (version > 4) {
+    if (version > 5) {
         database.close();
         return fail(errorMessage, QStringLiteral("数据库来自更新版本的 Orchestrate。请使用新版程序，或同时恢复旧版程序与数据库备份。"));
     }
-    if (version == 4) return true;
+    if (version == 5) return true;
 
     if (existingDatabase || QFileInfo(databasePath_).size() > 0) {
         const QString backupDirectory = QDir(portableDataDirectory).filePath(QStringLiteral("backups"));
@@ -156,8 +156,21 @@ bool AppDatabase::open(QString *errorMessage)
             }
         }
     }
-    if (migrated) migrated = initializeCollaborationSchema(errorMessage);
-    if (!migrated || !setVersion.exec(QStringLiteral("PRAGMA user_version = 4"))) {
+    if (migrated && version < 4) migrated = initializeCollaborationSchema(errorMessage);
+    if (migrated) {
+        QSqlQuery columns(database);
+        bool hasSummary = false;
+        migrated = columns.exec(QStringLiteral("PRAGMA table_info(project_work_records)"));
+        if (!migrated) setError(errorMessage, columns);
+        while (columns.next()) hasSummary |= columns.value(1).toString() == QStringLiteral("summary");
+        columns.finish();
+        if (migrated && !hasSummary) {
+            QSqlQuery summary(database);
+            migrated = summary.exec(QStringLiteral("ALTER TABLE project_work_records ADD COLUMN summary TEXT NOT NULL DEFAULT ''"));
+            if (!migrated) setError(errorMessage, summary);
+        }
+    }
+    if (!migrated || !setVersion.exec(QStringLiteral("PRAGMA user_version = 5"))) {
         if (errorMessage && errorMessage->isEmpty()) setError(errorMessage, setVersion);
         database.rollback();
         database.close();
@@ -957,7 +970,7 @@ QList<AppDatabase::WorkRecord> AppDatabase::workRecords(int projectId, QString *
     }
     QSqlQuery query(QSqlDatabase::database(connectionName_));
     query.prepare(QStringLiteral(
-        "SELECT id, project_id, content, created_at, updated_at, title, folder_id "
+        "SELECT id, project_id, content, created_at, updated_at, title, folder_id, summary "
         "FROM project_work_records WHERE project_id = ? ORDER BY created_at DESC, id DESC"));
     query.addBindValue(projectId);
     if (!query.exec()) {
@@ -970,6 +983,7 @@ QList<AppDatabase::WorkRecord> AppDatabase::workRecords(int projectId, QString *
         record.projectId = query.value(1).toInt();
         record.title = query.value(5).toString();
         record.folderId = query.value(6).toInt();
+        record.summary = query.value(7).toString();
         record.content = query.value(2).toString();
         record.createdAt = QDateTime::fromString(query.value(3).toString(), Qt::ISODateWithMs);
         record.updatedAt = QDateTime::fromString(query.value(4).toString(), Qt::ISODateWithMs);
@@ -990,23 +1004,46 @@ bool AppDatabase::addWorkRecord(int projectId, const QString &title, const QStri
 
 bool AppDatabase::addWorkRecord(int projectId, const QString &title, const QString &content, int folderId, QString *errorMessage)
 {
-    if (!isOpen()) {
-        return fail(errorMessage, QStringLiteral("数据库尚未打开。"));
-    }
-    QSqlQuery query(QSqlDatabase::database(connectionName_));
-    query.prepare(QStringLiteral(
-        "INSERT INTO project_work_records(project_id, content, created_at, updated_at, title, folder_id) VALUES (?, ?, ?, ?, ?, ?)"));
+    WorkRecord record;
+    record.projectId = projectId;
+    record.title = title;
+    record.content = content;
+    record.folderId = folderId;
+    return saveWorkRecord(&record, errorMessage);
+}
+
+bool AppDatabase::saveWorkRecord(WorkRecord *record, QString *errorMessage)
+{
+    if (!isOpen()) return fail(errorMessage, QStringLiteral("数据库尚未打开。"));
+    if (!record) return fail(errorMessage, QStringLiteral("协作记录无效。"));
     const QString timestamp = nowIso();
-    query.addBindValue(projectId);
-    query.addBindValue(content);
-    query.addBindValue(timestamp);
-    query.addBindValue(timestamp);
-    query.addBindValue(title.isNull() ? QStringLiteral("") : title);
-    query.addBindValue(folderId > 0 ? QVariant(folderId) : QVariant());
-    if (!query.exec()) {
-        setError(errorMessage, query);
-        return false;
+    const bool creating = record->id <= 0;
+    QSqlQuery query(QSqlDatabase::database(connectionName_));
+    if (creating) {
+        query.prepare(QStringLiteral("INSERT INTO project_work_records(project_id, title, summary, content, created_at, updated_at, folder_id) VALUES (?, ?, ?, ?, ?, ?, ?)"));
+        query.addBindValue(record->projectId);
+        query.addBindValue(text(record->title));
+        query.addBindValue(text(record->summary));
+        query.addBindValue(text(record->content));
+        query.addBindValue(timestamp);
+        query.addBindValue(timestamp);
+        query.addBindValue(record->folderId > 0 ? QVariant(record->folderId) : QVariant());
+    } else {
+        query.prepare(QStringLiteral("UPDATE project_work_records SET title = ?, summary = ?, content = ?, updated_at = ? WHERE id = ? AND project_id = ?"));
+        query.addBindValue(text(record->title));
+        query.addBindValue(text(record->summary));
+        query.addBindValue(text(record->content));
+        query.addBindValue(timestamp);
+        query.addBindValue(record->id);
+        query.addBindValue(record->projectId);
     }
+    if (!query.exec()) { setError(errorMessage, query); return false; }
+    if (query.numRowsAffected() != 1) return fail(errorMessage, QStringLiteral("协作记录不存在，请重新打开项目。"));
+    if (creating) {
+        record->id = query.lastInsertId().toInt();
+        record->createdAt = QDateTime::fromString(timestamp, Qt::ISODateWithMs);
+    }
+    record->updatedAt = QDateTime::fromString(timestamp, Qt::ISODateWithMs);
     return true;
 }
 

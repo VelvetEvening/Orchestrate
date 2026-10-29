@@ -51,6 +51,8 @@ qt_add_executable(Orchestrate WIN32
     src/pages/calendarpage.h
     src/pages/projectspage.cpp
     src/pages/projectspage.h
+    src/pages/collaborationrecorddialog.cpp
+    src/pages/collaborationrecorddialog.h
     src/pages/automationpage.cpp
     src/pages/automationpage.h
     src/pages/placeholderpage.cpp

@@ -43,6 +43,7 @@ public:
         QDateTime createdAt;
         QDateTime updatedAt;
         int folderId = 0;
+        QString summary;
     };
 
     struct Reminder {
@@ -157,6 +158,8 @@ public:
     bool deleteRecordFolder(int id, QString *errorMessage = nullptr);
     bool setWorkRecordFolder(int id, int folderId, QString *errorMessage = nullptr);
     QList<WorkRecord> workRecords(int projectId, QString *errorMessage = nullptr) const;
+    // Save all user-authored fields together; update identity/timestamps only on success.
+    bool saveWorkRecord(WorkRecord *record, QString *errorMessage = nullptr);
     bool addWorkRecord(int projectId, const QString &content, QString *errorMessage = nullptr);
     bool addWorkRecord(int projectId, const QString &title, const QString &content, QString *errorMessage = nullptr);
     bool addWorkRecord(int projectId, const QString &title, const QString &content, int folderId, QString *errorMessage = nullptr);

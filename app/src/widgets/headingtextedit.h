@@ -20,6 +20,8 @@ public:
     void setPreviewMode(bool preview);
     bool isPreviewMode() const;
     void setTextPointSize(qreal size);
+    void setModeControlsVisible(bool visible);
+    void setContentLabel(const QString &label);
 
     static QString getText(QWidget *parent, const QString &title,
                            const QString &initial, bool *accepted, bool previewFirst = false);
@@ -39,4 +41,5 @@ private:
     QStackedWidget *pages_;
     QPlainTextEdit *source_;
     QTextEdit *preview_;
+    bool previewDirty_ = true;
 };
