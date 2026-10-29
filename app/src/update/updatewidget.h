@@ -15,18 +15,24 @@ class QFile;
 class QCryptographicHash;
 class QProcess;
 class QShowEvent;
+class QCheckBox;
+class QTextBrowser;
+class UpdateChecker;
 
 void scheduleCompletedUpdateCleanup();
 
 class UpdateWidget final : public QWidget {
     Q_OBJECT
 public:
-    explicit UpdateWidget(QWidget *parent = nullptr);
+    explicit UpdateWidget(QWidget *parent = nullptr, UpdateChecker *checker = nullptr);
     ~UpdateWidget() override;
     bool startInstaller(QString *error);
+    void startAutomaticChecks();
 
 signals:
     void installRequested();
+    void updateAvailableChanged(const QString &tag);
+    void updateNotificationRequested(const QString &tag);
 
 protected:
     void showEvent(QShowEvent *event) override;
@@ -41,11 +47,18 @@ private:
     void fail(const QString &message);
     void setState(State state, const QString &message);
     void refreshResult();
+    void showRelease();
+    void refreshNotes();
     QNetworkReply *get(const QUrl &url);
 
     State state_ = State::Idle;
     QLabel *status_ = nullptr;
-    QLabel *notes_ = nullptr;
+    QLabel *resultStatus_ = nullptr;
+    QTextBrowser *notes_ = nullptr;
+    QCheckBox *automaticCheck_ = nullptr;
+    UpdateChecker *checker_ = nullptr;
+    QString statusBeforeCheck_;
+    QString displayedNotes_;
     QPushButton *check_ = nullptr;
     QPushButton *action_ = nullptr;
     QPushButton *cancel_ = nullptr;

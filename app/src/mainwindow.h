@@ -42,6 +42,8 @@ private:
     void quitApplication();
     void installUpdate();
     void refreshAutoStartSettings(const QString &error = QString());
+    void setAvailableUpdate(const QString &tag);
+    void openUpdatesPage();
 
     std::unique_ptr<AutoStart> autoStart_;
     QCheckBox *autoStartCheck_ = nullptr;
@@ -58,6 +60,7 @@ private:
     QMenu *trayMenu_ = nullptr;
     QAction *showAction_ = nullptr;
     QAction *quitAction_ = nullptr;
+    QAction *updateAction_ = nullptr;
     QList<QPushButton *> navigationButtons_;
     bool sidebarCollapsed_ = false;
     bool closeToTray_ = true;

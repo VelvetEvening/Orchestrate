@@ -13,6 +13,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Qt6 6.11.2 REQUIRED COMPONENTS Widgets Sql Network)
 
 add_library(OrchestrateUpdate STATIC
+    src/update/updatechecker.cpp src/update/updatechecker.h
     src/update/releaseinfo.cpp src/update/releaseinfo.h
     src/update/updatewidget.cpp src/update/updatewidget.h
     src/platform/instancelock.cpp src/platform/instancelock.h

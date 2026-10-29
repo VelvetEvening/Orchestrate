@@ -509,7 +509,8 @@ void MainWindow::toggleSidebar()
 
     for (QPushButton *button : navigationButtons_) {
         button->setText(sidebarCollapsed_ ? QString() : button->property("expandedText").toString());
-        button->setToolTip(button->property("expandedText").toString());
+        if (button->property("updateTag").toString().isEmpty())
+            button->setToolTip(button->property("expandedText").toString());
         button->setStyleSheet(sidebarCollapsed_
                                   ? QStringLiteral("text-align: center; padding: 10px 0;")
                                   : QString());
@@ -535,6 +536,10 @@ void MainWindow::buildTray()
 
     trayMenu_ = new QMenu(this);
     showAction_ = trayMenu_->addAction(QStringLiteral("打开 Orchestrate"));
+    updateAction_ = trayMenu_->addAction(QStringLiteral("查看更新"));
+    updateAction_->setObjectName(QStringLiteral("viewUpdateAction"));
+    updateAction_->setVisible(false);
+    connect(updateAction_, &QAction::triggered, this, &MainWindow::openUpdatesPage);
     trayMenu_->addSeparator();
     quitAction_ = trayMenu_->addAction(QStringLiteral("退出 Orchestrate"));
     trayIcon_->setContextMenu(trayMenu_);
@@ -650,6 +655,13 @@ void MainWindow::switchToPage(int index)
         settingsLayout->addWidget(settingsCard);
         auto *update = new UpdateWidget(settingsPage);
         connect(update, &UpdateWidget::installRequested, this, &MainWindow::installUpdate);
+        connect(update, &UpdateWidget::updateAvailableChanged, this, &MainWindow::setAvailableUpdate);
+        connect(update, &UpdateWidget::updateNotificationRequested, this, [this](const QString &tag) {
+            if (trayIcon_ && trayIcon_->isVisible() && QSystemTrayIcon::supportsMessages())
+                trayIcon_->showMessage(QStringLiteral("Orchestrate 有新版本"),
+                    QStringLiteral("%1 已发布。打开“设置 → 版本与更新”查看说明并下载。").arg(tag),
+                    QSystemTrayIcon::Information, 8000);
+        });
         settingsLayout->addWidget(update);
         settingsLayout->addStretch(1);
         auto *settingsScroll = new QScrollArea(pageStack_);
@@ -657,6 +669,7 @@ void MainWindow::switchToPage(int index)
         settingsScroll->setFrameShape(QFrame::NoFrame);
         settingsScroll->setWidget(settingsPage);
         pageStack_->addWidget(settingsScroll);
+        update->startAutomaticChecks();
     }
 
     if (index < 0 || index >= pageStack_->count()) {
@@ -667,6 +680,35 @@ void MainWindow::switchToPage(int index)
     if (index == 3) refreshAutoStartSettings();
     for (int i = 0; i < navigationButtons_.size(); ++i) {
         navigationButtons_.at(i)->setChecked(i == index);
+    }
+}
+
+void MainWindow::setAvailableUpdate(const QString &tag)
+{
+    if (navigationButtons_.size() < 4) return;
+    auto *settings = navigationButtons_.at(3);
+    const auto text = tag.isEmpty() ? QStringLiteral("设置") : QStringLiteral("设置 · 有更新");
+    settings->setProperty("expandedText", text);
+    settings->setProperty("updateTag", tag);
+    settings->setText(sidebarCollapsed_ ? QString() : text);
+    settings->setToolTip(tag.isEmpty() ? text : QStringLiteral("设置：有新版本 %1").arg(tag));
+    settings->setAccessibleName(settings->toolTip());
+    settings->setIcon(tag.isEmpty() ? style()->standardIcon(QStyle::SP_FileDialogContentsView)
+                                   : QIcon(QStringLiteral(":/icons/update-available.svg")));
+    if (updateAction_) {
+        updateAction_->setText(QStringLiteral("查看更新（%1）").arg(tag));
+        updateAction_->setVisible(!tag.isEmpty());
+    }
+}
+
+void MainWindow::openUpdatesPage()
+{
+    showMainWindow();
+    switchToPage(3);
+    auto *scroll = qobject_cast<QScrollArea *>(pageStack_->currentWidget());
+    if (scroll) {
+        auto *update = scroll->findChild<UpdateWidget *>();
+        if (update) scroll->ensureWidgetVisible(update);
     }
 }
 
