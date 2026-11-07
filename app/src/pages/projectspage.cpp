@@ -32,6 +32,7 @@
 namespace {
 constexpr int FolderRole = Qt::UserRole + 1;
 constexpr int SummaryRole = Qt::UserRole + 2;
+constexpr int StarredRole = Qt::UserRole + 3;
 QString projectStatus(bool completed) {
     return completed ? QStringLiteral("已完结") : QStringLiteral("进行中");
 }
@@ -161,7 +162,8 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     workList_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     workList_->setContextMenuPolicy(Qt::CustomContextMenu);
     workList_->setAccessibleName(QStringLiteral("协作记录与文件夹"));
-    workList_->setToolTip(QStringLiteral("右键记录可移动到文件夹；右键文件夹可重命名或删除"));
+    workList_->setToolTip(QStringLiteral("右键文件夹可标记重点并置顶、重命名或删除；右键记录可移动到文件夹"));
+    workList_->setAccessibleDescription(QStringLiteral("右键文件夹可标记重点并置顶，重点文件夹显示星标；再次操作可取消"));
     workList_->setStyleSheet(QStringLiteral(
         "QTreeWidget { border: none; background: transparent; padding: 0; selection-background-color: #e0ebff; selection-color: #1d4ed8; }"
         "QTreeWidget::item { padding: 8px 10px; color: #334155; }"
@@ -480,13 +482,19 @@ void ProjectsPage::refreshWorkRecords()
     QHash<int, QTreeWidgetItem *> folderItems;
     QIcon folderIcon = style()->standardIcon(QStyle::SP_DirClosedIcon);
     folderIcon.addPixmap(style()->standardPixmap(QStyle::SP_DirOpenIcon), QIcon::Normal, QIcon::On);
+    const QIcon starredIcon(QStringLiteral(":/icons/star.svg"));
     for (const auto &folder : folders) {
         auto *item = new QTreeWidgetItem(workList_, {folder.name});
         item->setData(0,Qt::UserRole,folder.id);
         item->setData(0,FolderRole,true);
-        item->setIcon(0,folderIcon);
+        item->setData(0,StarredRole,folder.starred);
+        item->setIcon(0,folder.starred ? starredIcon : folderIcon);
+        item->setData(0,Qt::AccessibleTextRole,folder.starred
+            ? folder.name + QStringLiteral("，重点文件夹，已置顶") : folder.name);
         item->setSizeHint(0,QSize(0,44));
-        item->setToolTip(0,folder.name + QStringLiteral("\n右键重命名或删除文件夹"));
+        item->setToolTip(0,folder.name + (folder.starred
+            ? QStringLiteral("\n重点文件夹 · 已置顶\n右键取消重点标记、重命名或删除文件夹")
+            : QStringLiteral("\n右键标记重点并置顶、重命名或删除文件夹")));
         item->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
         item->setExpanded(expanded.contains(QString::number(folder.id)));
         folderItems.insert(folder.id,item);
@@ -697,6 +705,16 @@ void ProjectsPage::showRecordContextMenu(const QPoint &position)
         menu.addAction(QStringLiteral("新建文件夹"),this,[this]{ folderDialog(true); });
         if (item) {
             menu.addSeparator();
+            const int folderId = item->data(0,Qt::UserRole).toInt();
+            const bool starred = item->data(0,StarredRole).toBool();
+            auto *star = menu.addAction(QIcon(QStringLiteral(":/icons/star.svg")),
+                starred ? QStringLiteral("取消重点标记") : QStringLiteral("标记重点并置顶"), this, [this,folderId,starred] {
+                    QString error;
+                    if (!database_->setRecordFolderStarred(folderId,!starred,&error)) { showError(error); return; }
+                    refreshWorkRecords();
+                    if (workList_->currentItem()) workList_->scrollToItem(workList_->currentItem());
+                });
+            star->setObjectName(QStringLiteral("toggleRecordFolderStar"));
             menu.addAction(QStringLiteral("重命名文件夹"),this,[this]{ folderDialog(false); });
             menu.addAction(QStringLiteral("删除文件夹…"),this,&ProjectsPage::deleteFolder);
         }

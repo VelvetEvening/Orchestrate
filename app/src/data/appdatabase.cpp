@@ -14,6 +14,8 @@
 
 namespace {
 
+constexpr int CurrentSchemaVersion = 6;
+
 QString nowIso()
 {
     return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
@@ -112,11 +114,11 @@ bool AppDatabase::open(QString *errorMessage)
     }
     const int version = schemaVersion.value(0).toInt();
     schemaVersion.finish();
-    if (version > 5) {
+    if (version > CurrentSchemaVersion) {
         database.close();
         return fail(errorMessage, QStringLiteral("数据库来自更新版本的 Orchestrate。请使用新版程序，或同时恢复旧版程序与数据库备份。"));
     }
-    if (version == 5) return true;
+    if (version == CurrentSchemaVersion) return true;
 
     if (existingDatabase || QFileInfo(databasePath_).size() > 0) {
         const QString backupDirectory = QDir(portableDataDirectory).filePath(QStringLiteral("backups"));
@@ -170,7 +172,21 @@ bool AppDatabase::open(QString *errorMessage)
             if (!migrated) setError(errorMessage, summary);
         }
     }
-    if (!migrated || !setVersion.exec(QStringLiteral("PRAGMA user_version = 5"))) {
+    if (migrated) {
+        QSqlQuery columns(database);
+        bool hasStarred = false;
+        migrated = columns.exec(QStringLiteral("PRAGMA table_info(project_record_folders)"));
+        if (!migrated) setError(errorMessage, columns);
+        while (columns.next()) hasStarred |= columns.value(1).toString() == QStringLiteral("starred");
+        columns.finish();
+        if (migrated && !hasStarred) {
+            QSqlQuery starred(database);
+            migrated = starred.exec(QStringLiteral(
+                "ALTER TABLE project_record_folders ADD COLUMN starred INTEGER NOT NULL DEFAULT 0 CHECK(starred IN (0, 1))"));
+            if (!migrated) setError(errorMessage, starred);
+        }
+    }
+    if (!migrated || !setVersion.exec(QStringLiteral("PRAGMA user_version = %1").arg(CurrentSchemaVersion))) {
         if (errorMessage && errorMessage->isEmpty()) setError(errorMessage, setVersion);
         database.rollback();
         database.close();
@@ -909,10 +925,10 @@ QList<AppDatabase::RecordFolder> AppDatabase::recordFolders(int projectId, QStri
     QList<RecordFolder> result;
     if (!isOpen()) { fail(errorMessage, QStringLiteral("数据库尚未打开。")); return result; }
     QSqlQuery query(QSqlDatabase::database(connectionName_));
-    query.prepare(QStringLiteral("SELECT id, project_id, name FROM project_record_folders WHERE project_id = ? ORDER BY name COLLATE NOCASE, id"));
+    query.prepare(QStringLiteral("SELECT id, project_id, name, starred FROM project_record_folders WHERE project_id = ? ORDER BY starred DESC, name COLLATE NOCASE, id"));
     query.addBindValue(projectId);
     if (!query.exec()) { setError(errorMessage, query); return result; }
-    while (query.next()) result.append({query.value(0).toInt(), query.value(1).toInt(), query.value(2).toString()});
+    while (query.next()) result.append({query.value(0).toInt(), query.value(1).toInt(), query.value(2).toString(), query.value(3).toBool()});
     return result;
 }
 
@@ -936,6 +952,17 @@ bool AppDatabase::renameRecordFolder(int id, const QString &name, QString *error
     QSqlQuery query(QSqlDatabase::database(connectionName_));
     query.prepare(QStringLiteral("UPDATE project_record_folders SET name = ? WHERE id = ?"));
     query.addBindValue(name.trimmed());
+    query.addBindValue(id);
+    if (!query.exec()) { setError(errorMessage, query); return false; }
+    return query.numRowsAffected() == 1 || fail(errorMessage, QStringLiteral("文件夹不存在，请重新打开项目。"));
+}
+
+bool AppDatabase::setRecordFolderStarred(int id, bool starred, QString *errorMessage)
+{
+    if (!isOpen()) return fail(errorMessage, QStringLiteral("数据库尚未打开。"));
+    QSqlQuery query(QSqlDatabase::database(connectionName_));
+    query.prepare(QStringLiteral("UPDATE project_record_folders SET starred = ? WHERE id = ?"));
+    query.addBindValue(starred);
     query.addBindValue(id);
     if (!query.exec()) { setError(errorMessage, query); return false; }
     return query.numRowsAffected() == 1 || fail(errorMessage, QStringLiteral("文件夹不存在，请重新打开项目。"));

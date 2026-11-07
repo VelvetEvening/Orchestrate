@@ -33,6 +33,7 @@ public:
         int id = 0;
         int projectId = 0;
         QString name;
+        bool starred = false;
     };
 
     struct WorkRecord {
@@ -154,6 +155,7 @@ public:
     QList<RecordFolder> recordFolders(int projectId, QString *errorMessage = nullptr) const;
     bool addRecordFolder(int projectId, const QString &name, int *folderId = nullptr, QString *errorMessage = nullptr);
     bool renameRecordFolder(int id, const QString &name, QString *errorMessage = nullptr);
+    bool setRecordFolderStarred(int id, bool starred, QString *errorMessage = nullptr);
     // Removing a folder keeps its records at the project root.
     bool deleteRecordFolder(int id, QString *errorMessage = nullptr);
     bool setWorkRecordFolder(int id, int folderId, QString *errorMessage = nullptr);

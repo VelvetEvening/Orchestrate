@@ -4,6 +4,7 @@
         <file>chevron-up.svg</file>
         <file>check.svg</file>
         <file>update-available.svg</file>
+        <file>star.svg</file>
     </qresource>
     <qresource prefix="/app-icon">
         <file alias="16.png">app-icon/app-16.png</file>
