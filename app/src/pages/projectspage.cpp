@@ -3,6 +3,7 @@
 #include "widgets/persistenttextzoom.h"
 #include "widgets/headingtextedit.h"
 #include "widgets/summaryfield.h"
+#include "widgets/treeaccessibility.h"
 #include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -151,6 +152,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     search_->setClearButtonEnabled(true);
     records->addWidget(search_);
     workList_ = new QTreeWidget(recordsPanel_);
+    synchronizeTreeAccessibility(workList_);
     workList_->setObjectName(QStringLiteral("workRecordList"));
     workList_->setHeaderHidden(true);
     workList_->header()->setStretchLastSection(true);
@@ -553,6 +555,10 @@ void ProjectsPage::filterRecords()
     recordHint_->setText(!query.isEmpty() ? QStringLiteral("没有匹配的协作记录或文件夹。")
         : QStringLiteral("暂无协作记录。添加任务说明或提示词，并用文件夹按用途整理。"));
     recordHint_->setVisible(!anyVisible && current_.id > 0);
+    // Filtering changes visible rows with tree signals blocked, including when
+    // the visible row count stays the same. Refresh their accessible mapping.
+    workList_->doItemsLayout();
+    resetTreeAccessibility(workList_);
     updateRecordActions();
 }
 

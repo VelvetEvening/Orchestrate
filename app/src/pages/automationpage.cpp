@@ -5,6 +5,7 @@
 #include "automation/toolstatereader.h"
 #include "automation/wslprocess.h"
 #include "automation/sshconnection.h"
+#include "widgets/treeaccessibility.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -460,6 +461,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     groupHint_->setContentsMargins(4, 0, 0, 4);
     groupHint_->hide();
     tree_ = new QTreeWidget(treeCard);
+    synchronizeTreeAccessibility(tree_);
     tree_->setObjectName(QStringLiteral("toolTree"));
     tree_->setColumnCount(2);
     tree_->setHeaderHidden(true);
