@@ -46,8 +46,8 @@ void applySiblingOrder(QList<T> &items, const QString &serialized, Matches match
     if (saved.isEmpty()) return;
     QHash<int, int> ranks;
     for (const auto &value : saved) {
-        const int id = value.toInt();
-        if (id > 0 && !ranks.contains(id)) ranks.insert(id, ranks.size());
+        const int id = value.toInt(-1);
+        if (id >= 0 && !ranks.contains(id)) ranks.insert(id, ranks.size());
     }
     QList<qsizetype> positions;
     QList<T> siblings;
@@ -1156,7 +1156,7 @@ bool AppDatabase::deleteWorkRecord(int id, QString *errorMessage)
     return true;
 }
 
-QList<AppDatabase::ToolGroup> AppDatabase::toolGroups(QString *errorMessage) const
+QList<AppDatabase::ToolGroup> AppDatabase::toolGroups(QString *errorMessage, bool includeUngrouped) const
 {
     QList<ToolGroup> result;
     if (!isOpen()) {
@@ -1174,6 +1174,7 @@ QList<AppDatabase::ToolGroup> AppDatabase::toolGroups(QString *errorMessage) con
         group.sortOrder = query.value(2).toInt();
         result.append(group);
     }
+    if (includeUngrouped) result.append(ToolGroup{});
     applySiblingOrder(result, setting(QStringLiteral("order.tool_groups")), [](const auto &) { return true; });
     return result;
 }
@@ -1603,7 +1604,7 @@ bool AppDatabase::saveSiblingOrder(const QString &key, const QString &sql, const
     while (query.next()) expected.insert(query.value(0).toInt());
     query.finish();
     const QSet<int> actual(ids.cbegin(), ids.cend());
-    if (actual.size() != ids.size() || actual != expected || actual.contains(0)) {
+    if (actual.size() != ids.size() || actual != expected) {
         database.rollback();
         return fail(errorMessage, QStringLiteral("列表内容已变化，排序未保存。请重新打开此列表后重试。"));
     }
@@ -1628,7 +1629,7 @@ bool AppDatabase::reorderProjects(const QList<int> &ids, QString *errorMessage)
 
 bool AppDatabase::reorderToolGroups(const QList<int> &ids, QString *errorMessage)
 {
-    return saveSiblingOrder(QStringLiteral("order.tool_groups"), QStringLiteral("SELECT id FROM tool_groups"), {}, ids, errorMessage);
+    return saveSiblingOrder(QStringLiteral("order.tool_groups"), QStringLiteral("SELECT id FROM tool_groups UNION ALL SELECT 0"), {}, ids, errorMessage);
 }
 
 bool AppDatabase::reorderTools(int groupId, const QList<int> &ids, QString *errorMessage)

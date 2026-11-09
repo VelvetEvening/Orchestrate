@@ -14,7 +14,7 @@
 #include <type_traits>
 
 // A scope identifies reorderable siblings, not a destination container. Empty
-// scopes (e.g. the virtual Ungrouped node) and filtered views cannot be reordered.
+// scopes and filtered views cannot be reordered.
 constexpr int SiblingOrderScopeRole = Qt::UserRole + 100;
 
 template<class Base, class Item>
@@ -66,7 +66,7 @@ protected:
 
     void dragMoveEvent(QDragMoveEvent *event) override
     {
-        const auto target = this->indexAt(event->position().toPoint()).siblingAtColumn(0);
+        const auto target = dropTarget(event->position().toPoint());
         if (event->source() != this || !compatible(source_, target)) {
             clearIndicator();
             event->ignore();
@@ -76,7 +76,7 @@ protected:
         // its tree "drop into item" affordance: this operation never reparents.
         Base::dragMoveEvent(event);
         const QRect rect = this->visualRect(target);
-        indicatorY_ = event->position().y() < rect.center().y() ? rect.top() : rect.bottom() + 1;
+        indicatorY_ = event->position().y() < rect.center().y() ? rect.top() : subtreeBottom(target);
         indicatorX_ = rect.left();
         this->viewport()->update();
         event->setDropAction(Qt::MoveAction);
@@ -91,7 +91,7 @@ protected:
 
     void dropEvent(QDropEvent *event) override
     {
-        const auto target = this->indexAt(event->position().toPoint()).siblingAtColumn(0);
+        const auto target = dropTarget(event->position().toPoint());
         clearIndicator();
         if (event->source() == this && compatible(source_, target)
             && moveItem(source_, target, event->position().y() >= this->visualRect(target).center().y())) {
@@ -127,6 +127,29 @@ protected:
 
 private:
     QString scope(const QModelIndex &index) const { return index.data(SiblingOrderScopeRole).toString(); }
+
+    QModelIndex dropTarget(const QPoint &position) const
+    {
+        auto target = this->indexAt(position).siblingAtColumn(0);
+        // An expanded group's children belong to that group's drop area. Walk
+        // up to the source level; tools/records still cannot change containers.
+        while (target.isValid() && target.parent() != source_.parent()) target = target.parent();
+        return target;
+    }
+
+    int subtreeBottom(const QModelIndex &target) const
+    {
+        auto last = target;
+        if constexpr (std::is_same_v<Base, QTreeWidget>) {
+            for (auto next = this->indexBelow(last); next.isValid(); next = this->indexBelow(last)) {
+                auto ancestor = next.parent();
+                while (ancestor.isValid() && ancestor != target) ancestor = ancestor.parent();
+                if (!ancestor.isValid()) break;
+                last = next;
+            }
+        }
+        return this->visualRect(last).bottom() + 1;
+    }
 
     bool compatible(const QModelIndex &from, const QModelIndex &target) const
     {

@@ -487,8 +487,8 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     tree_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     tree_->setContextMenuPolicy(Qt::CustomContextMenu);
     tree_->setMouseTracking(true);
-    tree_->setAccessibleDescription(QStringLiteral("在同一工具组内拖动排序；Ctrl+上或下箭头调序。跨组移动使用右键菜单。"));
-    tree_->setToolTip(QStringLiteral("拖动或 Ctrl+↑/↓ 调整同组顺序；跨组移动使用右键菜单"));
+    tree_->setAccessibleDescription(QStringLiteral("拖动工具组调整组间顺序，或在同一工具组内拖动工具；Ctrl+上或下箭头调序。工具跨组移动使用右键菜单。"));
+    tree_->setToolTip(QStringLiteral("拖动工具组或同组工具排序，也可使用 Ctrl+↑/↓；工具跨组移动使用右键菜单"));
     treeLayout->addWidget(tree_, 1);
 
     // ---- Right: empty state or tool details ----
@@ -919,7 +919,7 @@ void AutomationPage::loadAll(int preferredToolId)
     }
 
     QString error;
-    const QList<AppDatabase::ToolGroup> groups = database_->toolGroups(&error);
+    const QList<AppDatabase::ToolGroup> groups = database_->toolGroups(&error, true);
     if (!error.isEmpty()) {
         showError(error);
         return;
@@ -936,7 +936,7 @@ void AutomationPage::loadAll(int preferredToolId)
         item->setText(0, name);
         item->setData(0, Qt::UserRole, id);
         item->setData(0, Qt::UserRole + 1, kGroupItem);
-        if (id > 0) item->setData(0, SiblingOrderScopeRole, QStringLiteral("tool-groups"));
+        item->setData(0, SiblingOrderScopeRole, QStringLiteral("tool-groups"));
         item->setIcon(0, style()->standardIcon(QStyle::SP_DirIcon));
         item->setToolTip(0, tooltip);
         QFont font = item->font(0);
@@ -947,9 +947,9 @@ void AutomationPage::loadAll(int preferredToolId)
         groupItems.insert(id, item);
     };
     for (const AppDatabase::ToolGroup &group : groups) {
-        addGroupItem(group.id, group.name, QStringLiteral("工具组：%1").arg(group.name));
+        const QString name = group.id == 0 ? ungroupedName() : group.name;
+        addGroupItem(group.id, name, QStringLiteral("工具组：%1；拖动调整组间顺序").arg(name));
     }
-    addGroupItem(0, ungroupedName(), QStringLiteral("尚未归入工具组的工具"));
 
     QHash<int, int> toolCounts;
     for (const AppDatabase::AutomationTool &tool : tools) {

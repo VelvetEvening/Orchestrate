@@ -170,7 +170,8 @@ public:
     bool updateWorkRecord(int id, const QString &title, const QString &content, QString *errorMessage = nullptr);
     bool deleteWorkRecord(int id, QString *errorMessage = nullptr);
 
-    QList<ToolGroup> toolGroups(QString *errorMessage = nullptr) const;
+    // Include the virtual id=0 group when loading the reorderable tool tree.
+    QList<ToolGroup> toolGroups(QString *errorMessage = nullptr, bool includeUngrouped = false) const;
     bool addToolGroup(const QString &name, int *groupId = nullptr, QString *errorMessage = nullptr);
     bool renameToolGroup(int id, const QString &name, QString *errorMessage = nullptr);
     bool deleteToolGroup(int id, QString *errorMessage = nullptr);
