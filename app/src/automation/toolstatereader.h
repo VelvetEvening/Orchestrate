@@ -5,63 +5,27 @@
 #include "toolstate.h"
 #include "wslprocess.h"
 #include "../data/appdatabase.h"
+#include "../platform/fileaccess.h"
 #include <QFile>
 #include <QFileInfo>
-#include <QFutureWatcher>
-#include <QPromise>
-#include <QThreadPool>
 
 namespace ToolStateReader {
 using Callback = std::function<void(bool, const QJsonObject &, const QString &)>;
 
-struct Result {
-    bool success = false;
-    QJsonObject state;
-    QString error;
-};
-
-// File I/O stays off the GUI thread even for Windows paths (including network
-// shares). The worker owns no widgets; closing the form drops its callbacks.
+// The same bounded, cancellable reader is used by the page and parameter forms.
 inline void readLocal(QObject *context, const AppDatabase::AutomationTool &tool,
                       Callback callback, int timeoutMs = 30000)
 {
-    auto *request = new QObject(context);
-    auto *watcher = new QFutureWatcher<Result>(request);
-    auto *timer = new QTimer(request);
-    timer->setSingleShot(true);
-    const auto done = std::make_shared<bool>(false);
-    const auto finish = [request, timer, done, callback](const Result &result) {
-        if (*done) return;
-        *done = true;
-        timer->stop();
-        request->deleteLater();
-        callback(result.success, result.state, result.error);
-    };
-    QObject::connect(watcher, &QFutureWatcher<Result>::finished, request, [watcher, finish] {
-        finish(watcher->result());
-    });
-    QObject::connect(timer, &QTimer::timeout, request, [finish] {
-        finish({false, {}, QStringLiteral("本地状态读取超时；请检查文件路径后重试。")});
-    });
-    QPromise<Result> promise;
-    promise.start();
-    watcher->setFuture(promise.future());
-    timer->start(timeoutMs);
-    QThreadPool::globalInstance()->start([tool, promise = std::move(promise)]() mutable {
-        Result result;
-        if (!QFileInfo::exists(tool.statePath)) {
-            result.success = true;
-            result.state = {{QStringLiteral("result"), QStringLiteral("none")},
-                {QStringLiteral("summary"), QStringLiteral("还没有状态文件。")}};
-        } else {
-            QFile file(tool.statePath);
-            if (!file.open(QIODevice::ReadOnly)) result.error = file.errorString();
-            else result.success = ToolState::parse(file.read(ToolState::maxBytes + 1),
-                                                   tool.externalId, &result.state, &result.error);
-        }
-        promise.addResult(result);
-        promise.finish();
-    });
+    FileAccess::request(context, QStringLiteral("read-optional"), tool.statePath,
+        [tool, callback](bool success, const QByteArray &bytes, const QString &diagnostic) {
+            QJsonObject state;
+            QString error = diagnostic;
+            if (success && bytes == QByteArray(1, '\0'))
+                state = {{QStringLiteral("result"), QStringLiteral("none")},
+                    {QStringLiteral("summary"), QStringLiteral("还没有状态文件。")}};
+            else if (success) success = ToolState::parse(bytes, tool.externalId, &state, &error);
+            callback(success, state, error);
+        }, timeoutMs);
 }
 
 // This reads only the registered JSON file. It never runs a tool command.

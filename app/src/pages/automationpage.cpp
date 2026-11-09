@@ -6,6 +6,7 @@
 #include "automation/wslprocess.h"
 #include "automation/sshconnection.h"
 #include "widgets/treeaccessibility.h"
+#include "widgets/textlayoutguard.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -39,6 +40,8 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSignalBlocker>
+#include <QShowEvent>
+#include <QTextCursor>
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QSplitter>
@@ -621,6 +624,8 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     runOutput_->setMinimumHeight(90);
     runOutput_->setMaximumHeight(200);
     runOutput_->setLineWrapMode(QPlainTextEdit::WidgetWidth);
+    TextLayoutGuard::configure(runOutput_);
+    runOutput_->setUndoRedoEnabled(false);
     runLayout->addWidget(runOutput_);
     runPanel_->hide();
     commandLayout->addWidget(runPanel_);
@@ -814,7 +819,7 @@ void AutomationPage::syncBuiltinTools()
         }
         QByteArray data;
         ParsedManifest manifest;
-        if (!readManifest(manifestPath, QString(), &data, &error)
+        if (!readManifest(manifestPath, &data, &error)
             || !parseManifest(data, manifestPath, QString(), &manifest, &error)) {
             problems.append(QStringLiteral("%1：%2").arg(folder, error));
             continue;
@@ -1315,7 +1320,7 @@ void AutomationPage::deleteGroup()
 
 void AutomationPage::importTool()
 {
-    if (database_ == nullptr) {
+    if (database_ == nullptr || importInFlight_) {
         return;
     }
 
@@ -1328,13 +1333,14 @@ void AutomationPage::importTool()
         return;
     }
 
-    QByteArray data;
-    QString error;
-    if (!readManifest(filePath, QString(), &data, &error)) {
-        showError(QStringLiteral("无法读取接入声明：%1").arg(error));
-        return;
-    }
-    registerToolManifest(data, filePath);
+    importInFlight_ = true;
+    const int requestedGroup = selectedGroupId_;
+    FileAccess::request(this, QStringLiteral("read"), filePath,
+        [this, filePath, requestedGroup](bool ok, const QByteArray &data, const QString &error) {
+            importInFlight_ = false;
+            if (!ok) { showError(QStringLiteral("无法读取接入声明：%1").arg(error)); return; }
+            registerToolManifest(data, filePath, {}, {}, {}, {}, requestedGroup);
+        });
 }
 
 void AutomationPage::importRemoteTool()
@@ -1608,16 +1614,11 @@ void AutomationPage::importWslTool()
 }
 
 bool AutomationPage::readManifest(const QString &sourcePath,
-                                  const QString &sshHost,
                                   QByteArray *data,
-                                  QString *errorMessage, const QString &sshUser) const
+                                  QString *errorMessage) const
 {
-    if (!sshHost.isEmpty()) {
-        return runSshCapture(sshHost,
-                             {QStringLiteral("cat"), QStringLiteral("--"), shellQuote(sourcePath)},
-                             data,
-                             errorMessage, sshUser);
-    }
+    // Only the bundled manifests next to the executable use this bounded path.
+    // User-registered locations always go through FileAccess.
     QFile file(sourcePath);
     if (!file.open(QIODevice::ReadOnly)) {
         if (errorMessage != nullptr) {
@@ -1625,7 +1626,11 @@ bool AutomationPage::readManifest(const QString &sourcePath,
         }
         return false;
     }
-    *data = file.readAll();
+    *data = file.read(FileAccess::maxBytes + 1);
+    if (data->size() > FileAccess::maxBytes) {
+        if (errorMessage) *errorMessage = QStringLiteral("接入声明超过 1 MiB 上限。");
+        return false;
+    }
     return true;
 }
 
@@ -1777,7 +1782,7 @@ void AutomationPage::registerToolManifest(const QByteArray &manifestData,
                                            const QString &sshHost,
                                            const QString &wslDistribution,
                                            const QString &wslUser,
-                                           const QString &sshUser)
+                                           const QString &sshUser, int requestedGroupId)
 {
     if (database_ == nullptr) {
         return;
@@ -1811,7 +1816,7 @@ void AutomationPage::registerToolManifest(const QByteArray &manifestData,
     }
 
     QString groupNotice;
-    int groupId = selectedGroupId_ > 0 ? selectedGroupId_ : 0;
+    int groupId = qMax(0, requestedGroupId >= 0 ? requestedGroupId : selectedGroupId_);
     if (groupId == 0 && !manifest.group.isEmpty()) {
         for (const AppDatabase::ToolGroup &group : database_->toolGroups(&error)) {
             if (group.name == manifest.group) {
@@ -1864,9 +1869,9 @@ void AutomationPage::reloadManifest()
 {
     AppDatabase::AutomationTool tool;
     if (!findTool(selectedToolId_, &tool) || manifestReadsInFlight_.contains(tool.id)) return;
-    if (tool.targetType == QStringLiteral("wsl") || tool.targetType == QStringLiteral("ssh")) {
+    {
         manifestReadsInFlight_.insert(tool.id);
-        commandHint_->setText(QStringLiteral("正在重新读取远程声明…"));
+        commandHint_->setText(QStringLiteral("正在重新读取声明…"));
         commandHint_->show();
         const auto complete = [this, tool](bool ok, const QByteArray &data, const QString &error) {
             manifestReadsInFlight_.remove(tool.id);
@@ -1886,18 +1891,13 @@ void AutomationPage::reloadManifest()
         if (tool.targetType == QStringLiteral("wsl"))
             WslProcess::capture(this, WslProcess::arguments(tool.wslDistribution, tool.wslUser,
                 QStringLiteral("cat"), {QStringLiteral("--"), tool.registrationPath}), complete);
-        else
+        else if (tool.targetType == QStringLiteral("ssh"))
             SshConnection::capture(this, tool.sshHost, tool.sshUser,
                 QStringLiteral("cat -- %1").arg(shellQuote(tool.registrationPath)), complete);
+        else
+            FileAccess::request(this, QStringLiteral("read"), tool.registrationPath, complete);
         return;
     }
-    QByteArray data;
-    QString error;
-    if (!readManifest(tool.registrationPath, tool.sshHost, &data, &error)) {
-        showError(QStringLiteral("无法读取接入声明：%1").arg(error));
-        return;
-    }
-    finishManifestReload(tool, data);
 }
 
 void AutomationPage::finishManifestReload(const AppDatabase::AutomationTool &tool, const QByteArray &data)
@@ -1947,50 +1947,6 @@ void AutomationPage::moveToolToGroup(int toolId, int groupId)
     loadAll(toolId);
 }
 
-bool AutomationPage::runSshCapture(const QString &host,
-                                    const QStringList &arguments,
-                                    QByteArray *output,
-                                    QString *errorMessage, const QString &sshUser) const
-{
-    QProcess process;
-    process.setProgram(QStringLiteral("ssh"));
-    process.setArguments(SshConnection::arguments(host, sshUser, arguments.join(QLatin1Char(' '))));
-    process.setProcessChannelMode(QProcess::SeparateChannels);
-    process.start();
-    if (!process.waitForStarted(5000)) {
-        if (errorMessage != nullptr) {
-            *errorMessage = process.errorString();
-        }
-        return false;
-    }
-    if (!process.waitForFinished(30000)) {
-        process.kill();
-        process.waitForFinished(2000);
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("SSH 命令超时。");
-        }
-        return false;
-    }
-    const QByteArray data = process.readAllStandardOutput();
-    const QByteArray errorData = process.readAllStandardError();
-    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-        if (errorMessage != nullptr) {
-            *errorMessage = decodeOutput(errorData).trimmed();
-            if (errorMessage->isEmpty()) {
-                *errorMessage = decodeOutput(data).trimmed();
-            }
-            if (errorMessage->isEmpty()) {
-                *errorMessage = QStringLiteral("SSH 命令失败（退出码 %1）。").arg(process.exitCode());
-            }
-        }
-        return false;
-    }
-    if (output != nullptr) {
-        *output = data;
-    }
-    return true;
-}
-
 void AutomationPage::deleteTool()
 {
     AppDatabase::AutomationTool tool;
@@ -2015,31 +1971,6 @@ void AutomationPage::deleteTool()
     lastAutoRefreshAt_.remove(toolId);
     tree_->setCurrentItem(nullptr);
     loadAll();
-}
-
-bool AutomationPage::readStateFile(const QString &path, const QString &toolId, QJsonObject *state, QString *errorMessage) const
-{
-    // A tool that has never run (e.g. a freshly shipped built-in tool) has no state
-    // file yet; that is not a read error.
-    if (!QFileInfo::exists(path)) {
-        if (state != nullptr) {
-            *state = QJsonObject {
-                {QStringLiteral("result"), QStringLiteral("none")},
-                {QStringLiteral("summary"), QStringLiteral("还没有状态文件，运行任意一条命令后生成。")}
-            };
-        }
-        return true;
-    }
-
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        if (errorMessage != nullptr) {
-            *errorMessage = QStringLiteral("%1\n%2").arg(file.errorString(), QDir::toNativeSeparators(path));
-        }
-        return false;
-    }
-
-    return ToolState::parse(file.read(ToolState::maxBytes + 1), toolId, state, errorMessage);
 }
 
 void AutomationPage::clearStateItems()
@@ -2103,34 +2034,10 @@ void AutomationPage::renderStateMessage(const QString &badge, const QString &res
     clearStateItems();
 }
 
-bool AutomationPage::readToolState(const AppDatabase::AutomationTool &tool,
-                                    QJsonObject *state,
-                                    QString *errorMessage) const
-{
-    if (tool.targetType == QStringLiteral("wsl")) {
-        if (errorMessage) *errorMessage = QStringLiteral("WSL 状态须通过异步通道读取。");
-        return false;
-    }
-    if (tool.sshHost.isEmpty()) {
-        return readStateFile(tool.statePath, tool.externalId, state, errorMessage);
-    }
-
-    QByteArray data;
-    if (!runSshCapture(tool.sshHost,
-                       {QStringLiteral("cat"), QStringLiteral("--"), shellQuote(tool.statePath)},
-                       &data,
-                       errorMessage, tool.sshUser)) {
-        return false;
-    }
-
-    return ToolState::parse(data, tool.externalId, state, errorMessage);
-}
-
 void AutomationPage::applyStateResult(int toolId,
                                       bool success,
                                       const QJsonObject &state,
-                                      const QString &error,
-                                      bool updateVisibleState)
+                                      const QString &error)
 {
     if (success) {
         stateCache_.insert(toolId, state);
@@ -2140,7 +2047,9 @@ void AutomationPage::applyStateResult(int toolId,
         stateErrors_.insert(toolId, error);
     }
     updateToolIcon(toolId);
-    if (updateVisibleState && selectedToolId_ == toolId) {
+    // Selection may change while a deduplicated background read is in flight.
+    // Render for the current selection, not the selection when the read began.
+    if (selectedToolId_ == toolId) {
         if (success) {
             renderState(state);
         } else {
@@ -2204,7 +2113,7 @@ void AutomationPage::startStateReadProcess(const AppDatabase::AutomationTool &to
         AppDatabase::AutomationTool current;
         if (findTool(tool.id, &current) && current.externalId == tool.externalId
             && current.statePath == tool.statePath && current.sameExecutionTarget(tool))
-            applyStateResult(tool.id, success, state, error, updateVisibleState);
+            applyStateResult(tool.id, success, state, error);
         else if (current.id > 0)
             refreshStateForTool(current.id, updateVisibleState);
     };
@@ -2266,10 +2175,16 @@ void AutomationPage::refreshStateForTool(int toolId, bool updateVisibleState)
         startAsyncSshStateRead(tool, updateVisibleState);
         return;
     }
-    QJsonObject state;
-    QString error;
-    const bool success = readToolState(tool, &state, &error);
-    applyStateResult(tool.id, success, state, error, updateVisibleState);
+    if (stateReadsInFlight_.contains(tool.id)) return;
+    stateReadsInFlight_.insert(tool.id);
+    ToolStateReader::readLocal(this, tool, [this, tool, updateVisibleState](bool success, const QJsonObject &state, const QString &error) {
+        stateReadsInFlight_.remove(tool.id);
+        AppDatabase::AutomationTool current;
+        if (findTool(tool.id, &current) && current.externalId == tool.externalId
+            && current.statePath == tool.statePath && current.sameExecutionTarget(tool))
+            applyStateResult(tool.id, success, state, error);
+        else if (current.id > 0) refreshStateForTool(current.id, updateVisibleState);
+    });
 }
 
 void AutomationPage::refreshState()
@@ -2433,12 +2348,15 @@ QString AutomationPage::remoteCommandLine(const AppDatabase::AutomationTool &too
 
 void AutomationPage::renderRunRecord()
 {
+    // The bounded record is still captured while hidden. Lay it out on show.
+    if (!isVisible()) { displayedOutputTool_ = -1; return; }
     if (!runRecords_.contains(selectedToolId_)) {
         runPanel_->hide();
         return;
     }
     const RunRecord &record = runRecords_[selectedToolId_];
-    runTitle_->setText(QStringLiteral("最近运行：%1").arg(record.title));
+    runTitle_->setText(QStringLiteral("最近运行：%1").arg(record.title)
+        + (record.outputTruncated ? QStringLiteral("（仅保留最近 256 Ki 字符）") : QString()));
     QString color = QStringLiteral("#4ade80");
     if (record.running) {
         color = QStringLiteral("#93c5fd");
@@ -2447,20 +2365,58 @@ void AutomationPage::renderRunRecord()
     }
     runStatus_->setText(record.status);
     runStatus_->setStyleSheet(QStringLiteral("color: %1; font-weight: 600;").arg(color));
-    runOutput_->setPlainText((record.outputTruncated ? QStringLiteral("[较早输出已截断，仅保留最近 256 Ki 字符]\n") : QString())
-                            + record.output);
-    runOutput_->verticalScrollBar()->setValue(runOutput_->verticalScrollBar()->maximum());
+    const qint64 start = record.outputOffset;
+    const qint64 end = start + record.output.size();
+    auto *scroll = runOutput_->verticalScrollBar();
+    const bool reset = displayedOutputTool_ != selectedToolId_ || displayedOutputEnd_ < start
+        || displayedOutputEnd_ > end || displayedOutputStart_ > start;
+    const bool follow = reset || scroll->value() >= scroll->maximum() - 2;
+    if (reset) TextLayoutGuard::setPlainText(runOutput_, record.output);
+    else if (start != displayedOutputStart_ || end != displayedOutputEnd_) {
+        QTextCursor cursor(runOutput_->document());
+        cursor.beginEditBlock();
+        if (start > displayedOutputStart_) {
+            cursor.setPosition(0);
+            cursor.setPosition(int(start - displayedOutputStart_), QTextCursor::KeepAnchor);
+            cursor.removeSelectedText();
+        }
+        cursor.movePosition(QTextCursor::End);
+        const QString appended = record.output.mid(displayedOutputEnd_ - start);
+        TextLayoutGuard::prepareInsertion(runOutput_, cursor, appended);
+        cursor.insertText(appended);
+        cursor.endEditBlock();
+    }
+    displayedOutputTool_ = selectedToolId_;
+    displayedOutputStart_ = start;
+    displayedOutputEnd_ = end;
+    if (follow) scroll->setValue(scroll->maximum());
     runPanel_->show();
+}
+
+void AutomationPage::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    renderRunRecord();
 }
 
 void AutomationPage::appendRunOutput(int toolId, const QString &text)
 {
+    if (text.isEmpty()) return;
     auto &record = runRecords_[toolId];
-    record.output += text;
+    // Keep offsets in the same normalized UTF-16 space as QTextDocument,
+    // including CRLF pairs split across process reads.
+    QString normalized = text;
+    if (record.outputEndedWithCr && normalized.startsWith(QLatin1Char('\n'))) normalized.remove(0, 1);
+    record.outputEndedWithCr = text.endsWith(QLatin1Char('\r'));
+    normalized.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+    normalized.replace(QLatin1Char('\r'), QLatin1Char('\n'));
+    record.output += normalized;
     if (record.output.size() > maxRunOutputChars) {
+        const auto previousSize = record.output.size();
         record.output = record.output.right(maxRunOutputChars);
         if (!record.output.isEmpty() && record.output.front().isLowSurrogate()) record.output.remove(0, 1);
         record.outputTruncated = true;
+        record.outputOffset += previousSize - record.output.size();
     }
 }
 
@@ -2598,6 +2554,7 @@ void AutomationPage::runCommand(QListWidgetItem *item)
     record.running = true;
     record.status = QStringLiteral("运行中…");
     runRecords_.insert(toolId, record);
+    displayedOutputTool_ = -1;
     appendRunOutput(toolId, QStringLiteral("$ %1\n").arg(commandLine));
     runningProcesses_.insert(toolId, process);
     renderRunRecord();

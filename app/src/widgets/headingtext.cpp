@@ -1,4 +1,5 @@
 #include "headingtext.h"
+#include "textlayoutguard.h"
 
 #include <QAbstractTextDocumentLayout>
 #include <QApplication>
@@ -102,7 +103,8 @@ void HeadingText::render(QTextDocument &document, const QString &source)
     document.clear();
     document.setDocumentMargin(0);
     QTextOption option = document.defaultTextOption();
-    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    option.setWrapMode(TextLayoutGuard::hasLongLine(source)
+        ? QTextOption::NoWrap : QTextOption::WrapAtWordBoundaryOrAnywhere);
     document.setDefaultTextOption(option);
     QString normalized = source;
     normalized.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));

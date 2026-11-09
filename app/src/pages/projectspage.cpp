@@ -1,4 +1,5 @@
 #include "projectspage.h"
+#include "platform/fileaccess.h"
 #include "collaborationrecorddialog.h"
 #include "widgets/persistenttextzoom.h"
 #include "widgets/headingtextedit.h"
@@ -303,19 +304,14 @@ void ProjectsPage::showProjectContextMenu(const QPoint &position)
 
 void ProjectsPage::openProjectDirectory(const QString &directory)
 {
-    if (directory.isEmpty()) return;
-    const QFileInfo folder(directory);
-    if (!folder.isDir()) {
-        QMessageBox::warning(this, QStringLiteral("无法打开项目目录"),
-            QStringLiteral("目录不存在、无法访问或不是文件夹，请在“项目设置”中更新目录。\n\n%1")
-                .arg(QDir::toNativeSeparators(directory)));
-        return;
-    }
-    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(folder.absoluteFilePath()))) {
-        QMessageBox::warning(this, QStringLiteral("无法打开项目目录"),
-            QStringLiteral("系统未能打开项目目录。\n\n%1")
-                .arg(QDir::toNativeSeparators(folder.absoluteFilePath())));
-    }
+    if (directory.isEmpty() || openingDirectory_) return;
+    openingDirectory_ = true;
+    FileAccess::request(this, QStringLiteral("open-directory"), directory,
+        [this, directory](bool ok, const QByteArray &, const QString &error) {
+            openingDirectory_ = false;
+            if (!ok) QMessageBox::warning(this, QStringLiteral("无法打开项目目录"),
+                error + QStringLiteral("\n请在“项目设置”中检查目录。\n\n") + QDir::toNativeSeparators(directory));
+        });
 }
 
 bool ProjectsPage::saveOutline()

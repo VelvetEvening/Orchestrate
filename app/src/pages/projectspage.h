@@ -41,6 +41,7 @@ private:
     void showError(const QString &message);
     AppDatabase *database_;
     AppDatabase::Project current_;
+    bool openingDirectory_ = false;
     QListWidget *projectList_;
     QWidget *details_;
     QLabel *projectTitle_;

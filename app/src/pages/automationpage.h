@@ -40,6 +40,9 @@ public:
     void refreshAllStates();
     bool hasRunningCommands() const;
 
+protected:
+    void showEvent(QShowEvent *event) override;
+
 private:
     friend class AutomationContractTest;
     struct ParsedManifest {
@@ -56,6 +59,8 @@ private:
         bool running = false;
         bool failed = false;
         bool outputTruncated = false;
+        qint64 outputOffset = 0;
+        bool outputEndedWithCr = false;
     };
 
     void loadAll(int preferredToolId = 0);
@@ -76,9 +81,8 @@ private:
     void importWslTool();
     void finishManifestReload(const AppDatabase::AutomationTool &tool, const QByteArray &data);
     bool readManifest(const QString &sourcePath,
-                      const QString &sshHost,
                       QByteArray *data,
-                      QString *errorMessage, const QString &sshUser = QString()) const;
+                      QString *errorMessage) const;
     bool parseManifest(const QByteArray &manifestData,
                        const QString &sourcePath,
                        const QString &sshHost,
@@ -92,28 +96,18 @@ private:
                               const QString &sshHost = QString(),
                               const QString &wslDistribution = QString(),
                               const QString &wslUser = QString(),
-                              const QString &sshUser = QString());
+                              const QString &sshUser = QString(), int requestedGroupId = -1);
     bool applyManifestUpdate(int toolId, ParsedManifest manifest);
     int builtinToolGroupId();
     void syncBuiltinTools();
     void reloadManifest();
     void moveToolToGroup(int toolId, int groupId);
     void deleteTool();
-    bool runSshCapture(const QString &host,
-                       const QStringList &arguments,
-                       QByteArray *output,
-                       QString *errorMessage, const QString &sshUser = QString()) const;
-
-    bool readToolState(const AppDatabase::AutomationTool &tool,
-                       QJsonObject *state,
-                       QString *errorMessage) const;
-    bool readStateFile(const QString &path, const QString &toolId, QJsonObject *state, QString *errorMessage) const;
     void startAsyncWslStateRead(const AppDatabase::AutomationTool &tool, bool updateVisibleState);
     void startAsyncSshStateRead(const AppDatabase::AutomationTool &tool, bool updateVisibleState);
     void startStateReadProcess(const AppDatabase::AutomationTool &tool, bool updateVisibleState,
                                QProcess *process, int timeoutMs = 30000);
-    void applyStateResult(int toolId, bool success, const QJsonObject &state, const QString &error,
-                          bool updateVisibleState);
+    void applyStateResult(int toolId, bool success, const QJsonObject &state, const QString &error);
     void refreshState();
     void refreshStateForTool(int toolId, bool updateVisibleState);
     void refreshDueStates();
@@ -135,6 +129,7 @@ private:
     void showError(const QString &message);
 
     QSet<int> manifestReadsInFlight_;
+    bool importInFlight_ = false;
 
     QTreeWidget *tree_ = nullptr;
     QPushButton *renameGroupButton_ = nullptr;
@@ -162,6 +157,9 @@ private:
     QLabel *runTitle_ = nullptr;
     QLabel *runStatus_ = nullptr;
     QPlainTextEdit *runOutput_ = nullptr;
+    int displayedOutputTool_ = -1;
+    qint64 displayedOutputStart_ = 0;
+    qint64 displayedOutputEnd_ = 0;
 
     QCheckBox *refreshEnabledCheck_ = nullptr;
     QWidget *refreshOptions_ = nullptr;

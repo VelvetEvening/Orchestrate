@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "version.h"
 #include "platform/instancelock.h"
+#include "platform/fileaccess.h"
 #include "update/updatewidget.h"
 
 #include <QApplication>
@@ -16,6 +17,10 @@
 
 int main(int argc, char *argv[])
 {
+    if (FileAccess::isHelper(argc, argv)) {
+        QCoreApplication helper(argc, argv);
+        return FileAccess::runHelper(helper.arguments());
+    }
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("Orchestrate"));
     QApplication::setApplicationDisplayName(QStringLiteral("Orchestrate"));

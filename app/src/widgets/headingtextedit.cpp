@@ -1,5 +1,6 @@
 #include "headingtextedit.h"
 #include "headingtext.h"
+#include "textlayoutguard.h"
 
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -43,7 +44,7 @@ HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
     // retaining a usable text area, rather than forcing the surrounding form.
     pages_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
     pages_->setMinimumHeight(80);
-    source_ = new QPlainTextEdit(pages_);
+    source_ = new TextLayoutGuard::Edit(pages_);
     source_->setObjectName(QStringLiteral("headingSource"));
     source_->setAccessibleName(QStringLiteral("正文原文"));
     source_->setTabChangesFocus(true);
@@ -78,10 +79,10 @@ HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
     });
 }
 
-void HeadingTextEdit::setPlainText(const QString &text) { source_->setPlainText(text); }
+void HeadingTextEdit::setPlainText(const QString &text) { TextLayoutGuard::setPlainText(source_, text); }
 QString HeadingTextEdit::toPlainText() const { return source_->toPlainText(); }
 void HeadingTextEdit::setPlaceholderText(const QString &text) { source_->setPlaceholderText(text); }
-void HeadingTextEdit::clear() { source_->clear(); setPreviewMode(false); }
+void HeadingTextEdit::clear() { setPlainText({}); setPreviewMode(false); }
 void HeadingTextEdit::setPreviewMode(bool preview) { tabs_->setCurrentIndex(preview ? PreviewTab : EditTab); }
 bool HeadingTextEdit::isPreviewMode() const { return tabs_->currentIndex() == PreviewTab; }
 void HeadingTextEdit::setModeControlsVisible(bool visible)
@@ -103,8 +104,13 @@ void HeadingTextEdit::updatePreview()
     QFont font = source_->font();
     if (font.pointSizeF() <= 0) font.setPointSizeF(QFontInfo(font).pointSizeF());
     if (!previewDirty_ && preview_->document()->defaultFont() == font) return;
+    const QString text = source_->toPlainText();
+    // Discard the previous layout before changing its width/font; otherwise
+    // switching from a long document to a short one can reflow the old text.
+    preview_->document()->clear();
     preview_->document()->setDefaultFont(font);
-    HeadingText::render(*preview_->document(), source_->toPlainText());
+    preview_->setLineWrapMode(TextLayoutGuard::hasLongLine(text) ? QTextEdit::NoWrap : QTextEdit::WidgetWidth);
+    HeadingText::render(*preview_->document(), text);
     // Inserting rendered text moves the viewer's cursor to the end. New content
     // starts at the top; an unchanged preview keeps its cursor and reading position.
     preview_->moveCursor(QTextCursor::Start);

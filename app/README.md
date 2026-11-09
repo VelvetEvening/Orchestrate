@@ -2,7 +2,7 @@
 
 Orchestrate 是基于 C++17、Qt 6 Widgets 和 SQLite 的 Windows 桌面工作台。产品统一使用 Orchestrate 名称。
 
-v2.4.0 支持工具组、同组工具、项目列表、协作记录文件夹及同文件夹内记录的拖动排序，顺序自动保存，也可使用 Ctrl+↑/↓。所有工具组均可调整位置，包括改名后的“未分组”；展开时也能按整组定位落点。继续保留重点文件夹置顶及无障碍缓存修复，数据库沿用 schema v6。完整变化见 [v2.4.0 发布说明](../docs/releases/v2.4.0.md)。
+v2.4.1 修复长日志、超长单行正文和缓慢文件访问导致的界面卡顿。日志增量更新且隐藏时暂停排版；超长行使用横向滚动；外部文件访问异步执行并限制并发、大小和超时，完成后释放读取进程。继续保留拖动排序和树控件无障碍修复，数据库沿用 schema v6。完整变化见 [v2.4.1 发布说明](../docs/releases/v2.4.1.md)。
 
 - **时序记录**：日历、日记、日记集合、一次性或重复提醒。
 - **项目记录**：项目目录与状态、独立大纲窗口、可按文件夹整理的协作记录，支持文件夹重点星标与置顶，以及标题、摘要和文件夹搜索。
@@ -56,9 +56,9 @@ $env:PATH = "$qtRoot/bin;D:/CodeTools/Qt/Qt/Tools/mingw1310_64/bin;$env:PATH"
 
 ## Windows 便携包
 
-从仓库根目录运行 `./app/package.ps1 -ReleaseTag v2.4.0`。需要已提交且干净的工作树、Qt/MinGW/CMake/Ninja，以及与 Qt 对应的源码目录（用于收集第三方许可说明）；工具安装路径均支持脚本参数覆盖。
+从仓库根目录运行 `./app/package.ps1 -ReleaseTag v2.4.1`。需要已提交且干净的工作树、Qt/MinGW/CMake/Ninja，以及与 Qt 对应的源码目录（用于收集第三方许可说明）；工具安装路径均支持脚本参数覆盖。
 
-脚本先检查输出目录已被 Git 忽略，再从 `git archive HEAD` 解出源码，在 `dist/work-*` 中全新 Release 构建（不包含本地测试）。发布前先在 `app/build-qt` 执行本地回归；发布验证完成后可删除 `dist/work-*` 临时目录，只保留发布产物。仅安装程序、更新器与内置工具，再收集 Qt、MinGW 运行库、SQLite 插件、Windows Schannel TLS 插件及许可说明。最终生成 `dist/Orchestrate-v2.4.0-windows-x64.zip` 和 `.zip.sha256`，以及本机构建记录 `.build.json`。ZIP 内含源码提交信息和逐文件校验清单，用户完整解压即可运行。已有同名 ZIP 时拒绝覆盖；可通过 `-OutputDir` 指定另一个已忽略目录。
+脚本先检查输出目录已被 Git 忽略，再从 `git archive HEAD` 解出源码，在 `dist/work-*` 中全新 Release 构建（不包含本地测试）。发布前先在 `app/build-qt` 执行本地回归；发布验证完成后可删除 `dist/work-*` 临时目录，只保留发布产物。仅安装程序、更新器与内置工具，再收集 Qt、MinGW 运行库、SQLite 插件、Windows Schannel TLS 插件及许可说明。最终生成 `dist/Orchestrate-v2.4.1-windows-x64.zip` 和 `.zip.sha256`，以及本机构建记录 `.build.json`。ZIP 内含源码提交信息和逐文件校验清单，用户完整解压即可运行。已有同名 ZIP 时拒绝覆盖；可通过 `-OutputDir` 指定另一个已忽略目录。
 
 应用运行时版本和 Windows 文件属性版本统一由 CMake 的 `project(... VERSION ...)` 生成。打包会校验版本、必要运行库和个人数据排除，不启动内置工具，不修改现用数据库或开机启动配置；真正无 Qt 的干净 Windows 系统验收仍应在发布前完成。
 
