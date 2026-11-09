@@ -49,6 +49,7 @@
 #include <QTimer>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
+#include "widgets/siblingorderview.h"
 #include <QVBoxLayout>
 
 #include <memory>
@@ -460,7 +461,16 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     groupHint_ = makeMuted(QStringLiteral("右键可重命名、移动或移除。"), treeCard);
     groupHint_->setContentsMargins(4, 0, 0, 4);
     groupHint_->hide();
-    tree_ = new QTreeWidget(treeCard);
+    auto *orderedTree = new SiblingOrderTree(treeCard);
+    tree_ = orderedTree;
+    orderedTree->saveOrder = [this](QTreeWidgetItem *item, const QList<int> &ids) {
+        QString error;
+        const bool saved = item->parent()
+            ? database_->reorderTools(item->parent()->data(0, Qt::UserRole).toInt(), ids, &error)
+            : database_->reorderToolGroups(ids, &error);
+        if (!saved) showError(error);
+        return saved;
+    };
     synchronizeTreeAccessibility(tree_);
     tree_->setObjectName(QStringLiteral("toolTree"));
     tree_->setColumnCount(2);
@@ -477,6 +487,8 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     tree_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     tree_->setContextMenuPolicy(Qt::CustomContextMenu);
     tree_->setMouseTracking(true);
+    tree_->setAccessibleDescription(QStringLiteral("在同一工具组内拖动排序；Ctrl+上或下箭头调序。跨组移动使用右键菜单。"));
+    tree_->setToolTip(QStringLiteral("拖动或 Ctrl+↑/↓ 调整同组顺序；跨组移动使用右键菜单"));
     treeLayout->addWidget(tree_, 1);
 
     // ---- Right: empty state or tool details ----
@@ -924,6 +936,7 @@ void AutomationPage::loadAll(int preferredToolId)
         item->setText(0, name);
         item->setData(0, Qt::UserRole, id);
         item->setData(0, Qt::UserRole + 1, kGroupItem);
+        if (id > 0) item->setData(0, SiblingOrderScopeRole, QStringLiteral("tool-groups"));
         item->setIcon(0, style()->standardIcon(QStyle::SP_DirIcon));
         item->setToolTip(0, tooltip);
         QFont font = item->font(0);
@@ -945,6 +958,7 @@ void AutomationPage::loadAll(int preferredToolId)
         item->setText(0, tool.name);
         item->setData(0, Qt::UserRole, tool.id);
         item->setData(0, Qt::UserRole + 1, kToolItem);
+        item->setData(0, SiblingOrderScopeRole, QStringLiteral("tools.%1").arg(tool.groupId));
         item->setToolTip(0, tool.description.isEmpty() ? QString()
             : QStringLiteral("<qt>%1</qt>").arg(tool.description.toHtmlEscaped().replace(
                 QLatin1Char('\n'), QStringLiteral("<br>"))));

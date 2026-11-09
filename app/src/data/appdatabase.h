@@ -6,6 +6,7 @@
 #include <QList>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 
 class AppDatabase
 {
@@ -199,7 +200,15 @@ public:
     QString setting(const QString &key, const QString &fallback = QString()) const;
     bool setSetting(const QString &key, const QString &value, QString *errorMessage = nullptr);
 
+    bool reorderProjects(const QList<int> &ids, QString *errorMessage = nullptr);
+    bool reorderToolGroups(const QList<int> &ids, QString *errorMessage = nullptr);
+    bool reorderTools(int groupId, const QList<int> &ids, QString *errorMessage = nullptr);
+    bool reorderRecordFolders(int projectId, bool starred, const QList<int> &ids, QString *errorMessage = nullptr);
+    bool reorderWorkRecords(int projectId, int folderId, const QList<int> &ids, QString *errorMessage = nullptr);
+
 private:
+    bool saveSiblingOrder(const QString &key, const QString &query, const QVariantList &bindings,
+                          const QList<int> &ids, QString *errorMessage);
     bool replaceToolCommandsInTransaction(int toolId, const QList<ToolCommand> &commands, QString *errorMessage);
     bool initializeSchema(QString *errorMessage);
     bool initializeCollaborationSchema(QString *errorMessage);
