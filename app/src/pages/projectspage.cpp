@@ -4,6 +4,7 @@
 #include "widgets/headingtextedit.h"
 #include "widgets/summaryfield.h"
 #include "widgets/treeaccessibility.h"
+#include "widgets/siblingorderview.h"
 #include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -86,10 +87,17 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     auto *left = new QVBoxLayout(listCard);
     left->setContentsMargins(18,18,18,18);
     left->addWidget(label(QStringLiteral("项目列表"), QStringLiteral("cardTitle"), listCard));
-    projectList_ = new QListWidget(listCard);
+    auto *orderedProjects = new SiblingOrderList(listCard);
+    projectList_ = orderedProjects;
+    orderedProjects->saveOrder = [this](QListWidgetItem *, const QList<int> &ids) {
+        QString error;
+        const bool saved = database_->reorderProjects(ids, &error);
+        if (!saved) showError(error);
+        return saved;
+    };
     projectList_->setObjectName(QStringLiteral("projectList"));
     projectList_->setContextMenuPolicy(Qt::CustomContextMenu);
-    projectList_->setAccessibleDescription(QStringLiteral("右键项目可切换进行中或已完结状态；双击打开项目目录"));
+    projectList_->setAccessibleDescription(QStringLiteral("拖动或 Ctrl+上或下箭头调整项目顺序；右键切换状态；双击打开目录"));
     styleList(projectList_);
     left->addWidget(projectList_, 1);
     auto *create = new QPushButton(QStringLiteral("新建项目"), listCard);
@@ -151,7 +159,16 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     search_->setAccessibleName(QStringLiteral("搜索协作记录"));
     search_->setClearButtonEnabled(true);
     records->addWidget(search_);
-    workList_ = new QTreeWidget(recordsPanel_);
+    auto *orderedRecords = new SiblingOrderTree(recordsPanel_);
+    workList_ = orderedRecords;
+    orderedRecords->saveOrder = [this](QTreeWidgetItem *item, const QList<int> &ids) {
+        QString error;
+        const bool saved = item->data(0, FolderRole).toBool()
+            ? database_->reorderRecordFolders(current_.id, item->data(0, StarredRole).toBool(), ids, &error)
+            : database_->reorderWorkRecords(current_.id, item->parent() ? item->parent()->data(0, Qt::UserRole).toInt() : 0, ids, &error);
+        if (!saved) showError(error);
+        return saved;
+    };
     synchronizeTreeAccessibility(workList_);
     workList_->setObjectName(QStringLiteral("workRecordList"));
     workList_->setHeaderHidden(true);
@@ -164,8 +181,8 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     workList_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     workList_->setContextMenuPolicy(Qt::CustomContextMenu);
     workList_->setAccessibleName(QStringLiteral("协作记录与文件夹"));
-    workList_->setToolTip(QStringLiteral("右键文件夹可标记重点并置顶、重命名或删除；右键记录可移动到文件夹"));
-    workList_->setAccessibleDescription(QStringLiteral("右键文件夹可标记重点并置顶，重点文件夹显示星标；再次操作可取消"));
+    workList_->setToolTip(QStringLiteral("拖动或 Ctrl+↑/↓ 调整同层顺序；重点文件夹仍置顶。右键记录可移动到文件夹。"));
+    workList_->setAccessibleDescription(QStringLiteral("同一文件夹内拖动或 Ctrl+上或下箭头排序；重点文件夹仍置顶。搜索时暂停排序。"));
     workList_->setStyleSheet(QStringLiteral(
         "QTreeWidget { border: none; background: transparent; padding: 0; selection-background-color: #e0ebff; selection-color: #1d4ed8; }"
         "QTreeWidget::item { padding: 8px 10px; color: #334155; }"
@@ -231,6 +248,7 @@ void ProjectsPage::loadProjects(int preferred)
         auto *item = new QListWidgetItem(project.name + QStringLiteral("\n") + projectStatus(project.completed), projectList_);
         item->setSizeHint(QSize(0,64));
         item->setData(Qt::UserRole,project.id);
+        item->setData(SiblingOrderScopeRole, QStringLiteral("projects"));
         item->setData(Qt::UserRole + 1, project.directory);
         item->setData(Qt::UserRole + 2, project.completed);
         item->setData(Qt::UserRole + 3, project.name);
@@ -490,6 +508,7 @@ void ProjectsPage::refreshWorkRecords()
         item->setData(0,Qt::UserRole,folder.id);
         item->setData(0,FolderRole,true);
         item->setData(0,StarredRole,folder.starred);
+        item->setData(0,SiblingOrderScopeRole,QStringLiteral("folders.%1").arg(folder.starred ? 1 : 0));
         item->setIcon(0,folder.starred ? starredIcon : folderIcon);
         item->setData(0,Qt::AccessibleTextRole,folder.starred
             ? folder.name + QStringLiteral("，重点文件夹，已置顶") : folder.name);
@@ -509,6 +528,7 @@ void ProjectsPage::refreshWorkRecords()
         item->setSizeHint(0,QSize(0,44));
         item->setData(0,Qt::UserRole,record.id);
         item->setData(0,FolderRole,false);
+        item->setData(0,SiblingOrderScopeRole,QStringLiteral("records.%1").arg(record.folderId));
         item->setData(0,SummaryRole,record.summary);
         item->setToolTip(0,recordTitle(record)+QStringLiteral("\n")+record.createdAt.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")));
         if (!selectedFolder && record.id == selected) workList_->setCurrentItem(item);
@@ -532,6 +552,9 @@ void ProjectsPage::filterRecords()
 {
     const QSignalBlocker blocker(workList_);
     const QString query = search_->text();
+    auto *orderedRecords = static_cast<SiblingOrderTree *>(workList_);
+    orderedRecords->orderingEnabled = query.isEmpty();
+    orderedRecords->setDragEnabled(query.isEmpty());
     const auto expanded = database_->setting(expandedFoldersKey(current_.id)).split(',');
     bool anyVisible = false;
     for (int i=0; i<workList_->topLevelItemCount(); ++i) {
@@ -552,9 +575,9 @@ void ProjectsPage::filterRecords()
         item->setHidden(!visible);
         anyVisible |= visible;
     }
-    recordHint_->setText(!query.isEmpty() ? QStringLiteral("没有匹配的协作记录或文件夹。")
+    recordHint_->setText(!query.isEmpty() ? (anyVisible ? QStringLiteral("清除搜索后可拖动调整顺序。") : QStringLiteral("没有匹配的协作记录或文件夹。"))
         : QStringLiteral("暂无协作记录。添加任务说明或提示词，并用文件夹按用途整理。"));
-    recordHint_->setVisible(!anyVisible && current_.id > 0);
+    recordHint_->setVisible((!anyVisible || !query.isEmpty()) && current_.id > 0);
     // Filtering changes visible rows with tree signals blocked, including when
     // the visible row count stays the same. Refresh their accessible mapping.
     workList_->doItemsLayout();

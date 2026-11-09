@@ -6,6 +6,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QHash>
+#include <QSet>
+#include <limits>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -33,6 +36,33 @@ QString text(const QString &value)
 {
     return value.isNull() ? QStringLiteral("") : value;
 }
+
+// Keep the legacy order until a user sorts a scope. Unknown/new ids append in
+// legacy order; deleted or moved-out ids are harmless and never resurrect rows.
+template<class T, class Matches>
+void applySiblingOrder(QList<T> &items, const QString &serialized, Matches matches)
+{
+    const auto saved = QJsonDocument::fromJson(serialized.toUtf8()).array();
+    if (saved.isEmpty()) return;
+    QHash<int, int> ranks;
+    for (const auto &value : saved) {
+        const int id = value.toInt(-1);
+        if (id >= 0 && !ranks.contains(id)) ranks.insert(id, ranks.size());
+    }
+    QList<qsizetype> positions;
+    QList<T> siblings;
+    for (qsizetype i = 0; i < items.size(); ++i) {
+        if (matches(items[i])) { positions.append(i); siblings.append(items[i]); }
+    }
+    std::stable_sort(siblings.begin(), siblings.end(), [&ranks](const T &a, const T &b) {
+        return ranks.value(a.id, std::numeric_limits<int>::max()) < ranks.value(b.id, std::numeric_limits<int>::max());
+    });
+    for (qsizetype i = 0; i < positions.size(); ++i) items[positions[i]] = siblings[i];
+}
+
+QString toolOrderKey(int groupId) { return QStringLiteral("order.tools.%1").arg(groupId); }
+QString folderOrderKey(int projectId, bool starred) { return QStringLiteral("order.folders.%1.%2").arg(projectId).arg(starred ? 1 : 0); }
+QString recordOrderKey(int projectId, int folderId) { return QStringLiteral("order.records.%1.%2").arg(projectId).arg(folderId); }
 
 } // namespace
 
@@ -838,6 +868,7 @@ QList<AppDatabase::Project> AppDatabase::projects(QString *errorMessage) const
         project.completed = query.value(6).toBool();
         result.append(project);
     }
+    applySiblingOrder(result, setting(QStringLiteral("order.projects")), [](const auto &) { return true; });
     return result;
 }
 
@@ -929,6 +960,8 @@ QList<AppDatabase::RecordFolder> AppDatabase::recordFolders(int projectId, QStri
     query.addBindValue(projectId);
     if (!query.exec()) { setError(errorMessage, query); return result; }
     while (query.next()) result.append({query.value(0).toInt(), query.value(1).toInt(), query.value(2).toString(), query.value(3).toBool()});
+    for (bool starred : {true, false})
+        applySiblingOrder(result, setting(folderOrderKey(projectId, starred)), [starred](const auto &folder) { return folder.starred == starred; });
     return result;
 }
 
@@ -1016,6 +1049,10 @@ QList<AppDatabase::WorkRecord> AppDatabase::workRecords(int projectId, QString *
         record.updatedAt = QDateTime::fromString(query.value(4).toString(), Qt::ISODateWithMs);
         result.append(record);
     }
+    QSet<int> folders;
+    for (const auto &record : result) folders.insert(record.folderId);
+    for (int folderId : folders)
+        applySiblingOrder(result, setting(recordOrderKey(projectId, folderId)), [folderId](const auto &record) { return record.folderId == folderId; });
     return result;
 }
 
@@ -1119,7 +1156,7 @@ bool AppDatabase::deleteWorkRecord(int id, QString *errorMessage)
     return true;
 }
 
-QList<AppDatabase::ToolGroup> AppDatabase::toolGroups(QString *errorMessage) const
+QList<AppDatabase::ToolGroup> AppDatabase::toolGroups(QString *errorMessage, bool includeUngrouped) const
 {
     QList<ToolGroup> result;
     if (!isOpen()) {
@@ -1137,6 +1174,8 @@ QList<AppDatabase::ToolGroup> AppDatabase::toolGroups(QString *errorMessage) con
         group.sortOrder = query.value(2).toInt();
         result.append(group);
     }
+    if (includeUngrouped) result.append(ToolGroup{});
+    applySiblingOrder(result, setting(QStringLiteral("order.tool_groups")), [](const auto &) { return true; });
     return result;
 }
 
@@ -1240,6 +1279,10 @@ QList<AppDatabase::AutomationTool> AppDatabase::automationTools(int groupId, QSt
         tool.sshUser = query.value(17).toString();
         result.append(tool);
     }
+    QSet<int> groups;
+    for (const auto &tool : result) groups.insert(tool.groupId);
+    for (int id : groups)
+        applySiblingOrder(result, setting(toolOrderKey(id)), [id](const auto &tool) { return tool.groupId == id; });
     return result;
 }
 
@@ -1545,4 +1588,66 @@ bool AppDatabase::setSetting(const QString &key, const QString &value, QString *
         return false;
     }
     return true;
+}
+
+bool AppDatabase::saveSiblingOrder(const QString &key, const QString &sql, const QVariantList &bindings,
+                                   const QList<int> &ids, QString *errorMessage)
+{
+    if (!isOpen()) return fail(errorMessage, QStringLiteral("数据库尚未打开。"));
+    auto database = QSqlDatabase::database(connectionName_);
+    if (!database.transaction()) return fail(errorMessage, database.lastError().text());
+    QSqlQuery query(database);
+    query.prepare(sql);
+    for (const auto &value : bindings) query.addBindValue(value);
+    if (!query.exec()) { setError(errorMessage, query); database.rollback(); return false; }
+    QSet<int> expected;
+    while (query.next()) expected.insert(query.value(0).toInt());
+    query.finish();
+    const QSet<int> actual(ids.cbegin(), ids.cend());
+    if (actual.size() != ids.size() || actual != expected) {
+        database.rollback();
+        return fail(errorMessage, QStringLiteral("列表内容已变化，排序未保存。请重新打开此列表后重试。"));
+    }
+    QJsonArray values;
+    for (int id : ids) values.append(id);
+    if (!setSetting(key, QString::fromUtf8(QJsonDocument(values).toJson(QJsonDocument::Compact)), errorMessage)) {
+        database.rollback();
+        return false;
+    }
+    if (!database.commit()) {
+        const QString message = database.lastError().text();
+        database.rollback();
+        return fail(errorMessage, message);
+    }
+    return true;
+}
+
+bool AppDatabase::reorderProjects(const QList<int> &ids, QString *errorMessage)
+{
+    return saveSiblingOrder(QStringLiteral("order.projects"), QStringLiteral("SELECT id FROM projects"), {}, ids, errorMessage);
+}
+
+bool AppDatabase::reorderToolGroups(const QList<int> &ids, QString *errorMessage)
+{
+    return saveSiblingOrder(QStringLiteral("order.tool_groups"), QStringLiteral("SELECT id FROM tool_groups UNION ALL SELECT 0"), {}, ids, errorMessage);
+}
+
+bool AppDatabase::reorderTools(int groupId, const QList<int> &ids, QString *errorMessage)
+{
+    return saveSiblingOrder(toolOrderKey(groupId), QStringLiteral("SELECT id FROM automation_tools WHERE COALESCE(group_id, 0) = ?"),
+                            {groupId}, ids, errorMessage);
+}
+
+bool AppDatabase::reorderRecordFolders(int projectId, bool starred, const QList<int> &ids, QString *errorMessage)
+{
+    return saveSiblingOrder(folderOrderKey(projectId, starred),
+                            QStringLiteral("SELECT id FROM project_record_folders WHERE project_id = ? AND starred = ?"),
+                            {projectId, starred ? 1 : 0}, ids, errorMessage);
+}
+
+bool AppDatabase::reorderWorkRecords(int projectId, int folderId, const QList<int> &ids, QString *errorMessage)
+{
+    return saveSiblingOrder(recordOrderKey(projectId, folderId),
+                            QStringLiteral("SELECT id FROM project_work_records WHERE project_id = ? AND COALESCE(folder_id, 0) = ?"),
+                            {projectId, folderId}, ids, errorMessage);
 }
