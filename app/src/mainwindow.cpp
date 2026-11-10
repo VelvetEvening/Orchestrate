@@ -3,6 +3,7 @@
 #include "pages/calendarpage.h"
 #include "pages/automationpage.h"
 #include "pages/projectspage.h"
+#include "pages/clipboardpage.h"
 #include "platform/globalshortcut.h"
 #include "update/updatewidget.h"
 
@@ -462,6 +463,7 @@ void MainWindow::buildNavigation(QWidget *parent)
         QStringLiteral("时序记录"),
         QStringLiteral("项目记录"),
         QStringLiteral("自动化工具"),
+        QStringLiteral("剪贴板"),
         QStringLiteral("设置")
     };
 
@@ -469,6 +471,7 @@ void MainWindow::buildNavigation(QWidget *parent)
         QStyle::SP_FileDialogDetailedView,
         QStyle::SP_DirHomeIcon,
         QStyle::SP_ComputerIcon,
+        QStyle::SP_FileIcon,
         QStyle::SP_FileDialogContentsView
     };
 
@@ -578,6 +581,10 @@ void MainWindow::switchToPage(int index)
         auto *automationPage = new AutomationPage(&database_, pageStack_);
         pageStack_->addWidget(automationPage);
 
+        auto *clipboardPage = new ClipboardPage(&database_, pageStack_);
+        pageStack_->addWidget(clipboardPage);
+        connect(clipboardPage, &ClipboardPage::hideRequested, this, [this] { hide(); });
+
         auto *settingsPage = new QWidget(pageStack_);
         auto *settingsLayout = new QVBoxLayout(settingsPage);
         settingsLayout->setContentsMargins(34, 30, 34, 34);
@@ -677,7 +684,7 @@ void MainWindow::switchToPage(int index)
     }
 
     pageStack_->setCurrentIndex(index);
-    if (index == 3) refreshAutoStartSettings();
+    if (index == 4) refreshAutoStartSettings();
     for (int i = 0; i < navigationButtons_.size(); ++i) {
         navigationButtons_.at(i)->setChecked(i == index);
     }
@@ -685,8 +692,8 @@ void MainWindow::switchToPage(int index)
 
 void MainWindow::setAvailableUpdate(const QString &tag)
 {
-    if (navigationButtons_.size() < 4) return;
-    auto *settings = navigationButtons_.at(3);
+    if (navigationButtons_.size() < 5) return;
+    auto *settings = navigationButtons_.at(4);
     const auto text = tag.isEmpty() ? QStringLiteral("设置") : QStringLiteral("设置 · 有更新");
     settings->setProperty("expandedText", text);
     settings->setProperty("updateTag", tag);
@@ -704,7 +711,7 @@ void MainWindow::setAvailableUpdate(const QString &tag)
 void MainWindow::openUpdatesPage()
 {
     showMainWindow();
-    switchToPage(3);
+    switchToPage(4);
     auto *scroll = qobject_cast<QScrollArea *>(pageStack_->currentWidget());
     if (scroll) {
         auto *update = scroll->findChild<UpdateWidget *>();
@@ -787,6 +794,9 @@ void MainWindow::installUpdate()
 bool MainWindow::savePendingChanges()
 {
     for (auto *page : findChildren<ProjectsPage *>()) {
+        if (!page->savePendingChanges()) return false;
+    }
+    for (auto *page : findChildren<ClipboardPage *>()) {
         if (!page->savePendingChanges()) return false;
     }
     return true;

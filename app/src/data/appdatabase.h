@@ -11,6 +11,29 @@
 class AppDatabase
 {
 public:
+    struct ClipboardTab {
+        int id = 0;
+        QString name;
+        bool history = false;
+    };
+    struct ClipboardFolder {
+        int id = 0;
+        int tabId = 0;
+        QString name;
+    };
+    struct ClipboardItem {
+        int id = 0;
+        int tabId = 1;
+        int folderId = 0;
+        QString title;
+        QString text;
+        QString kind;
+        QByteArray payload;
+        QByteArray fingerprint;
+        bool automatic = false;
+        QDateTime createdAt;
+    };
+
     struct DiaryEntry {
         int id = 0;
         QDate date;
@@ -201,6 +224,26 @@ public:
     QString setting(const QString &key, const QString &fallback = QString()) const;
     bool setSetting(const QString &key, const QString &value, QString *errorMessage = nullptr);
 
+    QList<ClipboardTab> clipboardTabs(QString *errorMessage = nullptr) const;
+    QList<ClipboardFolder> clipboardFolders(int tabId, QString *errorMessage = nullptr) const;
+    // Lists contain bounded text previews, never the binary payload. folderId=-1 searches the whole tab;
+    // tabId=0 searches all tabs. A concrete tab/folder pair is required for sorting.
+    QList<ClipboardItem> clipboardItems(int tabId, int folderId, const QString &search = {}, QString *errorMessage = nullptr) const;
+    ClipboardItem clipboardItem(int id, QString *errorMessage = nullptr) const;
+    bool addClipboardTab(const QString &name, int *id = nullptr, QString *errorMessage = nullptr);
+    bool renameClipboardTab(int id, const QString &name, QString *errorMessage = nullptr);
+    bool deleteClipboardTab(int id, QString *errorMessage = nullptr);
+    bool addClipboardFolder(int tabId, const QString &name, int *id = nullptr, QString *errorMessage = nullptr);
+    bool renameClipboardFolder(int id, const QString &name, QString *errorMessage = nullptr);
+    bool deleteClipboardFolder(int id, QString *errorMessage = nullptr);
+    bool saveClipboardItem(ClipboardItem *item, QString *errorMessage = nullptr);
+    bool captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage = nullptr);
+    bool moveClipboardItems(const QList<int> &ids, int tabId, int folderId, QString *errorMessage = nullptr);
+    bool deleteClipboardItems(const QList<int> &ids, QString *errorMessage = nullptr);
+    bool reorderClipboardTabs(const QList<int> &ids, QString *errorMessage = nullptr);
+    bool reorderClipboardFolders(int tabId, const QList<int> &ids, QString *errorMessage = nullptr);
+    bool reorderClipboardItems(int tabId, int folderId, const QList<int> &ids, QString *errorMessage = nullptr);
+
     bool reorderProjects(const QList<int> &ids, QString *errorMessage = nullptr);
     bool reorderToolGroups(const QList<int> &ids, QString *errorMessage = nullptr);
     bool reorderTools(int groupId, const QList<int> &ids, QString *errorMessage = nullptr);
@@ -208,6 +251,9 @@ public:
     bool reorderWorkRecords(int projectId, int folderId, const QList<int> &ids, QString *errorMessage = nullptr);
 
 private:
+    bool initializeClipboardSchema(QString *errorMessage);
+    bool reorderClipboard(const QString &table, const QString &where, const QVariantList &bindings,
+                          const QList<int> &ids, QString *errorMessage);
     bool saveSiblingOrder(const QString &key, const QString &query, const QVariantList &bindings,
                           const QList<int> &ids, QString *errorMessage);
     bool replaceToolCommandsInTransaction(int toolId, const QList<ToolCommand> &commands, QString *errorMessage);

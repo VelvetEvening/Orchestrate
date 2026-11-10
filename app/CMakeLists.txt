@@ -41,6 +41,14 @@ add_library(OrchestrateText STATIC
 target_link_libraries(OrchestrateText PUBLIC Qt6::Widgets)
 target_include_directories(OrchestrateText PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+add_library(OrchestrateClipboard STATIC
+    src/clipboard/clipboardcontent.cpp src/clipboard/clipboardcontent.h
+    src/clipboard/clipboardmonitor.cpp src/clipboard/clipboardmonitor.h
+    src/pages/clipboardpage.cpp src/pages/clipboardpage.h
+)
+target_link_libraries(OrchestrateClipboard PUBLIC Qt6::Widgets Qt6::Sql)
+target_include_directories(OrchestrateClipboard PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
 qt_add_executable(Orchestrate WIN32
     src/main.cpp
     src/mainwindow.cpp
@@ -70,7 +78,7 @@ if (WIN32)
     target_link_libraries(Orchestrate PRIVATE dwmapi)
 endif()
 
-target_link_libraries(Orchestrate PRIVATE Qt6::Widgets Qt6::Sql OrchestrateText OrchestrateShortcut OrchestrateAutoStart OrchestrateUpdate)
+target_link_libraries(Orchestrate PRIVATE Qt6::Widgets Qt6::Sql OrchestrateText OrchestrateShortcut OrchestrateAutoStart OrchestrateUpdate OrchestrateClipboard)
 
 target_include_directories(Orchestrate PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/generated

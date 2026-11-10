@@ -1,6 +1,6 @@
 # Orchestrate
 
-Windows 桌面工作台：时序记录、项目记录和自动化工具。使用 C++17、Qt Widgets 和 SQLite，数据随程序便携保存。
+Windows 桌面工作台：时序记录、项目记录、自动化工具和剪贴板。使用 C++17、Qt Widgets 和 SQLite，数据随程序便携保存。
 
 ## 文档入口
 
