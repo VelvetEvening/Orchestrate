@@ -479,7 +479,7 @@ void ClipboardPage::itemMenu(const QPoint &position)
 {
     if (const auto *item=items_->itemAt(position); item && item->data(0,FolderRole).toBool()) { folderMenu(position); return; }
     QMenu menu(this); auto *copy=menu.addAction(QStringLiteral("复制并收起")); auto *edit=menu.addAction(QStringLiteral("编辑"));
-    auto *remove=menu.addAction(QStringLiteral("删除…"));
+    auto *remove=menu.addAction(tabId()==1 ? QStringLiteral("删除") : QStringLiteral("删除…"));
     const auto ids=selectedIds(); copy->setEnabled(ids.size()==1); edit->setEnabled(ids.size()==1); remove->setEnabled(!ids.isEmpty());
     const auto *action=menu.exec(items_->viewport()->mapToGlobal(position));
     if (action==copy) copySelected(); else if (action==edit) editItem(false); else if (action==remove) deleteSelected();
@@ -547,7 +547,22 @@ bool ClipboardPage::savePendingChanges()
 void ClipboardPage::deleteSelected()
 {
     const auto ids=selectedIds(); if (ids.isEmpty()) return;
-    if (QMessageBox::question(this,QStringLiteral("删除剪贴板内容"),QStringLiteral("删除选中的 %1 条内容？此操作无法撤销。").arg(ids.size()),QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
+    if (tabId()!=1) {
+        const auto tabName=tabs_->tabText(tabs_->currentIndex());
+        const auto confirm=[this](QMessageBox::Icon icon, const QString &title, const QString &text, const QString &action) {
+            QMessageBox dialog(icon,title,text,QMessageBox::Yes|QMessageBox::No,this);
+            dialog.setTextFormat(Qt::PlainText);
+            dialog.button(QMessageBox::Yes)->setText(action);
+            dialog.button(QMessageBox::No)->setText(QStringLiteral("取消"));
+            dialog.setDefaultButton(QMessageBox::No);
+            dialog.setEscapeButton(QMessageBox::No);
+            return dialog.exec()==QMessageBox::Yes;
+        };
+        if (!confirm(QMessageBox::Question,QStringLiteral("删除剪贴板内容"),
+                QStringLiteral("准备删除“%1”中选中的 %2 条内容。是否继续？").arg(tabName,QString::number(ids.size())),QStringLiteral("继续"))) return;
+        if (!confirm(QMessageBox::Warning,QStringLiteral("再次确认删除"),
+                QStringLiteral("确定删除“%1”中选中的 %2 条内容？此操作无法撤销。").arg(tabName,QString::number(ids.size())),QStringLiteral("确认删除"))) return;
+    }
     QString error; if (!database_->deleteClipboardItems(ids,&error)) { report(error); return; } refreshItems();
 }
 
