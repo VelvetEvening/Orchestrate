@@ -7,6 +7,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QHeaderView>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
@@ -24,9 +25,26 @@
 #include <QStyle>
 #include <QTabBar>
 #include <QTimer>
+#include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
+#include <QHash>
+#include <QSet>
+#include <algorithm>
 
 namespace {
+constexpr int FolderRole=Qt::UserRole+1;
+constexpr int TabRole=Qt::UserRole+2;
+constexpr int FolderIdRole=Qt::UserRole+3;
+constexpr int TabNodeRole=Qt::UserRole+4;
+QString expandedKey(int tabId) { return QStringLiteral("clipboard.%1.expanded_folders").arg(tabId); }
+bool isEntry(const QTreeWidgetItem *item)
+{
+    if (!item || item->data(0,FolderRole).toBool() || item->data(0,TabNodeRole).toBool()) return false;
+    for (auto *node=item; node; node=node->parent()) {
+        if (node->isHidden() || (node->parent() && !node->parent()->isExpanded())) return false;
+    }
+    return true;
+}
 class ClipboardEditorDialog final : public QDialog {
 public:
     using QDialog::QDialog;
@@ -42,17 +60,17 @@ public:
         QDialog::reject();
     }
 };
-class ClipboardList final : public SiblingOrderList {
+class ClipboardTree final : public SiblingOrderTree {
 public:
-    using SiblingOrderList::SiblingOrderList;
+    using SiblingOrderTree::SiblingOrderTree;
 protected:
     void startDrag(Qt::DropActions actions) override {
-        if (selectedItems().size()==1) SiblingOrderList::startDrag(actions);
+        if (selectedItems().size()==1) SiblingOrderTree::startDrag(actions);
     }
     void keyPressEvent(QKeyEvent *event) override {
         if (selectedItems().size()>1 && event->modifiers()==Qt::ControlModifier
             && (event->key()==Qt::Key_Up || event->key()==Qt::Key_Down)) { event->accept(); return; }
-        SiblingOrderList::keyPressEvent(event);
+        SiblingOrderTree::keyPressEvent(event);
     }
 };
 QLabel *label(const QString &text, const QString &name, QWidget *parent)
@@ -94,74 +112,65 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
     tabRow->addWidget(tabs_,1);
     auto *newTab=new QPushButton(QStringLiteral("新建标签页"),this); tabRow->addWidget(newTab); layout->addLayout(tabRow);
     auto *searchRow=new QHBoxLayout;
-    search_=new QLineEdit(this); search_->setObjectName("clipboardSearch"); search_->setPlaceholderText(QStringLiteral("搜索内容或标题…"));
+    search_=new QLineEdit(this); search_->setObjectName("clipboardSearch"); search_->setPlaceholderText(QStringLiteral("搜索内容、标题或文件夹"));
     readablePlaceholder(search_);
     search_->setClearButtonEnabled(true); search_->setAccessibleName(QStringLiteral("搜索剪贴板内容")); searchRow->addWidget(search_,1);
     searchScope_=new QComboBox(this); searchScope_->setObjectName("clipboardSearchScope");
     searchScope_->addItems({QStringLiteral("当前标签页"),QStringLiteral("全部标签页")}); searchScope_->setAccessibleName(QStringLiteral("搜索范围"));
-    searchRow->addWidget(searchScope_); layout->addLayout(searchRow);
+    searchRow->addWidget(searchScope_);
+    auto *newFolder=new QPushButton(QStringLiteral("新建文件夹"),this); newFolder->setObjectName("clipboardNewFolder");
+    searchRow->addWidget(newFolder); layout->addLayout(searchRow);
 
-    auto *splitter=new QSplitter(Qt::Horizontal,this); splitter->setChildrenCollapsible(false);
-    auto *folderPane=new QWidget(splitter); auto *folderLayout=new QVBoxLayout(folderPane); folderLayout->setContentsMargins(0,0,8,0);
-    folderLayout->addWidget(label(QStringLiteral("文件夹"),"cardTitle",folderPane));
-    folders_=new SiblingOrderList(folderPane); folders_->setObjectName("clipboardFolders"); folders_->setMinimumWidth(125);
-    folders_->setIconSize(QSize(16,16));
-    folders_->setStyleSheet(QStringLiteral("QListWidget::item { padding: 7px 8px; color: #334155; } QListWidget::item:hover { background: #f1f5fb; } QListWidget::item:selected { color: #1d4ed8; background: #e0ebff; }"));
-    folders_->setContextMenuPolicy(Qt::CustomContextMenu); folders_->setAccessibleName(QStringLiteral("当前标签页的文件夹"));
-    folderLayout->addWidget(folders_,1);
-    auto *newFolder=new QPushButton(QStringLiteral("新建文件夹"),folderPane); folderLayout->addWidget(newFolder);
+    auto *contentSplit=new QSplitter(Qt::Vertical,this); contentSplit->setChildrenCollapsible(false);
+    items_=new ClipboardTree(contentSplit); items_->setObjectName("clipboardItems");
+    synchronizeTreeAccessibility(items_);
+    items_->setHeaderHidden(true); items_->header()->setStretchLastSection(true);
+    items_->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    items_->setStyleSheet(QStringLiteral("QTreeWidget::item { padding: 8px 10px; color: #334155; } QTreeWidget::item:hover { background: #f1f5fb; } QTreeWidget::item:selected { color: #1d4ed8; background: #e0ebff; }"));
+    items_->setContextMenuPolicy(Qt::CustomContextMenu); items_->setMinimumHeight(120); items_->setWordWrap(false);
+    items_->setTextElideMode(Qt::ElideRight); items_->setUniformRowHeights(true);
+    items_->setIndentation(20); items_->setIconSize(QSize(16,16));
+    items_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); items_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    items_->setAccessibleName(QStringLiteral("剪贴板内容与文件夹"));
 
-    auto *content=new QWidget(splitter); auto *contentLayout=new QVBoxLayout(content); contentLayout->setContentsMargins(0,0,0,0); contentLayout->setSpacing(10);
-    count_=label(QString(),"muted",content); contentLayout->addWidget(count_);
-    auto *contentSplit=new QSplitter(Qt::Vertical,content); contentSplit->setChildrenCollapsible(false);
-    auto *listPane=new QWidget(contentSplit); auto *listLayout=new QVBoxLayout(listPane); listLayout->setContentsMargins(0,0,0,0); listLayout->setSpacing(0);
-    items_=new ClipboardList(listPane); items_->setObjectName("clipboardItems"); items_->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    items_->setStyleSheet(QStringLiteral("QListWidget::item { padding: 4px 8px; color: #334155; } QListWidget::item:hover { background: #f1f5fb; } QListWidget::item:selected { color: #1d4ed8; background: #e0ebff; }"));
-    items_->setContextMenuPolicy(Qt::CustomContextMenu); items_->setMinimumHeight(110); items_->setWordWrap(false);
-    items_->setTextElideMode(Qt::ElideRight); items_->setUniformItemSizes(true); items_->setAccessibleName(QStringLiteral("剪贴板条目"));
-    listLayout->addWidget(items_,1);
-    empty_=label(QString(),"clipboardEmpty",listPane); empty_->setWordWrap(true); empty_->setAlignment(Qt::AlignCenter);
-    empty_->setStyleSheet(QStringLiteral("color: #52627a; padding: 18px;")); listLayout->addWidget(empty_);
-
-    auto *previewPane=new QWidget(contentSplit); auto *previewLayout=new QVBoxLayout(previewPane); previewLayout->setContentsMargins(0,4,0,0);
-    previewTitle_=label(QStringLiteral("选择条目查看内容"),"muted",previewPane); previewTitle_->setWordWrap(true); previewLayout->addWidget(previewTitle_);
-    previewImage_=label(QString(),"clipboardImage",previewPane); previewImage_->setAlignment(Qt::AlignCenter); previewImage_->setMinimumSize(1,1);
+    previewPane_=new QWidget(contentSplit); auto *previewLayout=new QVBoxLayout(previewPane_); previewLayout->setContentsMargins(0,4,0,0);
+    previewImage_=label(QString(),"clipboardImage",previewPane_); previewImage_->setAlignment(Qt::AlignCenter); previewImage_->setMinimumSize(1,1);
     previewImage_->setMaximumHeight(220); previewImage_->hide(); previewLayout->addWidget(previewImage_);
-    previewText_=new TextLayoutGuard::Edit(previewPane); previewText_->setObjectName("clipboardPreview"); previewText_->setReadOnly(true);
+    previewText_=new TextLayoutGuard::Edit(previewPane_); previewText_->setObjectName("clipboardPreview"); previewText_->setReadOnly(true);
     previewText_->setMinimumHeight(65); previewText_->setAccessibleName(QStringLiteral("条目内容预览")); previewLayout->addWidget(previewText_,1);
-    contentSplit->setSizes({280,180}); contentSplit->setStretchFactor(0,3); contentSplit->setStretchFactor(1,2); contentLayout->addWidget(contentSplit,1);
+    previewPane_->hide();
+    contentSplit->setSizes({330,170}); contentSplit->setStretchFactor(0,3); contentSplit->setStretchFactor(1,2); layout->addWidget(contentSplit,1);
 
     auto *actions=new QHBoxLayout; actions->setSpacing(6);
-    auto *create=new QPushButton(QStringLiteral("新建"),content); create->setObjectName("clipboardNewItem");
-    edit_=new QPushButton(QStringLiteral("编辑"),content); edit_->setObjectName("clipboardEditItem");
-    move_=new QPushButton(QStringLiteral("移动到…"),content); move_->setObjectName("clipboardMoveItems");
-    remove_=new QPushButton(QStringLiteral("删除"),content); remove_->setObjectName("clipboardDeleteItems");
-    copy_=new QPushButton(QStringLiteral("复制并收起"),content); copy_->setObjectName("primaryButton");
+    auto *create=new QPushButton(QStringLiteral("新建"),this); create->setObjectName("clipboardNewItem");
+    edit_=new QPushButton(QStringLiteral("编辑"),this); edit_->setObjectName("clipboardEditItem");
+    move_=new QPushButton(QStringLiteral("移动到…"),this); move_->setObjectName("clipboardMoveItems");
+    remove_=new QPushButton(QStringLiteral("删除"),this); remove_->setObjectName("clipboardDeleteItems");
+    copy_=new QPushButton(QStringLiteral("复制并收起"),this); copy_->setObjectName("primaryButton");
     copy_->setToolTip(QStringLiteral("复制选中条目并隐藏 Orchestrate，随后可手动 Ctrl+V。"));
     actions->addWidget(create); actions->addWidget(edit_); actions->addWidget(move_); actions->addWidget(remove_); actions->addStretch(); actions->addWidget(copy_);
-    contentLayout->addLayout(actions);
-    splitter->setSizes({170,670}); splitter->setStretchFactor(0,0); splitter->setStretchFactor(1,1); layout->addWidget(splitter,1);
-    status_=label(QString(),"clipboardStatus",this); status_->setWordWrap(true); status_->setStyleSheet(QStringLiteral("color: #52627a;")); layout->addWidget(status_);
+    layout->addLayout(actions);
+    status_=label(QString(),"clipboardStatus",this); status_->setWordWrap(true); status_->setStyleSheet(QStringLiteral("color: #b42318;")); status_->hide(); layout->addWidget(status_);
 
     refreshTimer_=new QTimer(this); refreshTimer_->setSingleShot(true); refreshTimer_->setInterval(100);
     connect(refreshTimer_,&QTimer::timeout,this,&ClipboardPage::refreshItems);
     connect(monitor_,&ClipboardMonitor::recorded,this,[this] {
         dirty_=true;
-        status_->setText(QStringLiteral("监听中 · 已保存到“历史”。双击条目复制并收起。"));
+        status_->hide();
         if (isVisible()) refreshTimer_->start();
     });
     connect(monitor_,&ClipboardMonitor::captureError,this,&ClipboardPage::report);
     connect(listening_,&QCheckBox::toggled,this,[this](bool enabled) {
         QString error;
         if (!monitor_->setEnabled(enabled,&error)) { QSignalBlocker blocker(listening_); listening_->setChecked(monitor_->enabled()); report(error); return; }
-        status_->setText(enabled ? QStringLiteral("监听中 · 新复制的内容进入“历史”。") : QStringLiteral("监听已暂停 · 已保存的内容仍可使用。"));
+        status_->hide();
     });
     connect(settings,&QPushButton::clicked,this,&ClipboardPage::historySettings);
     connect(newTab,&QPushButton::clicked,this,&ClipboardPage::addTab);
     connect(newFolder,&QPushButton::clicked,this,&ClipboardPage::addFolder);
     connect(tabs_,&QTabBar::currentChanged,this,[this] {
         database_->setSetting("clipboard.tab",QString::number(tabId()));
-        if (tabId()!=displayedTabId_) refreshFolders();
+        if (tabId()!=displayedTabId_) refreshItems();
     });
     connect(tabs_,&QTabBar::tabMoved,this,[this] {
         QList<int> ids; for (int i=0; i<tabs_->count(); ++i) ids.append(tabs_->tabData(i).toInt());
@@ -169,41 +178,49 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
         if (!database_->reorderClipboardTabs(ids,&error)) { const int selected=tabId(); refreshTabs(selected); report(error); }
     });
     connect(tabs_,&QTabBar::customContextMenuRequested,this,&ClipboardPage::tabMenu);
-    connect(folders_,&QListWidget::currentRowChanged,this,[this] { refreshItems(); });
-    connect(folders_,&QListWidget::customContextMenuRequested,this,&ClipboardPage::folderMenu);
-    folders_->saveOrder=[this](QListWidgetItem *,const QList<int> &ids) {
-        QString error; const bool ok=database_->reorderClipboardFolders(tabId(),ids,&error); if (!ok) report(error); return ok;
+    items_->saveOrder=[this](QTreeWidgetItem *item,const QList<int> &ids) {
+        QString error;
+        const bool ok=item->data(0,FolderRole).toBool()
+            ? database_->reorderClipboardFolders(item->data(0,TabRole).toInt(),ids,&error)
+            : database_->reorderClipboardItems(item->data(0,TabRole).toInt(),item->data(0,FolderIdRole).toInt(),ids,&error);
+        if (!ok) report(error); return ok;
     };
-    items_->saveOrder=[this](QListWidgetItem *,const QList<int> &ids) {
-        QString error; const bool ok=database_->reorderClipboardItems(tabId(),folderId(),ids,&error); if (!ok) report(error); return ok;
-    };
+    connect(items_,&QTreeWidget::itemExpanded,this,[this] { saveExpandedFolders(); updatePreview(); });
+    connect(items_,&QTreeWidget::itemCollapsed,this,[this] { saveExpandedFolders(); updatePreview(); });
     connect(search_,&QLineEdit::textChanged,this,[this] { refreshTimer_->start(); });
     connect(searchScope_,&QComboBox::currentIndexChanged,this,[this] { refreshItems(); });
-    connect(items_,&QListWidget::itemSelectionChanged,this,&ClipboardPage::updatePreview);
-    connect(items_,&QListWidget::itemDoubleClicked,this,[this](QListWidgetItem *item) { items_->clearSelection(); item->setSelected(true); items_->setCurrentItem(item); copySelected(); });
-    connect(items_,&QListWidget::customContextMenuRequested,this,&ClipboardPage::itemMenu);
+    connect(items_,&QTreeWidget::itemSelectionChanged,this,&ClipboardPage::updatePreview);
+    connect(items_,&QTreeWidget::itemDoubleClicked,this,[this](QTreeWidgetItem *item) {
+        if (!isEntry(item)) return;
+        items_->clearSelection(); items_->setCurrentItem(item); item->setSelected(true); copySelected();
+    });
+    connect(items_,&QTreeWidget::customContextMenuRequested,this,&ClipboardPage::itemMenu);
     connect(create,&QPushButton::clicked,this,[this] { editItem(true); });
     connect(edit_,&QPushButton::clicked,this,[this] { editItem(false); });
     connect(copy_,&QPushButton::clicked,this,&ClipboardPage::copySelected);
     connect(move_,&QPushButton::clicked,this,&ClipboardPage::moveSelected);
     connect(remove_,&QPushButton::clicked,this,&ClipboardPage::deleteSelected);
-    auto *enter=new QShortcut(QKeySequence(Qt::Key_Return),items_); enter->setContext(Qt::WidgetShortcut); connect(enter,&QShortcut::activated,this,&ClipboardPage::copySelected);
+    auto *enter=new QShortcut(QKeySequence(Qt::Key_Return),items_); enter->setContext(Qt::WidgetShortcut);
+    connect(enter,&QShortcut::activated,this,[this] {
+        auto *item=items_->currentItem();
+        if (item && !isEntry(item)) item->setExpanded(!item->isExpanded());
+        else copySelected();
+    });
     auto *find=new QShortcut(QKeySequence::Find,this); find->setContext(Qt::WidgetWithChildrenShortcut); connect(find,&QShortcut::activated,search_,qOverload<>(&QWidget::setFocus));
-    status_->setText(monitor_->enabled() ? QStringLiteral("监听中 · 双击条目复制并收起，随后手动 Ctrl+V。") : QStringLiteral("监听已暂停 · 开启右上角开关后，自动保存新复制的内容。"));
     refreshTabs(database_->setting("clipboard.tab","1").toInt());
 }
 
 int ClipboardPage::tabId() const { return tabs_->tabData(tabs_->currentIndex()).toInt(); }
-int ClipboardPage::folderId() const { return folders_->currentItem() ? folders_->currentItem()->data(Qt::UserRole).toInt() : 0; }
 QList<int> ClipboardPage::selectedIds() const
 {
     QList<int> ids;
     // Preserve visual order for bulk moves.
-    for (int i=0; i<items_->count(); ++i) if (items_->item(i)->isSelected()) ids.append(items_->item(i)->data(Qt::UserRole).toInt());
+    for (QTreeWidgetItemIterator it(items_); *it; ++it)
+        if ((*it)->isSelected() && isEntry(*it)) ids.append((*it)->data(0,Qt::UserRole).toInt());
     return ids;
 }
 void ClipboardPage::showEvent(QShowEvent *event) { QWidget::showEvent(event); if (dirty_) refreshItems(); }
-void ClipboardPage::report(const QString &message) { status_->setText(message); }
+void ClipboardPage::report(const QString &message) { status_->setText(message); status_->setVisible(!message.isEmpty()); }
 
 void ClipboardPage::refreshTabs(int selected)
 {
@@ -221,57 +238,104 @@ void ClipboardPage::refreshTabs(int selected)
         }
         tabs_->setCurrentIndex(current);
     }
-    refreshFolders(displayedTabId_==tabId() ? folderId() : 0);
+    refreshItems();
 }
 
-void ClipboardPage::refreshFolders(int selected)
+void ClipboardPage::saveExpandedFolders()
 {
-    displayedTabId_=tabId();
-    QString error; const auto folders=database_->clipboardFolders(tabId(),&error);
-    if (!error.isEmpty()) { report(error); return; }
-    {
-        const QSignalBlocker blocker(folders_); folders_->clear();
-        auto *root=new QListWidgetItem(QStringLiteral("未归档"),folders_); root->setData(Qt::UserRole,0);
-        auto *all=new QListWidgetItem(QStringLiteral("全部内容"),folders_); all->setData(Qt::UserRole,-1);
-        QListWidgetItem *current=selected==-1 ? all : root;
-        for (const auto &folder : folders) {
-            auto *item=new QListWidgetItem(style()->standardIcon(QStyle::SP_DirIcon),folder.name,folders_);
-            item->setData(Qt::UserRole,folder.id); item->setData(SiblingOrderScopeRole,QStringLiteral("folders.%1").arg(tabId()));
-            item->setToolTip(folder.name+QStringLiteral(" · 拖动或 Ctrl+↑/↓ 调位"));
-            if (folder.id==selected) current=item;
-        }
-        folders_->setCurrentItem(current);
+    if (searchScope_->currentIndex()!=0 || !search_->text().trimmed().isEmpty()) return;
+    QStringList expanded;
+    for (int i=0; i<items_->topLevelItemCount(); ++i) {
+        const auto *item=items_->topLevelItem(i);
+        if (item->data(0,FolderRole).toBool() && item->isExpanded()) expanded.append(QString::number(item->data(0,Qt::UserRole).toInt()));
     }
-    refreshItems();
+    QString error;
+    if (!database_->setSetting(expandedKey(tabId()),expanded.join(','),&error)) report(error);
+}
+
+void ClipboardPage::selectFolder(int id)
+{
+    for (QTreeWidgetItemIterator it(items_); *it; ++it) {
+        if ((*it)->data(0,FolderRole).toBool() && (*it)->data(0,Qt::UserRole).toInt()==id) {
+            items_->clearSelection(); items_->setCurrentItem(*it); (*it)->setExpanded(true); items_->scrollToItem(*it); return;
+        }
+    }
 }
 
 void ClipboardPage::refreshItems()
 {
     refreshTimer_->stop(); dirty_=false;
-    const auto selected=selectedIds(); const int scroll=items_->verticalScrollBar()->value();
+    const bool sameTab=displayedTabId_==tabId();
+    const auto selected=sameTab ? selectedIds() : QList<int>();
+    const auto *previous=items_->currentItem();
+    const int previousFolder=sameTab && previous && previous->data(0,FolderRole).toBool() ? previous->data(0,Qt::UserRole).toInt() : 0;
+    const int scroll=sameTab ? items_->verticalScrollBar()->value() : 0;
     const auto search=search_->text().trimmed(); const bool global=searchScope_->currentIndex()==1;
-    const int folder=global || !search.isEmpty() ? -1 : folderId();
-    QString error; const auto entries=database_->clipboardItems(global ? 0 : tabId(),folder,search,&error);
+    QString error; auto entries=database_->clipboardItems(global ? 0 : tabId(),-1,search,&error);
     if (!error.isEmpty()) { report(error); return; }
+    auto tabs=database_->clipboardTabs(&error);
+    if (!global) tabs.erase(std::remove_if(tabs.begin(),tabs.end(),[this](const auto &tab) { return tab.id!=tabId(); }),tabs.end());
+    QHash<int,QList<AppDatabase::ClipboardFolder>> folders;
+    QSet<int> entryIds;
+    for (const auto &entry : entries) entryIds.insert(entry.id);
+    for (const auto &tab : tabs) {
+        folders.insert(tab.id,database_->clipboardFolders(tab.id,&error));
+        if (!error.isEmpty()) { report(error); return; }
+        if (!search.isEmpty()) for (const auto &folder : folders.value(tab.id)) {
+            if (!folder.name.contains(search,Qt::CaseInsensitive)) continue;
+            for (const auto &entry : database_->clipboardItems(tab.id,folder.id,{},&error)) {
+                if (!entryIds.contains(entry.id)) { entries.append(entry); entryIds.insert(entry.id); }
+            }
+        }
+    }
+    if (!error.isEmpty()) { report(error); return; }
+    displayedTabId_=tabId();
     {
         const QSignalBlocker blocker(items_); items_->clear();
-        items_->orderingEnabled=!global && search.isEmpty() && folder>=0;
+        items_->orderingEnabled=!global && search.isEmpty();
+        items_->setDragEnabled(items_->orderingEnabled);
+        QHash<int,QTreeWidgetItem *> tabNodes,folderNodes;
+        QSet<int> matchedFolders,matchedTabs;
+        for (const auto &entry : entries) { matchedFolders.insert(entry.folderId); matchedTabs.insert(entry.tabId); }
+        QIcon folderIcon=style()->standardIcon(QStyle::SP_DirClosedIcon);
+        folderIcon.addPixmap(style()->standardPixmap(QStyle::SP_DirOpenIcon),QIcon::Normal,QIcon::On);
+        for (const auto &tab : tabs) {
+            bool matchingFolder=false;
+            for (const auto &folder : folders.value(tab.id)) matchingFolder|=folder.name.contains(search,Qt::CaseInsensitive);
+            if (!search.isEmpty() && !matchedTabs.contains(tab.id) && !matchingFolder) continue;
+            QTreeWidgetItem *tabNode=nullptr;
+            if (global) {
+                tabNode=new QTreeWidgetItem(items_,{tab.name}); tabNode->setData(0,TabNodeRole,true); tabNode->setData(0,TabRole,tab.id);
+                tabNode->setExpanded(true); tabNodes.insert(tab.id,tabNode);
+            }
+            const auto savedExpanded=database_->setting(expandedKey(tab.id),QStringLiteral("*")).split(',');
+            for (const auto &folder : folders.value(tab.id)) {
+                if (!search.isEmpty() && !matchedFolders.contains(folder.id) && !folder.name.contains(search,Qt::CaseInsensitive)) continue;
+                auto *item=tabNode ? new QTreeWidgetItem(tabNode) : new QTreeWidgetItem(items_);
+                item->setText(0,folder.name); item->setIcon(0,folderIcon);
+                item->setData(0,Qt::UserRole,folder.id); item->setData(0,FolderRole,true);
+                item->setData(0,TabRole,tab.id); item->setData(0,FolderIdRole,folder.id);
+                item->setData(0,SiblingOrderScopeRole,QStringLiteral("folders.%1").arg(tab.id));
+                item->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
+                item->setSizeHint(0,QSize(0,40)); item->setToolTip(0,folder.name);
+                item->setExpanded(global || !search.isEmpty() || savedExpanded.contains("*") || savedExpanded.contains(QString::number(folder.id)));
+                folderNodes.insert(folder.id,item);
+                if (previousFolder==folder.id) items_->setCurrentItem(item);
+            }
+        }
         for (const auto &entry : entries) {
             const auto caption=itemTitle(entry);
-            const auto date=entry.createdAt.toLocalTime().toString(QStringLiteral("MM-dd HH:mm"));
-            auto *item=new QListWidgetItem(caption+QStringLiteral("\n")+ClipboardContent::kindName(entry.kind)+QStringLiteral(" · ")+date,items_);
-            item->setData(Qt::UserRole,entry.id); item->setData(SiblingOrderScopeRole,QStringLiteral("items.%1.%2").arg(entry.tabId).arg(entry.folderId));
-            item->setSizeHint(QSize(0,58)); item->setToolTip(caption+QStringLiteral("\n双击复制并收起"));
+            auto *parent=folderNodes.value(entry.folderId,tabNodes.value(entry.tabId));
+            auto *item=parent ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(items_);
+            item->setText(0,caption); item->setData(0,Qt::UserRole,entry.id);
+            item->setData(0,TabRole,entry.tabId); item->setData(0,FolderIdRole,entry.folderId);
+            item->setData(0,SiblingOrderScopeRole,QStringLiteral("items.%1.%2").arg(entry.tabId).arg(entry.folderId));
+            item->setSizeHint(0,QSize(0,40)); item->setToolTip(0,caption);
             if (selected.contains(entry.id)) { items_->setCurrentItem(item,QItemSelectionModel::NoUpdate); item->setSelected(true); }
         }
         items_->verticalScrollBar()->setValue(scroll);
     }
-    count_->setText(QStringLiteral("%1 条内容%2").arg(entries.size()).arg(items_->orderingEnabled ? QStringLiteral(" · 拖动或 Ctrl+↑/↓ 调位") : QStringLiteral(" · 选择具体文件夹并清空搜索后可排序")));
-    empty_->setText(!search.isEmpty() ? QStringLiteral("没有找到匹配内容。试试其他关键词。")
-        : folderId()>0 ? QStringLiteral("这个文件夹还没有内容。新建条目，或从其他位置移动过来。")
-        : tabId()==1 ? QStringLiteral("还没有内容。开启监听后复制一段文字、图片或文件，也可以手动新建。")
-        : QStringLiteral("这个标签页还没有内容。可以新建条目，或从“历史”移动过来。"));
-    empty_->setVisible(entries.isEmpty()); updatePreview();
+    items_->doItemsLayout(); resetTreeAccessibility(items_); updatePreview();
 }
 
 void ClipboardPage::updateActions()
@@ -284,17 +348,13 @@ void ClipboardPage::updatePreview()
 {
     updateActions(); previewImage_->hide(); previewText_->show();
     const auto ids=selectedIds();
+    previewPane_->setVisible(ids.size()==1);
     if (ids.size()!=1) {
-        previewTitle_->setText(ids.isEmpty() ? QStringLiteral("选择条目查看内容") : QStringLiteral("已选择 %1 条，可批量移动或删除").arg(ids.size()));
         previewText_->clear(); return;
     }
     QString error; const auto item=database_->clipboardItem(ids.first(),&error);
-    if (!item.id) { report(error); previewText_->clear(); return; }
-    QString location;
-    for (const auto &tab : database_->clipboardTabs()) if (tab.id==item.tabId) location=tab.name;
-    for (const auto &folder : database_->clipboardFolders(item.tabId)) if (folder.id==item.folderId) location+=QStringLiteral(" / ")+folder.name;
-    previewTitle_->setText(ClipboardContent::kindName(item.kind)+QStringLiteral(" · ")+location
-        +(item.automatic ? QString() : QStringLiteral(" · 已保存"))+(item.text.size()>200000 ? QStringLiteral(" · 仅预览前 20 万字，复制保留完整内容") : QString()));
+    if (!item.id) { report(error); previewText_->clear(); previewPane_->hide(); return; }
+    previewText_->setToolTip(item.text.size()>200000 ? QStringLiteral("预览前 20 万字，复制保留完整内容。") : QString());
     TextLayoutGuard::setPlainText(previewText_,item.text.left(200000));
     if (item.kind=="image") {
         const auto image=ClipboardContent::previewImage(item.payload,QSize(qMax(100,previewText_->width()-20),210));
@@ -308,7 +368,7 @@ void ClipboardPage::copySelected()
     const auto ids=selectedIds(); if (ids.size()!=1) return;
     QString error;
     if (!monitor_->copyItem(ids.first(),&error)) { report(error); return; }
-    status_->setText(QStringLiteral("已复制，可在目标位置手动 Ctrl+V。"));
+    status_->hide();
     emit hideRequested();
 }
 
@@ -327,7 +387,7 @@ void ClipboardPage::addFolder()
     if (!ok) return;
     int id=0; QString error;
     if (!database_->addClipboardFolder(tabId(),name,&id,&error)) { report(error); return; }
-    search_->clear(); searchScope_->setCurrentIndex(0); refreshFolders(id);
+    search_->clear(); searchScope_->setCurrentIndex(0); refreshItems(); selectFolder(id);
 }
 
 void ClipboardPage::tabMenu(const QPoint &position)
@@ -354,24 +414,26 @@ void ClipboardPage::tabMenu(const QPoint &position)
 
 void ClipboardPage::folderMenu(const QPoint &position)
 {
-    const auto *item=folders_->itemAt(position); if (!item) return;
-    const int id=item->data(Qt::UserRole).toInt();
+    const auto *item=items_->itemAt(position); if (!item || !item->data(0,FolderRole).toBool()) return;
+    const int id=item->data(0,Qt::UserRole).toInt();
+    const QString folderName=item->text(0);
     QMenu menu(this); auto *create=menu.addAction(QStringLiteral("新建文件夹"));
     auto *rename=menu.addAction(QStringLiteral("重命名")); auto *remove=menu.addAction(QStringLiteral("删除文件夹…"));
     rename->setEnabled(id>0); remove->setEnabled(id>0);
-    const auto *action=menu.exec(folders_->viewport()->mapToGlobal(position)); QString error;
+    const auto *action=menu.exec(items_->viewport()->mapToGlobal(position)); QString error;
     if (action==create) addFolder();
     else if (action==rename) {
-        bool ok=false; const auto name=QInputDialog::getText(this,QStringLiteral("重命名文件夹"),QStringLiteral("文件夹名称"),QLineEdit::Normal,item->text(),&ok);
-        if (ok) { if (!database_->renameClipboardFolder(id,name,&error)) report(error); else refreshFolders(id); }
+        bool ok=false; const auto name=QInputDialog::getText(this,QStringLiteral("重命名文件夹"),QStringLiteral("文件夹名称"),QLineEdit::Normal,folderName,&ok);
+        if (ok) { if (!database_->renameClipboardFolder(id,name,&error)) report(error); else { refreshItems(); selectFolder(id); } }
     } else if (action==remove) {
-        if (QMessageBox::question(this,QStringLiteral("删除文件夹"),QStringLiteral("删除“%1”？内容会保留并移到当前标签页的“未归档”。").arg(item->text()),QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
-        if (!database_->deleteClipboardFolder(id,&error)) report(error); else refreshFolders();
+        if (QMessageBox::question(this,QStringLiteral("删除文件夹"),QStringLiteral("删除“%1”？内容会保留并移到所在标签页顶层。").arg(folderName),QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
+        if (!database_->deleteClipboardFolder(id,&error)) report(error); else refreshItems();
     }
 }
 
 void ClipboardPage::itemMenu(const QPoint &position)
 {
+    if (const auto *item=items_->itemAt(position); item && item->data(0,FolderRole).toBool()) { folderMenu(position); return; }
     QMenu menu(this); auto *copy=menu.addAction(QStringLiteral("复制并收起")); auto *edit=menu.addAction(QStringLiteral("编辑"));
     auto *move=menu.addAction(QStringLiteral("移动到…")); auto *remove=menu.addAction(QStringLiteral("删除…"));
     const auto ids=selectedIds(); copy->setEnabled(ids.size()==1); edit->setEnabled(ids.size()==1); move->setEnabled(!ids.isEmpty()); remove->setEnabled(!ids.isEmpty());
@@ -382,7 +444,11 @@ void ClipboardPage::itemMenu(const QPoint &position)
 void ClipboardPage::editItem(bool creating)
 {
     AppDatabase::ClipboardItem item; QString error;
-    if (creating) { item.tabId=tabId(); item.folderId=qMax(0,folderId()); }
+    if (creating) {
+        const auto *selected=items_->currentItem();
+        item.tabId=selected ? selected->data(0,TabRole).toInt() : tabId();
+        item.folderId=selected ? selected->data(0,FolderIdRole).toInt() : 0;
+    }
     else {
         const auto ids=selectedIds(); if (ids.size()!=1) return;
         item=database_->clipboardItem(ids.first(),&error); if (!item.id) { report(error); return; }
@@ -439,7 +505,7 @@ void ClipboardPage::moveSelected()
     auto *layout=new QFormLayout(&dialog); auto *tabs=new QComboBox(&dialog); tabs->setObjectName("clipboardDestinationTab");
     auto *folders=new QComboBox(&dialog); folders->setObjectName("clipboardDestinationFolder");
     for (const auto &tab : database_->clipboardTabs()) tabs->addItem(tab.name,tab.id);
-    const auto load=[&] { folders->clear(); folders->addItem(QStringLiteral("未归档"),0); for (const auto &folder : database_->clipboardFolders(tabs->currentData().toInt())) folders->addItem(folder.name,folder.id); };
+    const auto load=[&] { folders->clear(); folders->addItem(QStringLiteral("标签页顶层"),0); for (const auto &folder : database_->clipboardFolders(tabs->currentData().toInt())) folders->addItem(folder.name,folder.id); };
     connect(tabs,&QComboBox::currentIndexChanged,&dialog,load); tabs->setCurrentIndex(qMax(0,tabs->findData(tabId()))); load();
     layout->addRow(QStringLiteral("标签页"),tabs); layout->addRow(QStringLiteral("文件夹"),folders);
     auto *errorLabel=label(QString(),"clipboardMoveError",&dialog); errorLabel->setWordWrap(true); layout->addRow(errorLabel);
@@ -450,7 +516,7 @@ void ClipboardPage::moveSelected()
         dialog.accept();
     });
     connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
-    if (dialog.exec()==QDialog::Accepted) { refreshItems(); status_->setText(QStringLiteral("已移动 %1 条内容。").arg(ids.size())); }
+    if (dialog.exec()==QDialog::Accepted) { refreshItems(); status_->hide(); }
 }
 
 void ClipboardPage::deleteSelected()

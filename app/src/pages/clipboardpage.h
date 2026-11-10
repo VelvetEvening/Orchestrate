@@ -26,11 +26,11 @@ protected:
     void showEvent(QShowEvent *event) override;
 private:
     int tabId() const;
-    int folderId() const;
     QList<int> selectedIds() const;
     void refreshTabs(int selected=0);
-    void refreshFolders(int selected=0);
     void refreshItems();
+    void saveExpandedFolders();
+    void selectFolder(int id);
     void updatePreview();
     void updateActions();
     void editItem(bool creating);
@@ -47,15 +47,12 @@ private:
     AppDatabase *database_;
     ClipboardMonitor *monitor_;
     QTabBar *tabs_;
-    SiblingOrderList *folders_;
-    SiblingOrderList *items_;
+    SiblingOrderTree *items_;
     QLineEdit *search_;
     QComboBox *searchScope_;
     QCheckBox *listening_;
     QLabel *status_;
-    QLabel *count_;
-    QLabel *empty_;
-    QLabel *previewTitle_;
+    QWidget *previewPane_;
     QLabel *previewImage_;
     QPlainTextEdit *previewText_;
     QPushButton *copy_;
