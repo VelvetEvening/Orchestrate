@@ -406,7 +406,24 @@ function Remove-CompletedUpdateWorkspacesCore([string]$Install) {
 }
 
 function Move-UpdateDirectory([string]$Source, [string]$Destination) {
-    [IO.Directory]::Move($Source, $Destination)
+    $sourcePath = [IO.Path]::GetFullPath($Source)
+    $destinationPath = [IO.Path]::GetFullPath($Destination)
+    for ($attempt = 0; $attempt -lt 5; ++$attempt) {
+        try {
+            [IO.Directory]::Move($sourcePath, $destinationPath)
+            return
+        } catch {
+            $cause = $_.Exception
+            while ($cause.InnerException) { $cause = $cause.InnerException }
+            $win32Error = $cause.HResult -band 0xffff
+            # Windows can retain a directory handle briefly after process exit.
+            # Never retry a missing source or an existing destination.
+            if ($attempt -eq 4 -or $win32Error -notin @(5, 32, 33) -or
+                -not [IO.Directory]::Exists($sourcePath) -or
+                [IO.Directory]::Exists($destinationPath) -or [IO.File]::Exists($destinationPath)) { throw }
+            Start-Sleep -Milliseconds 500
+        }
+    }
 }
 
 function Install-PreparedPackage($Plan) {

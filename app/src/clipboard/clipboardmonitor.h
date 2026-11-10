@@ -11,6 +11,7 @@ public:
     bool setEnabled(bool enabled, QString *error=nullptr);
     int historyLimit() const { return historyLimit_; }
     bool setHistoryLimit(int limit, QString *error=nullptr);
+    void setEditingItem(int id) { editingItemId_=id; }
     bool copyItem(int id, QString *error=nullptr);
 signals:
     void recorded();
@@ -21,5 +22,6 @@ private:
     bool enabled_=false;
     bool writing_=false;
     int historyLimit_=500;
+    int editingItemId_=0;
     QTimer timer_;
 };

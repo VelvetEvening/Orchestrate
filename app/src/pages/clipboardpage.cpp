@@ -16,6 +16,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QScopeGuard>
 #include <QShortcut>
 #include <QShowEvent>
 #include <QSignalBlocker>
@@ -497,6 +498,8 @@ void ClipboardPage::editItem(bool creating)
         item=database_->clipboardItem(ids.first(),&error); if (!item.id) { report(error); return; }
     }
     ClipboardEditorDialog dialog(this); editor_=&dialog;
+    monitor_->setEditingItem(item.id);
+    const auto editingGuard=qScopeGuard([this] { monitor_->setEditingItem(0); });
     dialog.setObjectName("clipboardEditor"); dialog.setWindowTitle(creating ? QStringLiteral("新建剪贴板条目") : QStringLiteral("编辑剪贴板条目")); dialog.resize(640,470);
     auto *layout=new QVBoxLayout(&dialog); auto *form=new QFormLayout;
     auto *title=new QLineEdit(item.title,&dialog); title->setObjectName("clipboardItemTitle"); title->setMaxLength(200); title->setPlaceholderText(QStringLiteral("可选，留空时显示内容开头"));
@@ -553,7 +556,7 @@ void ClipboardPage::historySettings()
     QDialog dialog(this); dialog.setWindowTitle(QStringLiteral("历史设置")); auto *layout=new QFormLayout(&dialog);
     auto *limit=new QSpinBox(&dialog); limit->setRange(100,10000); limit->setSingleStep(100); limit->setValue(monitor_->historyLimit()); limit->setSuffix(QStringLiteral(" 条"));
     layout->addRow(QStringLiteral("自动历史保留上限"),limit);
-    auto *hint=label(QStringLiteral("下次记录新内容时，仅清理“历史”顶层超额的自动记录。其他标签页和手动新建、编辑或移动过的内容会保留。\n单条内容上限 16 MiB；图片上限 3200 万像素。"),"muted",&dialog); hint->setWordWrap(true); hint->setMaximumWidth(390); layout->addRow(hint);
+    auto *hint=label(QStringLiteral("下次记录新内容时，从“历史”顶层列表底部清理超额的自动记录，跳过正在编辑的条目。调序会改变清理先后。其他标签页和手动新建、编辑保存或移动归类过的内容会保留。\n单条内容上限 16 MiB；图片上限 3200 万像素。"),"muted",&dialog); hint->setWordWrap(true); hint->setMaximumWidth(390); layout->addRow(hint);
     auto *buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel,&dialog); layout->addRow(buttons);
     connect(buttons,&QDialogButtonBox::accepted,&dialog,[&] { QString error; if (!monitor_->setHistoryLimit(limit->value(),&error)) { QMessageBox::warning(&dialog,QStringLiteral("设置未保存"),error); return; } dialog.accept(); });
     connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject); dialog.exec();

@@ -1799,7 +1799,7 @@ bool AppDatabase::saveClipboardItem(ClipboardItem *item, QString *errorMessage)
     return true;
 }
 
-bool AppDatabase::captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage)
+bool AppDatabase::captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage, int editingItemId)
 {
     if (!item || item->id!=0) return fail(errorMessage, QStringLiteral("无法记录此剪贴板内容。"));
     auto database=QSqlDatabase::database(connectionName_);
@@ -1818,7 +1818,10 @@ bool AppDatabase::captureClipboardItem(ClipboardItem *item, int historyLimit, QS
     position.addBindValue(saved.id);
     if (!position.exec()) { setError(errorMessage,position); database.rollback(); return false; }
     QSqlQuery trim(database);
-    trim.prepare(QStringLiteral("DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1 ORDER BY id DESC LIMIT -1 OFFSET ?)"));
+    // Evict from the bottom of the actual list, skipping the open editor.
+    // Count the edited item toward the limit so other automatic entries still fit.
+    trim.prepare(QStringLiteral("DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1 AND id<>? ORDER BY position DESC,id ASC LIMIT (SELECT MAX(0,COUNT(*)-?) FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1))"));
+    trim.addBindValue(editingItemId);
     trim.addBindValue(qBound(100,historyLimit,10000));
     if (!trim.exec()) { setError(errorMessage,trim); database.rollback(); return false; }
     if (!database.commit()) { const auto e=database.lastError().text(); database.rollback(); return fail(errorMessage,e); }
