@@ -3,7 +3,6 @@
 #include "clipboard/clipboardmonitor.h"
 #include "widgets/textlayoutguard.h"
 #include <QCheckBox>
-#include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -29,7 +28,6 @@
 #include <QVBoxLayout>
 #include <QHash>
 #include <QSet>
-#include <algorithm>
 
 namespace {
 constexpr int FolderRole=Qt::UserRole+1;
@@ -140,9 +138,6 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
     search_=new QLineEdit(this); search_->setObjectName("clipboardSearch"); search_->setPlaceholderText(QStringLiteral("搜索内容、标题或文件夹"));
     readablePlaceholder(search_);
     search_->setClearButtonEnabled(true); search_->setAccessibleName(QStringLiteral("搜索剪贴板内容")); searchRow->addWidget(search_,1);
-    searchScope_=new QComboBox(this); searchScope_->setObjectName("clipboardSearchScope");
-    searchScope_->addItems({QStringLiteral("当前标签页"),QStringLiteral("全部标签页")}); searchScope_->setAccessibleName(QStringLiteral("搜索范围"));
-    searchRow->addWidget(searchScope_);
     auto *newFolder=new QPushButton(QStringLiteral("新建文件夹"),this); newFolder->setObjectName("clipboardNewFolder");
     searchRow->addWidget(newFolder); layout->addLayout(searchRow);
 
@@ -213,8 +208,7 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
         return item->data(0,FolderRole).toBool() || item->data(0,TabNodeRole).toBool();
     };
     items_->canTransfer=[this](const QList<QTreeWidgetItem *> &items,QTreeWidgetItem *destination) {
-        if ((!destination && searchScope_->currentIndex()==1)
-            || (destination && !items_->isContainer(destination))) return false;
+        if (destination && !items_->isContainer(destination)) return false;
         const int targetTab=destination ? destination->data(0,TabRole).toInt() : tabId();
         const int targetFolder=destination ? destination->data(0,FolderIdRole).toInt() : 0;
         bool changed=false;
@@ -233,7 +227,7 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
                 ids.append(item->data(0,Qt::UserRole).toInt());
         QString error;
         if (!database_->moveClipboardItems(ids,targetTab,targetFolder,&error)) { report(error); return false; }
-        if (searchScope_->currentIndex()==0 && targetTab!=tabId()) {
+        if (targetTab!=tabId()) {
             for (int i=0;i<tabs_->count();++i) if (tabs_->tabData(i).toInt()==targetTab) { tabs_->setCurrentIndex(i); break; }
         } else refreshItems();
         items_->clearSelection();
@@ -254,7 +248,6 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
     connect(items_,&QTreeWidget::itemExpanded,this,[this] { saveExpandedFolders(); updatePreview(); });
     connect(items_,&QTreeWidget::itemCollapsed,this,[this] { saveExpandedFolders(); updatePreview(); });
     connect(search_,&QLineEdit::textChanged,this,[this] { refreshTimer_->start(); });
-    connect(searchScope_,&QComboBox::currentIndexChanged,this,[this] { refreshItems(); });
     connect(items_,&QTreeWidget::itemSelectionChanged,this,&ClipboardPage::updatePreview);
     connect(items_,&QTreeWidget::itemDoubleClicked,this,[this](QTreeWidgetItem *item) {
         if (!isEntry(item)) return;
@@ -309,7 +302,7 @@ void ClipboardPage::refreshTabs(int selected)
 
 void ClipboardPage::saveExpandedFolders()
 {
-    if (searchScope_->currentIndex()!=0 || !search_->text().trimmed().isEmpty()) return;
+    if (!search_->text().trimmed().isEmpty()) return;
     QStringList expanded;
     for (int i=0; i<items_->topLevelItemCount(); ++i) {
         const auto *item=items_->topLevelItem(i);
@@ -336,65 +329,50 @@ void ClipboardPage::refreshItems()
     const auto *previous=items_->currentItem();
     const int previousFolder=sameTab && previous && previous->data(0,FolderRole).toBool() ? previous->data(0,Qt::UserRole).toInt() : 0;
     const int scroll=sameTab ? items_->verticalScrollBar()->value() : 0;
-    const auto search=search_->text().trimmed(); const bool global=searchScope_->currentIndex()==1;
-    QString error; auto entries=database_->clipboardItems(global ? 0 : tabId(),-1,search,&error);
+    const auto search=search_->text().trimmed();
+    const int currentTab=tabId();
+    QString error; auto entries=database_->clipboardItems(currentTab,-1,search,&error);
     if (!error.isEmpty()) { report(error); return; }
-    auto tabs=database_->clipboardTabs(&error);
-    if (!global) tabs.erase(std::remove_if(tabs.begin(),tabs.end(),[this](const auto &tab) { return tab.id!=tabId(); }),tabs.end());
-    QHash<int,QList<AppDatabase::ClipboardFolder>> folders;
+    const auto folders=database_->clipboardFolders(currentTab,&error);
+    if (!error.isEmpty()) { report(error); return; }
     QSet<int> entryIds;
     for (const auto &entry : entries) entryIds.insert(entry.id);
-    for (const auto &tab : tabs) {
-        folders.insert(tab.id,database_->clipboardFolders(tab.id,&error));
-        if (!error.isEmpty()) { report(error); return; }
-        if (!search.isEmpty()) for (const auto &folder : folders.value(tab.id)) {
-            if (!folder.name.contains(search,Qt::CaseInsensitive)) continue;
-            for (const auto &entry : database_->clipboardItems(tab.id,folder.id,{},&error)) {
-                if (!entryIds.contains(entry.id)) { entries.append(entry); entryIds.insert(entry.id); }
-            }
+    if (!search.isEmpty()) for (const auto &folder : folders) {
+        if (!folder.name.contains(search,Qt::CaseInsensitive)) continue;
+        for (const auto &entry : database_->clipboardItems(currentTab,folder.id,{},&error)) {
+            if (!entryIds.contains(entry.id)) { entries.append(entry); entryIds.insert(entry.id); }
         }
+        if (!error.isEmpty()) { report(error); return; }
     }
-    if (!error.isEmpty()) { report(error); return; }
-    displayedTabId_=tabId();
+    displayedTabId_=currentTab;
     displayedSearch_=search;
     {
         const QSignalBlocker blocker(items_); items_->clear();
         items_->orderingEnabled=search.isEmpty();
         items_->transferEnabled=search.isEmpty();
         items_->setDragEnabled(search.isEmpty());
-        QHash<int,QTreeWidgetItem *> tabNodes,folderNodes;
-        QSet<int> matchedFolders,matchedTabs;
-        for (const auto &entry : entries) { matchedFolders.insert(entry.folderId); matchedTabs.insert(entry.tabId); }
+        QHash<int,QTreeWidgetItem *> folderNodes;
+        QSet<int> matchedFolders;
+        for (const auto &entry : entries) matchedFolders.insert(entry.folderId);
         QIcon folderIcon=style()->standardIcon(QStyle::SP_DirClosedIcon);
         folderIcon.addPixmap(style()->standardPixmap(QStyle::SP_DirOpenIcon),QIcon::Normal,QIcon::On);
-        for (const auto &tab : tabs) {
-            bool matchingFolder=false;
-            for (const auto &folder : folders.value(tab.id)) matchingFolder|=folder.name.contains(search,Qt::CaseInsensitive);
-            if (!search.isEmpty() && !matchedTabs.contains(tab.id) && !matchingFolder) continue;
-            QTreeWidgetItem *tabNode=nullptr;
-            if (global) {
-                tabNode=new QTreeWidgetItem(items_,{tab.name}); tabNode->setData(0,TabNodeRole,true); tabNode->setData(0,TabRole,tab.id);
-                if (tab.history) tabNode->setIcon(0,QIcon(QStringLiteral(":/icons/star.svg")));
-                tabNode->setExpanded(true); tabNodes.insert(tab.id,tabNode);
-            }
-            const auto savedExpanded=database_->setting(expandedKey(tab.id),QStringLiteral("*")).split(',');
-            for (const auto &folder : folders.value(tab.id)) {
-                if (!search.isEmpty() && !matchedFolders.contains(folder.id) && !folder.name.contains(search,Qt::CaseInsensitive)) continue;
-                auto *item=tabNode ? new QTreeWidgetItem(tabNode) : new QTreeWidgetItem(items_);
-                item->setText(0,folder.name); item->setIcon(0,folderIcon);
-                item->setData(0,Qt::UserRole,folder.id); item->setData(0,FolderRole,true);
-                item->setData(0,TabRole,tab.id); item->setData(0,FolderIdRole,folder.id);
-                item->setData(0,SiblingOrderScopeRole,QStringLiteral("folders.%1").arg(tab.id));
-                item->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
-                item->setSizeHint(0,QSize(0,40)); item->setToolTip(0,folder.name);
-                item->setExpanded(global || !search.isEmpty() || savedExpanded.contains("*") || savedExpanded.contains(QString::number(folder.id)));
-                folderNodes.insert(folder.id,item);
-                if (previousFolder==folder.id) items_->setCurrentItem(item);
-            }
+        const auto savedExpanded=database_->setting(expandedKey(currentTab),QStringLiteral("*")).split(',');
+        for (const auto &folder : folders) {
+            if (!search.isEmpty() && !matchedFolders.contains(folder.id) && !folder.name.contains(search,Qt::CaseInsensitive)) continue;
+            auto *item=new QTreeWidgetItem(items_);
+            item->setText(0,folder.name); item->setIcon(0,folderIcon);
+            item->setData(0,Qt::UserRole,folder.id); item->setData(0,FolderRole,true);
+            item->setData(0,TabRole,currentTab); item->setData(0,FolderIdRole,folder.id);
+            item->setData(0,SiblingOrderScopeRole,QStringLiteral("folders.%1").arg(currentTab));
+            item->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
+            item->setSizeHint(0,QSize(0,40)); item->setToolTip(0,folder.name);
+            item->setExpanded(!search.isEmpty() || savedExpanded.contains("*") || savedExpanded.contains(QString::number(folder.id)));
+            folderNodes.insert(folder.id,item);
+            if (previousFolder==folder.id) items_->setCurrentItem(item);
         }
         for (const auto &entry : entries) {
             const auto caption=itemTitle(entry);
-            auto *parent=folderNodes.value(entry.folderId,tabNodes.value(entry.tabId));
+            auto *parent=folderNodes.value(entry.folderId);
             auto *item=parent ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(items_);
             item->setText(0,caption); item->setData(0,Qt::UserRole,entry.id);
             item->setData(0,TabRole,entry.tabId); item->setData(0,FolderIdRole,entry.folderId);
@@ -456,7 +434,7 @@ void ClipboardPage::addFolder()
     if (!ok) return;
     int id=0; QString error;
     if (!database_->addClipboardFolder(tabId(),name,&id,&error)) { report(error); return; }
-    search_->clear(); searchScope_->setCurrentIndex(0); refreshItems(); selectFolder(id);
+    search_->clear(); refreshItems(); selectFolder(id);
 }
 
 void ClipboardPage::tabMenu(const QPoint &position)
@@ -575,7 +553,7 @@ void ClipboardPage::historySettings()
     QDialog dialog(this); dialog.setWindowTitle(QStringLiteral("历史设置")); auto *layout=new QFormLayout(&dialog);
     auto *limit=new QSpinBox(&dialog); limit->setRange(100,10000); limit->setSingleStep(100); limit->setValue(monitor_->historyLimit()); limit->setSuffix(QStringLiteral(" 条"));
     layout->addRow(QStringLiteral("自动历史保留上限"),limit);
-    auto *hint=label(QStringLiteral("下次记录新内容时清理超额的自动历史。手动新建、编辑或移动过的内容会保留。\n单条内容上限 16 MiB；图片上限 3200 万像素。"),"muted",&dialog); hint->setWordWrap(true); hint->setMaximumWidth(390); layout->addRow(hint);
+    auto *hint=label(QStringLiteral("下次记录新内容时，仅清理“历史”顶层超额的自动记录。其他标签页和手动新建、编辑或移动过的内容会保留。\n单条内容上限 16 MiB；图片上限 3200 万像素。"),"muted",&dialog); hint->setWordWrap(true); hint->setMaximumWidth(390); layout->addRow(hint);
     auto *buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel,&dialog); layout->addRow(buttons);
     connect(buttons,&QDialogButtonBox::accepted,&dialog,[&] { QString error; if (!monitor_->setHistoryLimit(limit->value(),&error)) { QMessageBox::warning(&dialog,QStringLiteral("设置未保存"),error); return; } dialog.accept(); });
     connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject); dialog.exec();

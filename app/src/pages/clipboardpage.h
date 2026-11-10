@@ -6,7 +6,6 @@
 
 class ClipboardMonitor;
 class QCheckBox;
-class QComboBox;
 class QDialog;
 class QLabel;
 class QLineEdit;
@@ -48,7 +47,6 @@ private:
     QTabBar *tabs_;
     SiblingOrderTree *items_;
     QLineEdit *search_;
-    QComboBox *searchScope_;
     QCheckBox *listening_;
     QLabel *status_;
     QWidget *previewPane_;
