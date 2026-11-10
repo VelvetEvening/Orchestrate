@@ -549,19 +549,15 @@ void ClipboardPage::deleteSelected()
     const auto ids=selectedIds(); if (ids.isEmpty()) return;
     if (tabId()!=1) {
         const auto tabName=tabs_->tabText(tabs_->currentIndex());
-        const auto confirm=[this](QMessageBox::Icon icon, const QString &title, const QString &text, const QString &action) {
-            QMessageBox dialog(icon,title,text,QMessageBox::Yes|QMessageBox::No,this);
-            dialog.setTextFormat(Qt::PlainText);
-            dialog.button(QMessageBox::Yes)->setText(action);
-            dialog.button(QMessageBox::No)->setText(QStringLiteral("取消"));
-            dialog.setDefaultButton(QMessageBox::No);
-            dialog.setEscapeButton(QMessageBox::No);
-            return dialog.exec()==QMessageBox::Yes;
-        };
-        if (!confirm(QMessageBox::Question,QStringLiteral("删除剪贴板内容"),
-                QStringLiteral("准备删除“%1”中选中的 %2 条内容。是否继续？").arg(tabName,QString::number(ids.size())),QStringLiteral("继续"))) return;
-        if (!confirm(QMessageBox::Warning,QStringLiteral("再次确认删除"),
-                QStringLiteral("确定删除“%1”中选中的 %2 条内容？此操作无法撤销。").arg(tabName,QString::number(ids.size())),QStringLiteral("确认删除"))) return;
+        QMessageBox dialog(QMessageBox::Warning,QStringLiteral("删除剪贴板内容"),
+            QStringLiteral("确定删除“%1”中选中的 %2 条内容？此操作无法撤销。").arg(tabName,QString::number(ids.size())),
+            QMessageBox::Yes|QMessageBox::No,this);
+        dialog.setTextFormat(Qt::PlainText);
+        dialog.button(QMessageBox::Yes)->setText(QStringLiteral("确认删除"));
+        dialog.button(QMessageBox::No)->setText(QStringLiteral("取消"));
+        dialog.setDefaultButton(QMessageBox::No);
+        dialog.setEscapeButton(QMessageBox::No);
+        if (dialog.exec()!=QMessageBox::Yes) return;
     }
     QString error; if (!database_->deleteClipboardItems(ids,&error)) { report(error); return; } refreshItems();
 }
