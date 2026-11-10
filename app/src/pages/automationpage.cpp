@@ -461,7 +461,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     auto *treeTitle = makeCardTitle(QStringLiteral("工具组"), treeCard);
     treeTitle->setContentsMargins(4, 0, 0, 0);
     treeLayout->addWidget(treeTitle);
-    groupHint_ = makeMuted(QStringLiteral("右键可重命名、移动或移除。"), treeCard);
+    groupHint_ = makeMuted(QStringLiteral("右键可重命名或移除。"), treeCard);
     groupHint_->setContentsMargins(4, 0, 0, 4);
     groupHint_->hide();
     auto *orderedTree = new SiblingOrderTree(treeCard);
@@ -473,6 +473,21 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
             : database_->reorderToolGroups(ids, &error);
         if (!saved) showError(error);
         return saved;
+    };
+    orderedTree->isContainer = [](QTreeWidgetItem *item) { return !item->parent(); };
+    orderedTree->canTransfer = [](const QList<QTreeWidgetItem *> &items, QTreeWidgetItem *group) {
+        return items.size() == 1 && items.first()->parent() && group && !group->parent()
+            && items.first()->parent() != group;
+    };
+    orderedTree->saveTransfer = [this](const QList<QTreeWidgetItem *> &items, QTreeWidgetItem *group) {
+        const int toolId = items.first()->data(0,Qt::UserRole).toInt();
+        QString error;
+        if (!database_->setToolGroup(toolId,group->data(0,Qt::UserRole).toInt(),&error)) {
+            showError(error); return false;
+        }
+        loadAll(toolId);
+        if (tree_->currentItem()) tree_->scrollToItem(tree_->currentItem());
+        return true;
     };
     synchronizeTreeAccessibility(tree_);
     tree_->setObjectName(QStringLiteral("toolTree"));
@@ -490,8 +505,8 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     tree_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     tree_->setContextMenuPolicy(Qt::CustomContextMenu);
     tree_->setMouseTracking(true);
-    tree_->setAccessibleDescription(QStringLiteral("拖动工具组调整组间顺序，或在同一工具组内拖动工具；Ctrl+上或下箭头调序。工具跨组移动使用右键菜单。"));
-    tree_->setToolTip(QStringLiteral("拖动工具组或同组工具排序，也可使用 Ctrl+↑/↓；工具跨组移动使用右键菜单"));
+    tree_->setAccessibleDescription(QStringLiteral("拖动工具组或工具排序，拖入其他工具组归类；Ctrl+上或下箭头调序。"));
+    tree_->setToolTip(QStringLiteral("拖入工具组归类；拖动或 Ctrl+↑/↓ 调整同层顺序。"));
     treeLayout->addWidget(tree_, 1);
 
     // ---- Right: empty state or tool details ----
@@ -1056,24 +1071,6 @@ void AutomationPage::showTreeContextMenu(const QPoint &position)
         menu.addSeparator();
         menu.addAction(QStringLiteral("刷新状态"), this, &AutomationPage::refreshState);
         menu.addAction(QStringLiteral("重新读取声明"), this, &AutomationPage::reloadManifest);
-        QMenu *moveMenu = menu.addMenu(QStringLiteral("移动到工具组"));
-        const int currentGroup = item->parent() ? item->parent()->data(0, Qt::UserRole).toInt() : 0;
-        QString error;
-        QList<QPair<int, QString>> targets;
-        for (const AppDatabase::ToolGroup &group : database_->toolGroups(&error)) {
-            targets.append({group.id, group.name});
-        }
-        targets.append({0, ungroupedName()});
-        for (const auto &target : targets) {
-            QAction *action = moveMenu->addAction(target.second);
-            action->setCheckable(true);
-            action->setChecked(target.first == currentGroup);
-            action->setEnabled(target.first != currentGroup);
-            const int groupId = target.first;
-            connect(action, &QAction::triggered, this, [this, id, groupId] {
-                moveToolToGroup(id, groupId);
-            });
-        }
         AppDatabase::AutomationTool tool;
         if (findTool(id, &tool) && !tool.builtin) {
             menu.addSeparator();
@@ -1935,16 +1932,6 @@ void AutomationPage::finishManifestReload(const AppDatabase::AutomationTool &too
             commandHint_->hide();
         }
     });
-}
-
-void AutomationPage::moveToolToGroup(int toolId, int groupId)
-{
-    QString error;
-    if (database_ == nullptr || !database_->setToolGroup(toolId, groupId, &error)) {
-        showError(error);
-        return;
-    }
-    loadAll(toolId);
 }
 
 void AutomationPage::deleteTool()

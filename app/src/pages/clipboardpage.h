@@ -35,7 +35,6 @@ private:
     void updateActions();
     void editItem(bool creating);
     void copySelected();
-    void moveSelected();
     void deleteSelected();
     void addTab();
     void addFolder();
@@ -57,10 +56,10 @@ private:
     QPlainTextEdit *previewText_;
     QPushButton *copy_;
     QPushButton *edit_;
-    QPushButton *move_;
     QPushButton *remove_;
     QTimer *refreshTimer_;
     bool dirty_=true;
     int displayedTabId_=0;
+    QString displayedSearch_;
     QPointer<QDialog> editor_;
 };

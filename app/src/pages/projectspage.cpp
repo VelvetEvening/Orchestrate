@@ -170,6 +170,22 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
         if (!saved) showError(error);
         return saved;
     };
+    orderedRecords->isContainer = [](QTreeWidgetItem *item) { return item->data(0,FolderRole).toBool(); };
+    orderedRecords->canTransfer = [](const QList<QTreeWidgetItem *> &items, QTreeWidgetItem *folder) {
+        return items.size() == 1 && !items.first()->data(0,FolderRole).toBool()
+            && (!folder || folder->data(0,FolderRole).toBool()) && items.first()->parent() != folder;
+    };
+    orderedRecords->saveTransfer = [this](const QList<QTreeWidgetItem *> &items, QTreeWidgetItem *folder) {
+        const int folderId = folder ? folder->data(0,Qt::UserRole).toInt() : 0;
+        QString error;
+        if (!database_->setWorkRecordFolder(items.first()->data(0,Qt::UserRole).toInt(),folderId,&error)) {
+            showError(error); return false;
+        }
+        if (folder) { folder->setExpanded(true); saveExpandedFolders(); }
+        refreshWorkRecords();
+        if (workList_->currentItem()) workList_->scrollToItem(workList_->currentItem());
+        return true;
+    };
     synchronizeTreeAccessibility(workList_);
     workList_->setObjectName(QStringLiteral("workRecordList"));
     workList_->setHeaderHidden(true);
@@ -182,8 +198,8 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     workList_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     workList_->setContextMenuPolicy(Qt::CustomContextMenu);
     workList_->setAccessibleName(QStringLiteral("协作记录与文件夹"));
-    workList_->setToolTip(QStringLiteral("拖动或 Ctrl+↑/↓ 调整同层顺序；重点文件夹仍置顶。右键记录可移动到文件夹。"));
-    workList_->setAccessibleDescription(QStringLiteral("同一文件夹内拖动或 Ctrl+上或下箭头排序；重点文件夹仍置顶。搜索时暂停排序。"));
+    workList_->setToolTip(QStringLiteral("拖入文件夹归类，拖到空白处移回顶层；Ctrl+↑/↓ 调整同层顺序。"));
+    workList_->setAccessibleDescription(QStringLiteral("拖动排序或移入文件夹，空白处为项目顶层；Ctrl+上或下箭头调序。搜索时暂停拖动。"));
     workList_->setStyleSheet(QStringLiteral(
         "QTreeWidget { border: none; background: transparent; padding: 0; selection-background-color: #e0ebff; selection-color: #1d4ed8; }"
         "QTreeWidget::item { padding: 8px 10px; color: #334155; }"
@@ -551,6 +567,7 @@ void ProjectsPage::filterRecords()
     auto *orderedRecords = static_cast<SiblingOrderTree *>(workList_);
     orderedRecords->orderingEnabled = query.isEmpty();
     orderedRecords->setDragEnabled(query.isEmpty());
+    orderedRecords->transferEnabled = query.isEmpty();
     const auto expanded = database_->setting(expandedFoldersKey(current_.id)).split(',');
     bool anyVisible = false;
     for (int i=0; i<workList_->topLevelItemCount(); ++i) {
@@ -694,35 +711,6 @@ void ProjectsPage::showRecordContextMenu(const QPoint &position)
     menu.setObjectName(QStringLiteral("recordContextMenu"));
     if (item && !item->data(0,FolderRole).toBool()) {
         menu.addAction(QStringLiteral("打开记录"),this,[this]{ recordDialog(false); });
-        auto *move = menu.addMenu(QStringLiteral("移动到文件夹"));
-        const auto record = currentWorkRecord();
-        QString error;
-        const auto folders = database_->recordFolders(current_.id,&error);
-        if (!error.isEmpty()) { showError(error); return; }
-        auto addDestination = [&](const QString &name, int folderId) {
-            auto *action = move->addAction(name);
-            action->setCheckable(true);
-            action->setChecked(record.folderId == folderId);
-            action->setEnabled(record.folderId != folderId);
-            connect(action,&QAction::triggered,this,[this,record,folderId]{
-                QString error;
-                if (!database_->setWorkRecordFolder(record.id,folderId,&error)) { showError(error); return; }
-                {
-                    const QSignalBlocker blocker(search_);
-                    search_->clear();
-                }
-                if (folderId > 0) {
-                    auto expanded = database_->setting(expandedFoldersKey(current_.id)).split(',',Qt::SkipEmptyParts);
-                    if (!expanded.contains(QString::number(folderId))) expanded.append(QString::number(folderId));
-                    database_->setSetting(expandedFoldersKey(current_.id),expanded.join(','));
-                }
-                refreshWorkRecords();
-                if (workList_->currentItem()) workList_->scrollToItem(workList_->currentItem());
-            });
-        };
-        addDestination(QStringLiteral("项目顶层"),0);
-        if (!folders.isEmpty()) move->addSeparator();
-        for (const auto &folder : folders) addDestination(QString(folder.name).replace('&',QStringLiteral("&&")),folder.id);
         menu.addSeparator();
         menu.addAction(QStringLiteral("删除记录…"),this,&ProjectsPage::deleteWorkRecord);
     } else {

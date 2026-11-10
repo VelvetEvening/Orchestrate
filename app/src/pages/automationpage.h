@@ -101,7 +101,6 @@ private:
     int builtinToolGroupId();
     void syncBuiltinTools();
     void reloadManifest();
-    void moveToolToGroup(int toolId, int groupId);
     void deleteTool();
     void startAsyncWslStateRead(const AppDatabase::AutomationTool &tool, bool updateVisibleState);
     void startAsyncSshStateRead(const AppDatabase::AutomationTool &tool, bool updateVisibleState);

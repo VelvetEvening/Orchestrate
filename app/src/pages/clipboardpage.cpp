@@ -60,18 +60,41 @@ public:
         QDialog::reject();
     }
 };
-class ClipboardTree final : public SiblingOrderTree {
+class ClipboardTabs final : public QTabBar {
 public:
-    using SiblingOrderTree::SiblingOrderTree;
+    explicit ClipboardTabs(QWidget *parent) : QTabBar(parent) { setAcceptDrops(true); }
+    SiblingOrderTree *tree = nullptr;
 protected:
-    void startDrag(Qt::DropActions actions) override {
-        if (selectedItems().size()==1) SiblingOrderTree::startDrag(actions);
+    void dragEnterEvent(QDragEnterEvent *event) override { updateDrop(event); }
+    void dragMoveEvent(QDragMoveEvent *event) override { updateDrop(event); }
+    void dragLeaveEvent(QDragLeaveEvent *event) override { dropIndex_=-1; update(); event->accept(); }
+    void dropEvent(QDropEvent *event) override {
+        const int index=tabAt(event->position().toPoint());
+        dropIndex_=-1; update();
+        if (!tree || event->source()!=tree || !tree->isDragging() || index<0) { event->ignore(); return; }
+        QTreeWidgetItem destination;
+        destination.setData(0,TabNodeRole,true); destination.setData(0,TabRole,tabData(index));
+        if (tree->transferSelectionTo(&destination)) { event->setDropAction(Qt::MoveAction); event->accept(); }
+        else event->ignore();
     }
-    void keyPressEvent(QKeyEvent *event) override {
-        if (selectedItems().size()>1 && event->modifiers()==Qt::ControlModifier
-            && (event->key()==Qt::Key_Up || event->key()==Qt::Key_Down)) { event->accept(); return; }
-        SiblingOrderTree::keyPressEvent(event);
+    void paintEvent(QPaintEvent *event) override {
+        QTabBar::paintEvent(event);
+        if (dropIndex_<0) return;
+        QPainter painter(this); painter.setPen(QPen(QColor("#2563eb"),2));
+        painter.fillRect(tabRect(dropIndex_),QColor(37,99,235,24));
+        painter.drawRect(tabRect(dropIndex_).adjusted(1,1,-1,-1));
     }
+private:
+    void updateDrop(QDragMoveEvent *event) {
+        const int index=tabAt(event->position().toPoint());
+        QTreeWidgetItem destination;
+        destination.setData(0,TabNodeRole,true); destination.setData(0,TabRole,tabData(index));
+        if (tree && event->source()==tree && tree->isDragging() && index>=0 && tree->canTransferSelectionTo(&destination)) {
+            dropIndex_=index; event->setDropAction(Qt::MoveAction); event->accept();
+        } else { dropIndex_=-1; event->ignore(); }
+        update();
+    }
+    int dropIndex_=-1;
 };
 QLabel *label(const QString &text, const QString &name, QWidget *parent)
 {
@@ -105,7 +128,9 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
     layout->addLayout(header);
 
     auto *tabRow=new QHBoxLayout;
-    tabs_=new QTabBar(this); tabs_->setObjectName("clipboardTabs"); tabs_->setMovable(true); tabs_->setExpanding(false);
+    auto *dropTabs=new ClipboardTabs(this);
+    tabs_=dropTabs; tabs_->setObjectName("clipboardTabs"); tabs_->setMovable(true); tabs_->setExpanding(false);
+    tabs_->setIconSize(QSize(16,16));
     tabs_->setUsesScrollButtons(true); tabs_->setElideMode(Qt::ElideRight); tabs_->setContextMenuPolicy(Qt::CustomContextMenu);
     tabs_->setAccessibleName(QStringLiteral("剪贴板标签页"));
     tabs_->setStyleSheet(QStringLiteral("QTabBar::tab { padding: 9px 16px; margin-right: 3px; border-bottom: 2px solid transparent; color: #52627a; } QTabBar::tab:selected { color: #1d4ed8; border-bottom: 2px solid #2563eb; background: #eaf0ff; } QTabBar::tab:hover { background: #edf2fa; }"));
@@ -122,7 +147,7 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
     searchRow->addWidget(newFolder); layout->addLayout(searchRow);
 
     auto *contentSplit=new QSplitter(Qt::Vertical,this); contentSplit->setChildrenCollapsible(false);
-    items_=new ClipboardTree(contentSplit); items_->setObjectName("clipboardItems");
+    items_=new SiblingOrderTree(contentSplit); items_->setObjectName("clipboardItems"); dropTabs->tree=items_;
     synchronizeTreeAccessibility(items_);
     items_->setHeaderHidden(true); items_->header()->setStretchLastSection(true);
     items_->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -144,11 +169,10 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
     auto *actions=new QHBoxLayout; actions->setSpacing(6);
     auto *create=new QPushButton(QStringLiteral("新建"),this); create->setObjectName("clipboardNewItem");
     edit_=new QPushButton(QStringLiteral("编辑"),this); edit_->setObjectName("clipboardEditItem");
-    move_=new QPushButton(QStringLiteral("移动到…"),this); move_->setObjectName("clipboardMoveItems");
     remove_=new QPushButton(QStringLiteral("删除"),this); remove_->setObjectName("clipboardDeleteItems");
     copy_=new QPushButton(QStringLiteral("复制并收起"),this); copy_->setObjectName("primaryButton");
     copy_->setToolTip(QStringLiteral("复制选中条目并隐藏 Orchestrate，随后可手动 Ctrl+V。"));
-    actions->addWidget(create); actions->addWidget(edit_); actions->addWidget(move_); actions->addWidget(remove_); actions->addStretch(); actions->addWidget(copy_);
+    actions->addWidget(create); actions->addWidget(edit_); actions->addWidget(remove_); actions->addStretch(); actions->addWidget(copy_);
     layout->addLayout(actions);
     status_=label(QString(),"clipboardStatus",this); status_->setWordWrap(true); status_->setStyleSheet(QStringLiteral("color: #b42318;")); status_->hide(); layout->addWidget(status_);
 
@@ -157,7 +181,7 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
     connect(monitor_,&ClipboardMonitor::recorded,this,[this] {
         dirty_=true;
         status_->hide();
-        if (isVisible()) refreshTimer_->start();
+        if (isVisible() && !items_->isDragging()) refreshTimer_->start();
     });
     connect(monitor_,&ClipboardMonitor::captureError,this,&ClipboardPage::report);
     connect(listening_,&QCheckBox::toggled,this,[this](bool enabled) {
@@ -185,6 +209,48 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
             : database_->reorderClipboardItems(item->data(0,TabRole).toInt(),item->data(0,FolderIdRole).toInt(),ids,&error);
         if (!ok) report(error); return ok;
     };
+    items_->isContainer=[](QTreeWidgetItem *item) {
+        return item->data(0,FolderRole).toBool() || item->data(0,TabNodeRole).toBool();
+    };
+    items_->canTransfer=[this](const QList<QTreeWidgetItem *> &items,QTreeWidgetItem *destination) {
+        if ((!destination && searchScope_->currentIndex()==1)
+            || (destination && !items_->isContainer(destination))) return false;
+        const int targetTab=destination ? destination->data(0,TabRole).toInt() : tabId();
+        const int targetFolder=destination ? destination->data(0,FolderIdRole).toInt() : 0;
+        bool changed=false;
+        for (auto *item : items) {
+            if (!isEntry(item)) return false;
+            changed |= item->data(0,TabRole).toInt()!=targetTab || item->data(0,FolderIdRole).toInt()!=targetFolder;
+        }
+        return changed;
+    };
+    items_->saveTransfer=[this](const QList<QTreeWidgetItem *> &items,QTreeWidgetItem *destination) {
+        const int targetTab=destination ? destination->data(0,TabRole).toInt() : tabId();
+        const int targetFolder=destination ? destination->data(0,FolderIdRole).toInt() : 0;
+        QList<int> ids;
+        for (auto *item : items)
+            if (item->data(0,TabRole).toInt()!=targetTab || item->data(0,FolderIdRole).toInt()!=targetFolder)
+                ids.append(item->data(0,Qt::UserRole).toInt());
+        QString error;
+        if (!database_->moveClipboardItems(ids,targetTab,targetFolder,&error)) { report(error); return false; }
+        if (searchScope_->currentIndex()==0 && targetTab!=tabId()) {
+            for (int i=0;i<tabs_->count();++i) if (tabs_->tabData(i).toInt()==targetTab) { tabs_->setCurrentIndex(i); break; }
+        } else refreshItems();
+        items_->clearSelection();
+        for (QTreeWidgetItemIterator it(items_); *it; ++it) {
+            auto *item=*it;
+            if (item->data(0,FolderRole).toBool() || item->data(0,TabNodeRole).toBool()
+                || !ids.contains(item->data(0,Qt::UserRole).toInt())) continue;
+            for (auto *parent=item->parent(); parent; parent=parent->parent()) parent->setExpanded(true);
+            items_->setCurrentItem(item,0,QItemSelectionModel::NoUpdate); item->setSelected(true);
+        }
+        if (items_->currentItem()) items_->scrollToItem(items_->currentItem());
+        updatePreview(); status_->hide(); return true;
+    };
+    items_->dragActivityChanged=[this](bool active) {
+        if (active) refreshTimer_->stop();
+        else if (dirty_ || search_->text().trimmed()!=displayedSearch_) refreshItems();
+    };
     connect(items_,&QTreeWidget::itemExpanded,this,[this] { saveExpandedFolders(); updatePreview(); });
     connect(items_,&QTreeWidget::itemCollapsed,this,[this] { saveExpandedFolders(); updatePreview(); });
     connect(search_,&QLineEdit::textChanged,this,[this] { refreshTimer_->start(); });
@@ -198,7 +264,6 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
     connect(create,&QPushButton::clicked,this,[this] { editItem(true); });
     connect(edit_,&QPushButton::clicked,this,[this] { editItem(false); });
     connect(copy_,&QPushButton::clicked,this,&ClipboardPage::copySelected);
-    connect(move_,&QPushButton::clicked,this,&ClipboardPage::moveSelected);
     connect(remove_,&QPushButton::clicked,this,&ClipboardPage::deleteSelected);
     auto *enter=new QShortcut(QKeySequence(Qt::Key_Return),items_); enter->setContext(Qt::WidgetShortcut);
     connect(enter,&QShortcut::activated,this,[this] {
@@ -233,7 +298,8 @@ void ClipboardPage::refreshTabs(int selected)
         int current=0;
         for (const auto &tab : tabs) {
             const int index=tabs_->addTab(tab.name); tabs_->setTabData(index,tab.id);
-            tabs_->setTabToolTip(index,tab.history ? QStringLiteral("自动收集新复制的内容；拖动可调位。") : tab.name+QStringLiteral(" · 拖动调位，右键管理"));
+            if (tab.history) tabs_->setTabIcon(index,QIcon(QStringLiteral(":/icons/star.svg")));
+            tabs_->setTabToolTip(index,tab.history ? QStringLiteral("自动收纳复制的内容") : tab.name);
             if (tab.id==selected) current=index;
         }
         tabs_->setCurrentIndex(current);
@@ -290,10 +356,12 @@ void ClipboardPage::refreshItems()
     }
     if (!error.isEmpty()) { report(error); return; }
     displayedTabId_=tabId();
+    displayedSearch_=search;
     {
         const QSignalBlocker blocker(items_); items_->clear();
-        items_->orderingEnabled=!global && search.isEmpty();
-        items_->setDragEnabled(items_->orderingEnabled);
+        items_->orderingEnabled=search.isEmpty();
+        items_->transferEnabled=search.isEmpty();
+        items_->setDragEnabled(search.isEmpty());
         QHash<int,QTreeWidgetItem *> tabNodes,folderNodes;
         QSet<int> matchedFolders,matchedTabs;
         for (const auto &entry : entries) { matchedFolders.insert(entry.folderId); matchedTabs.insert(entry.tabId); }
@@ -306,6 +374,7 @@ void ClipboardPage::refreshItems()
             QTreeWidgetItem *tabNode=nullptr;
             if (global) {
                 tabNode=new QTreeWidgetItem(items_,{tab.name}); tabNode->setData(0,TabNodeRole,true); tabNode->setData(0,TabRole,tab.id);
+                if (tab.history) tabNode->setIcon(0,QIcon(QStringLiteral(":/icons/star.svg")));
                 tabNode->setExpanded(true); tabNodes.insert(tab.id,tabNode);
             }
             const auto savedExpanded=database_->setting(expandedKey(tab.id),QStringLiteral("*")).split(',');
@@ -331,7 +400,7 @@ void ClipboardPage::refreshItems()
             item->setData(0,TabRole,entry.tabId); item->setData(0,FolderIdRole,entry.folderId);
             item->setData(0,SiblingOrderScopeRole,QStringLiteral("items.%1.%2").arg(entry.tabId).arg(entry.folderId));
             item->setSizeHint(0,QSize(0,40)); item->setToolTip(0,caption);
-            if (selected.contains(entry.id)) { items_->setCurrentItem(item,QItemSelectionModel::NoUpdate); item->setSelected(true); }
+            if (selected.contains(entry.id)) { items_->setCurrentItem(item,0,QItemSelectionModel::NoUpdate); item->setSelected(true); }
         }
         items_->verticalScrollBar()->setValue(scroll);
     }
@@ -341,7 +410,7 @@ void ClipboardPage::refreshItems()
 void ClipboardPage::updateActions()
 {
     const auto ids=selectedIds(); const bool single=ids.size()==1;
-    copy_->setEnabled(single); edit_->setEnabled(single); move_->setEnabled(!ids.isEmpty()); remove_->setEnabled(!ids.isEmpty());
+    copy_->setEnabled(single); edit_->setEnabled(single); remove_->setEnabled(!ids.isEmpty());
 }
 
 void ClipboardPage::updatePreview()
@@ -397,12 +466,8 @@ void ClipboardPage::tabMenu(const QPoint &position)
     QMenu menu(this); auto *create=menu.addAction(QStringLiteral("新建标签页"));
     auto *rename=menu.addAction(QStringLiteral("重命名")); auto *remove=menu.addAction(QStringLiteral("删除标签页…"));
     rename->setEnabled(id!=1); remove->setEnabled(id!=1);
-    menu.addSeparator(); auto *left=menu.addAction(QStringLiteral("向左移动")); auto *right=menu.addAction(QStringLiteral("向右移动"));
-    left->setEnabled(index>0); right->setEnabled(index<tabs_->count()-1);
     const auto *action=menu.exec(tabs_->mapToGlobal(position)); QString error;
     if (action==create) addTab();
-    else if (action==left) tabs_->moveTab(index,index-1);
-    else if (action==right) tabs_->moveTab(index,index+1);
     else if (action==rename) {
         bool ok=false; const auto name=QInputDialog::getText(this,QStringLiteral("重命名标签页"),QStringLiteral("标签页名称"),QLineEdit::Normal,tabs_->tabText(index),&ok);
         if (ok) { if (!database_->renameClipboardTab(id,name,&error)) report(error); else refreshTabs(tabId()); }
@@ -435,10 +500,10 @@ void ClipboardPage::itemMenu(const QPoint &position)
 {
     if (const auto *item=items_->itemAt(position); item && item->data(0,FolderRole).toBool()) { folderMenu(position); return; }
     QMenu menu(this); auto *copy=menu.addAction(QStringLiteral("复制并收起")); auto *edit=menu.addAction(QStringLiteral("编辑"));
-    auto *move=menu.addAction(QStringLiteral("移动到…")); auto *remove=menu.addAction(QStringLiteral("删除…"));
-    const auto ids=selectedIds(); copy->setEnabled(ids.size()==1); edit->setEnabled(ids.size()==1); move->setEnabled(!ids.isEmpty()); remove->setEnabled(!ids.isEmpty());
+    auto *remove=menu.addAction(QStringLiteral("删除…"));
+    const auto ids=selectedIds(); copy->setEnabled(ids.size()==1); edit->setEnabled(ids.size()==1); remove->setEnabled(!ids.isEmpty());
     const auto *action=menu.exec(items_->viewport()->mapToGlobal(position));
-    if (action==copy) copySelected(); else if (action==edit) editItem(false); else if (action==move) moveSelected(); else if (action==remove) deleteSelected();
+    if (action==copy) copySelected(); else if (action==edit) editItem(false); else if (action==remove) deleteSelected();
 }
 
 void ClipboardPage::editItem(bool creating)
@@ -496,27 +561,6 @@ bool ClipboardPage::savePendingChanges()
 {
     if (editor_ && editor_->isVisible()) editor_->reject();
     return !editor_ || !editor_->isVisible();
-}
-
-void ClipboardPage::moveSelected()
-{
-    const auto ids=selectedIds(); if (ids.isEmpty()) return;
-    QDialog dialog(this); dialog.setWindowTitle(QStringLiteral("移动 %1 条内容").arg(ids.size()));
-    auto *layout=new QFormLayout(&dialog); auto *tabs=new QComboBox(&dialog); tabs->setObjectName("clipboardDestinationTab");
-    auto *folders=new QComboBox(&dialog); folders->setObjectName("clipboardDestinationFolder");
-    for (const auto &tab : database_->clipboardTabs()) tabs->addItem(tab.name,tab.id);
-    const auto load=[&] { folders->clear(); folders->addItem(QStringLiteral("标签页顶层"),0); for (const auto &folder : database_->clipboardFolders(tabs->currentData().toInt())) folders->addItem(folder.name,folder.id); };
-    connect(tabs,&QComboBox::currentIndexChanged,&dialog,load); tabs->setCurrentIndex(qMax(0,tabs->findData(tabId()))); load();
-    layout->addRow(QStringLiteral("标签页"),tabs); layout->addRow(QStringLiteral("文件夹"),folders);
-    auto *errorLabel=label(QString(),"clipboardMoveError",&dialog); errorLabel->setWordWrap(true); layout->addRow(errorLabel);
-    auto *buttons=new QDialogButtonBox(QDialogButtonBox::Ok|QDialogButtonBox::Cancel,&dialog); buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("移动")); buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消")); layout->addRow(buttons);
-    connect(buttons,&QDialogButtonBox::accepted,&dialog,[&] {
-        QString error;
-        if (!database_->moveClipboardItems(ids,tabs->currentData().toInt(),folders->currentData().toInt(),&error)) { errorLabel->setText(error); return; }
-        dialog.accept();
-    });
-    connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
-    if (dialog.exec()==QDialog::Accepted) { refreshItems(); status_->hide(); }
 }
 
 void ClipboardPage::deleteSelected()
