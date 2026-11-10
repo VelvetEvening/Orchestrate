@@ -1,5 +1,5 @@
 param(
-    [string]$ReleaseTag = 'v3.0.2',
+    [string]$ReleaseTag = 'v3.1.0',
     [string]$QtRoot = 'D:/CodeTools/Qt/Qt/6.11.2/mingw_64',
     [string]$MinGWRoot = 'D:/CodeTools/Qt/Qt/Tools/mingw1310_64',
     [string]$CMakeExe = 'D:/CodeTools/Qt/Qt/Tools/CMake_64/bin/cmake.exe',
@@ -104,7 +104,9 @@ try {
         compiler = 'MinGW GCC'; built_at_utc = [DateTime]::UtcNow.ToString('o') }
     Write-Utf8 (Join-Path $packageRoot 'build-info.json') (($info | ConvertTo-Json) + "`n")
 
-    foreach ($required in @('Orchestrate.exe', 'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Sql.dll', 'Qt6Network.dll',
+    foreach ($required in @('Orchestrate.exe', 'OrchestrateMath.exe',
+            'licenses/microtex/LICENSE', 'licenses/microtex/fonts/OFL.txt', 'licenses/tinyxml2/LICENSE.txt',
+            'Qt6Core.dll', 'Qt6Gui.dll', 'Qt6Widgets.dll', 'Qt6Sql.dll', 'Qt6Network.dll',
             'libgcc_s_seh-1.dll', 'libstdc++-6.dll', 'libwinpthread-1.dll', 'platforms/qwindows.dll',
             'sqldrivers/qsqlite.dll', 'tls/qschannelbackend.dll', 'updater/Update-Orchestrate.ps1',
             'tools/scheduled-shutdown/orchestrate-tool.json')) {

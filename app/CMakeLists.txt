@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Orchestrate VERSION 3.0.2 LANGUAGES CXX)
+project(Orchestrate VERSION 3.1.0 LANGUAGES CXX)
 
 configure_file(src/version.h.in generated/version.h @ONLY)
 
@@ -11,6 +11,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Qt6 6.11.2 REQUIRED COMPONENTS Widgets Sql Network)
+
+add_subdirectory(third_party)
+add_executable(OrchestrateMath WIN32 src/math/mathworker.cpp)
+target_link_libraries(OrchestrateMath PRIVATE OrchestrateMicroTeX Qt6::Gui)
+install(TARGETS OrchestrateMath RUNTIME DESTINATION bin)
 
 add_library(OrchestrateUpdate STATIC
     src/update/updatechecker.cpp src/update/updatechecker.h
@@ -37,7 +42,10 @@ add_library(OrchestrateText STATIC
     src/widgets/headingtext.h
     src/widgets/headingtextedit.cpp
     src/widgets/headingtextedit.h
+    src/widgets/mathtext.cpp src/widgets/mathtext.h
+    src/widgets/mathpreview.cpp src/widgets/mathpreview.h
 )
+add_dependencies(OrchestrateText OrchestrateMath)
 target_link_libraries(OrchestrateText PUBLIC Qt6::Widgets)
 target_include_directories(OrchestrateText PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 

@@ -1,6 +1,7 @@
 #include "headingtextedit.h"
 #include "headingtext.h"
 #include "textlayoutguard.h"
+#include "mathpreview.h"
 
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -14,11 +15,24 @@
 #include <QTextEdit>
 #include <QVBoxLayout>
 #include <QWheelEvent>
+#include <QMimeData>
+#include <QLabel>
+#include <QHBoxLayout>
 #include <QtMath>
 
 namespace {
 constexpr int PreviewTab = 0;
 constexpr int EditTab = 1;
+class FormulaPreview final : public QTextEdit {
+public:
+    using QTextEdit::QTextEdit;
+protected:
+    QMimeData *createMimeDataFromSelection() const override {
+        auto *data = new QMimeData;
+        data->setText(MathText::selectedText(textCursor()));
+        return data;
+    }
+};
 }
 
 HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
@@ -36,9 +50,16 @@ HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
         "QTabBar::tab:hover { background: #edf3ff; }"));
     tabs_->addTab(QStringLiteral("预览"));
     tabs_->addTab(QStringLiteral("编辑"));
+    tabs_->setTabToolTip(PreviewTab, QStringLiteral("标题与公式预览；行内公式用 $…$ 或 \\(…\\)，独立公式用 $$…$$ 或 \\[…\\]。"));
     // New content starts editable; existing documents explicitly select preview.
     tabs_->setCurrentIndex(EditTab);
-    layout->addWidget(tabs_);
+    auto *modes = new QHBoxLayout;
+    modes->addWidget(tabs_);
+    mathStatus_ = new QLabel(this);
+    mathStatus_->setObjectName(QStringLiteral("mathPreviewStatus"));
+    mathStatus_->setWordWrap(true);
+    modes->addWidget(mathStatus_, 1);
+    layout->addLayout(modes);
     pages_ = new QStackedWidget(this);
     // QTextEdit's default size hint is tall. Let embedded editors shrink while
     // retaining a usable text area, rather than forcing the surrounding form.
@@ -49,9 +70,9 @@ HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
     source_->setAccessibleName(QStringLiteral("正文原文"));
     source_->setTabChangesFocus(true);
     source_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
-    preview_ = new QTextEdit(pages_);
+    preview_ = new FormulaPreview(pages_);
     preview_->setObjectName(QStringLiteral("headingPreview"));
-    preview_->setAccessibleName(QStringLiteral("三级标题预览"));
+    preview_->setAccessibleName(QStringLiteral("标题与公式预览"));
     preview_->setReadOnly(true);
     preview_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored);
     preview_->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
@@ -64,9 +85,38 @@ HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
     layout->addWidget(pages_, 1);
     setMinimumHeight(170);
     setFocusProxy(source_);
+    math_ = new MathPreview(this);
+    connect(math_, &MathPreview::ready, this, [this] {
+        if (!isPreviewMode()) return;
+        auto *document = preview_->document();
+        const auto selection = preview_->textCursor();
+        const int position = MathText::expandedPosition(*document, selection.position());
+        const int anchor = MathText::expandedPosition(*document, selection.anchor());
+        const auto top = preview_->cursorForPosition(QPoint(0, 0));
+        const int topPosition = MathText::expandedPosition(*document, top.position());
+        const int topOffset = preview_->cursorRect(top).top();
+        HeadingText::render(*document, source_->toPlainText(), math_->images(), preview_->devicePixelRatioF());
+        QTextCursor cursor(document);
+        cursor.setPosition(MathText::collapsedPosition(*document, anchor));
+        cursor.setPosition(MathText::collapsedPosition(*document, position), QTextCursor::KeepAnchor);
+        preview_->setTextCursor(cursor);
+        cursor.setPosition(MathText::collapsedPosition(*document, topPosition));
+        auto *scroll = preview_->verticalScrollBar();
+        scroll->setValue(scroll->value() + preview_->cursorRect(cursor).top() - topOffset);
+        const auto rawText = source_->toPlainText();
+        const auto spans = MathText::spans(rawText);
+        bool fallback = false;
+        for (const auto &span : spans)
+            if (!math_->images().contains(rawText.mid(span.start, span.length))) { fallback = true; break; }
+        mathStatus_->setText(fallback ? QStringLiteral("部分公式暂未渲染，已保留原文") : QString());
+    });
     connect(tabs_, &QTabBar::currentChanged, this, [this](int index) {
         const bool preview = index == PreviewTab;
         if (preview) updatePreview();
+        else {
+            if (math_->pending()) { math_->cancel(); previewDirty_ = true; }
+            mathStatus_->clear();
+        }
         QWidget *page = preview ? static_cast<QWidget *>(preview_) : source_;
         pages_->setCurrentWidget(page);
         setFocusProxy(page);
@@ -74,6 +124,7 @@ HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
     });
     connect(source_, &QPlainTextEdit::textChanged, this, [this] {
         previewDirty_ = true;
+        if (!isPreviewMode()) math_->cancel();
         if (isPreviewMode()) updatePreview();
         emit textChanged();
     });
@@ -111,6 +162,9 @@ void HeadingTextEdit::updatePreview()
     preview_->document()->setDefaultFont(font);
     preview_->setLineWrapMode(TextLayoutGuard::hasLongLine(text) ? QTextEdit::NoWrap : QTextEdit::WidgetWidth);
     HeadingText::render(*preview_->document(), text);
+    const bool formulas = !MathText::spans(text).isEmpty();
+    mathStatus_->setText(formulas ? QStringLiteral("公式排版中…") : QString());
+    math_->request(text, font.pointSizeF() * preview_->logicalDpiY() / 72.0);
     // Inserting rendered text moves the viewer's cursor to the end. New content
     // starts at the top; an unchanged preview keeps its cursor and reading position.
     preview_->moveCursor(QTextCursor::Start);
@@ -149,10 +203,10 @@ void HeadingTextEdit::setTextPointSize(qreal requestedSize)
     const qreal newSize = qBound(6.0, requestedSize, 72.0);
     if (qFuzzyCompare(size, newSize)) return;
 
-    const int position = preview_->textCursor().position();
-    const int anchor = preview_->textCursor().anchor();
+    const int position = MathText::expandedPosition(*preview_->document(), preview_->textCursor().position());
+    const int anchor = MathText::expandedPosition(*preview_->document(), preview_->textCursor().anchor());
     const auto topCursor = preview_->cursorForPosition(QPoint(0, 0));
-    const int topPosition = topCursor.position();
+    const int topPosition = MathText::expandedPosition(*preview_->document(), topCursor.position());
     const int topOffset = preview_->cursorRect(topCursor).top();
 
     // Change only the display font, keeping the source text and undo history.
@@ -165,10 +219,10 @@ void HeadingTextEdit::setTextPointSize(qreal requestedSize)
 
     // Rendering headings rebuilds the preview; retain its selection and visible text.
     QTextCursor cursor(preview_->document());
-    cursor.setPosition(anchor);
-    cursor.setPosition(position, QTextCursor::KeepAnchor);
+    cursor.setPosition(MathText::collapsedPosition(*preview_->document(), anchor));
+    cursor.setPosition(MathText::collapsedPosition(*preview_->document(), position), QTextCursor::KeepAnchor);
     preview_->setTextCursor(cursor);
-    cursor.setPosition(topPosition);
+    cursor.setPosition(MathText::collapsedPosition(*preview_->document(), topPosition));
     auto *scroll = preview_->verticalScrollBar();
     scroll->setValue(scroll->value() + preview_->cursorRect(cursor).top() - topOffset);
 }

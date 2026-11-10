@@ -12,6 +12,9 @@
 #include <QTextCharFormat>
 #include <QTextCursor>
 #include <QTextDocument>
+#include <QTextImageFormat>
+#include <QBuffer>
+#include <QSet>
 #include <QTextOption>
 #include <QTimer>
 #include <QtMath>
@@ -98,7 +101,7 @@ private:
 };
 } // namespace
 
-void HeadingText::render(QTextDocument &document, const QString &source)
+void HeadingText::render(QTextDocument &document, const QString &source, const MathText::Images &images, qreal devicePixelRatio)
 {
     document.clear();
     document.setDocumentMargin(0);
@@ -109,10 +112,28 @@ void HeadingText::render(QTextDocument &document, const QString &source)
     QString normalized = source;
     normalized.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
     normalized.replace(QLatin1Char('\r'), QLatin1Char('\n'));
+    QHash<qsizetype, QString> formulaAt;
+    QSet<qsizetype> displayAt;
+    if (!images.isEmpty()) {
+        QString replaced;
+        qsizetype previous = 0;
+        for (const auto &span : MathText::spans(normalized)) {
+            const auto raw = normalized.mid(span.start, span.length);
+            if (!images.contains(raw)) continue;
+            replaced += normalized.mid(previous, span.start - previous);
+            formulaAt.insert(replaced.size(), raw);
+            if (span.display) displayAt.insert(replaced.size());
+            replaced += QChar::ObjectReplacementCharacter;
+            previous = span.start + span.length;
+        }
+        replaced += normalized.mid(previous);
+        normalized = replaced;
+    }
     const QStringList lines = normalized.split(QLatin1Char('\n'), Qt::KeepEmptyParts);
     QTextCursor cursor(&document);
     const QFont base = document.defaultFont();
     const qreal baseSize = base.pointSizeF() > 0 ? base.pointSizeF() : 10.0;
+    qsizetype lineOffset = 0;
     for (qsizetype i = 0; i < lines.size(); ++i) {
         const QString &line = lines.at(i);
         int start = 0;
@@ -120,6 +141,13 @@ void HeadingText::render(QTextDocument &document, const QString &source)
         QTextBlockFormat block;
         QTextCharFormat characters;
         characters.setFont(base);
+        const auto object = line.indexOf(QChar::ObjectReplacementCharacter);
+        if (object >= 0 && displayAt.contains(lineOffset + object)
+            && line.trimmed() == QString(QChar::ObjectReplacementCharacter)) {
+            block.setAlignment(Qt::AlignHCenter);
+            block.setTopMargin(8);
+            block.setBottomMargin(8);
+        }
         if (level > 0) {
             constexpr qreal scales[] {1.0, 1.6, 1.35, 1.15};
             block.setHeadingLevel(level);
@@ -135,7 +163,37 @@ void HeadingText::render(QTextDocument &document, const QString &source)
         }
         // Inserting text rather than parsing HTML prevents links, images, HTML
         // or other Markdown syntax from becoming active content.
-        cursor.insertText(level > 0 ? line.mid(start) : line, characters);
+        qsizetype part = level > 0 ? start : 0;
+        for (auto pos = part; pos < line.size(); ++pos) {
+            const auto raw = formulaAt.value(lineOffset + pos);
+            if (raw.isEmpty()) continue;
+            cursor.insertText(line.mid(part, pos - part), characters);
+            const auto original = images.value(raw);
+            const qreal scale = level > 0 ? characters.fontPointSize() / baseSize : 1.0;
+            const QSizeF logicalSize(original.width() / 3.0 * scale, original.height() / 3.0 * scale);
+            // QTextDocument downsamples images without a smooth-pixmap hint.
+            // Filter once at the viewport's actual pixel density to keep fine strokes.
+            const auto image = original.scaled(qMax(1, qRound(logicalSize.width() * devicePixelRatio)),
+                qMax(1, qRound(logicalSize.height() * devicePixelRatio)), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+            QByteArray png;
+            QBuffer buffer(&png);
+            buffer.open(QIODevice::WriteOnly);
+            image.save(&buffer, "PNG");
+            const auto url = QStringLiteral("data:image/png;base64,") + QString::fromLatin1(png.toBase64());
+            document.addResource(QTextDocument::ImageResource, QUrl(url), image);
+            QTextImageFormat format;
+            format.setName(url);
+            format.setWidth(logicalSize.width());
+            format.setHeight(logicalSize.height());
+            format.setVerticalAlignment(QTextCharFormat::AlignMiddle);
+            format.setProperty(QTextFormat::ImageAltText, raw);
+            format.setProperty(MathText::SourceProperty, raw);
+            format.setToolTip(raw);
+            cursor.insertImage(format);
+            part = pos + 1;
+        }
+        cursor.insertText(line.mid(part), characters);
+        lineOffset += line.size() + 1;
     }
 }
 

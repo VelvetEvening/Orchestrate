@@ -24,6 +24,15 @@ runtime licenses. Original notices are included in licenses/mingw/.
 https://gcc.gnu.org/onlinedocs/libstdc++/manual/license.html
 https://www.mingw-w64.org/
 
+Formula previews use MicroTeX (MIT, copyright Nano Michael) and tinyxml2 (zlib,
+copyright Lee Thomason), statically linked into the separate OrchestrateMath worker.
+MicroTeX source: https://github.com/NanoMichael/MicroTeX
+Commit: 0e3707f6dafebb121d98b53c64364d16fefe481d
+tinyxml2 source: https://github.com/leethomason/tinyxml2/tree/11.0.0
+Original notices and bundled font licenses are in licenses/microtex/ and
+licenses/tinyxml2/. Qt backend/resource integration changes are documented in
+app/third_party/README.md in the corresponding Orchestrate source.
+
 Orchestrate source for this binary is identified in build-info.json and available
 at https://github.com/VelvetEvening/Orchestrate . No additional license for the
 Orchestrate source is granted by this third-party notice.

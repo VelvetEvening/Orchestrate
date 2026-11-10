@@ -6,6 +6,8 @@ class QPlainTextEdit;
 class QStackedWidget;
 class QTabBar;
 class QTextEdit;
+class MathPreview;
+class QLabel;
 
 class HeadingTextEdit final : public QWidget
 {
@@ -41,5 +43,7 @@ private:
     QStackedWidget *pages_;
     QPlainTextEdit *source_;
     QTextEdit *preview_;
+    MathPreview *math_;
+    QLabel *mathStatus_;
     bool previewDirty_ = true;
 };
