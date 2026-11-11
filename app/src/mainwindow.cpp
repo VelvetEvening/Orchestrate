@@ -40,13 +40,6 @@
 
 namespace {
 
-QLabel *makeSectionLabel(const QString &text, QWidget *parent)
-{
-    auto *label = new QLabel(text, parent);
-    label->setObjectName(QStringLiteral("sectionLabel"));
-    return label;
-}
-
 QFrame *makeCard(QWidget *parent)
 {
     auto *card = new QFrame(parent);
@@ -121,9 +114,6 @@ void MainWindow::buildNavigation(QWidget *parent)
 
     auto *header = new QHBoxLayout;
     header->setSpacing(8);
-    brandLabel_ = new QLabel(QStringLiteral("Orchestrate"), parent);
-    brandLabel_->setObjectName(QStringLiteral("brand"));
-    header->addWidget(brandLabel_);
     header->addStretch(1);
     sidebarToggleButton_ = new QPushButton(parent);
     sidebarToggleButton_->setObjectName(QStringLiteral("sidebarToggle"));
@@ -136,9 +126,7 @@ void MainWindow::buildNavigation(QWidget *parent)
     sidebarLayout_->addLayout(header);
 
 
-    sidebarLayout_->addSpacing(12);
-    sectionLabel_ = makeSectionLabel(QStringLiteral("工作台"), parent);
-    sidebarLayout_->addWidget(sectionLabel_);
+    sidebarLayout_->addSpacing(6);
 
     const QStringList labels {
         QStringLiteral("时序记录"),
@@ -184,8 +172,6 @@ void MainWindow::toggleSidebar()
     }
 
     sidebar_->setFixedWidth(sidebarCollapsed_ ? 72 : 216);
-    brandLabel_->setVisible(!sidebarCollapsed_);
-    sectionLabel_->setVisible(!sidebarCollapsed_);
 
     for (QPushButton *button : navigationButtons_) {
         button->setText(sidebarCollapsed_ ? QString() : button->property("expandedText").toString());

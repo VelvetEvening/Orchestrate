@@ -52,8 +52,6 @@ private:
     QFrame *sidebar_ = nullptr;
     GlobalShortcut *globalShortcut_ = nullptr;
     QVBoxLayout *sidebarLayout_ = nullptr;
-    QLabel *brandLabel_ = nullptr;
-    QLabel *sectionLabel_ = nullptr;
     QPushButton *sidebarToggleButton_ = nullptr;
     QStackedWidget *pageStack_ = nullptr;
     QSystemTrayIcon *trayIcon_ = nullptr;

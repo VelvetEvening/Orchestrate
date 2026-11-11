@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-11T03:02:06.098392Z",
+  "generatedAt": "2026-11-11T03:22:34.668435Z",
   "title": "Design System: Orchestrate",
   "extensions": {
     "colorMeta": {
@@ -336,10 +336,6 @@
         "displayName": "page-title",
         "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
       },
-      "brand": {
-        "displayName": "brand",
-        "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
-      },
       "tool-title": {
         "displayName": "tool-title",
         "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
@@ -418,7 +414,7 @@
       "name": "侧栏导航",
       "kind": "nav",
       "refersTo": "navigation",
-      "description": "可折叠原生导航的展开态；示例展示当前模块。",
+      "description": "可折叠原生导航的展开态；不重复原生标题栏的应用名或工作台分组标签，示例展示当前模块。",
       "html": "<nav class=\"ds-nav\"><button class=\"ds-nav-button\" aria-current=\"page\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#637184\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"5\" width=\"16\" height=\"16\" rx=\"2\"/><path d=\"M8 3v4m8-4v4M4 10h16M8 14h2m4 0h2m-8 4h2\"/></svg><span>时序记录</span></button></nav>",
       "css": ".ds-nav{background:#f0f2f5;padding:14px;width:188px}.ds-nav-button{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;font-size:14px;display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;color:#344254;border:1px solid transparent;border-radius:7px;padding:10px 12px;min-height:20px}.ds-nav-button svg{width:19px;height:19px;flex-shrink:0}.ds-nav-button:hover{background:#e9edf3}.ds-nav-button[aria-current=\"page\"]{background:#e2eaf5;color:#41638f;font-weight:600}.ds-nav-button:focus-visible{outline:none;border-color:#7895bc}"
     },
@@ -434,7 +430,7 @@
       "name": "内容卡片",
       "kind": "card",
       "refersTo": "card",
-      "description": "白色工作面；示例使用项目详情的内边距。",
+      "description": "白色工作面；示例使用项目详情内边距。实际项目行高 44px，名称旁为 18px 状态图标，状态文字保留于工具提示与可访问名称；项目设置位于右键菜单末项。",
       "html": "<section class=\"ds-card\"><h3 class=\"ds-card-title\">项目记录</h3><p class=\"ds-card-copy\">查找、阅读和编辑工作内容。</p></section>",
       "css": ".ds-card{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;background:#fff;color:#344254;border:1px solid #e1e6ed;border-radius:10px;padding:18px 22px}.ds-card-title{font-size:15px;font-weight:600;margin:0 0 12px}.ds-card-copy{margin:0}"
     },
@@ -450,7 +446,7 @@
       "name": "选中日期",
       "kind": "custom",
       "refersTo": "calendar-selected",
-      "description": "日历日期最大尺寸静态示例；日记方块与提醒三角形来自原生绘制几何。",
+      "description": "日历日期最大尺寸静态示例；标记来自原生绘制几何。右侧直接呈现提醒与日记，列表可访问名称包含日期，不重复日期和条数摘要。",
       "html": "<div class=\"ds-date\" aria-label=\"选中日期 11，含日记和提醒\"><span class=\"ds-date-number\">11</span><svg class=\"ds-date-marks\" width=\"24\" height=\"8\" viewBox=\"0 0 24 8\" aria-hidden=\"true\"><rect x=\"3\" y=\"1\" width=\"6\" height=\"6\" rx=\"1\" fill=\"#386b50\"/><path d=\"M18 .5 14.5 7 21.5 7Z\" fill=\"#87611e\"/></svg></div>",
       "css": ".ds-date{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;font-size:11pt;position:relative;width:44px;height:44px;border:1px solid #e7eef8;border-radius:10px;background:#e7eef8;color:#41638f;font-weight:700}.ds-date-number{position:absolute;inset:0 0 6px;display:flex;align-items:center;justify-content:center}.ds-date-marks{position:absolute;left:10px;bottom:2px}"
     },
@@ -490,7 +486,7 @@
     ],
     "dos": [
       "Do 从 `UiTheme` 与全局 QSS 复用颜色和状态；新增独立窗口同样安装全局主题。",
-      "Do 为导航与图标操作保留可访问名称、工具提示和键盘焦点；状态同时使用明确文字。",
+      "Do 为导航与图标操作保留可访问名称、工具提示和键盘焦点；状态通过可见文字、工具提示或可访问名称保留明确语义。",
       "Do 在主窗口最小尺寸下检查长标题换行、表单收缩、滚动区和可见操作；中文正文优先保持阅读面积。",
       "Do 保留现有应用图标与更新标记，新增通用操作沿用 SVG 线性图标。"
     ],

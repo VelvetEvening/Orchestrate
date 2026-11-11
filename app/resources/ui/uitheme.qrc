@@ -15,5 +15,7 @@
     <file>icons/play.svg</file>
     <file>icons/refresh.svg</file>
     <file>icons/document.svg</file>
+    <file>icons/project-active.svg</file>
+    <file>icons/project-complete.svg</file>
   </qresource>
 </RCC>

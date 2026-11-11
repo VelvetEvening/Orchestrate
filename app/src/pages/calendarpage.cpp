@@ -119,14 +119,6 @@ CalendarPage::CalendarPage(AppDatabase *database,
     detailsLayout->setContentsMargins(20, 18, 20, 18);
     detailsLayout->setSpacing(10);
 
-    detailsLayout->addWidget(makeCardTitle(QStringLiteral("当天记录"), detailsCard));
-    selectedDateLabel_ = new QLabel(detailsCard);
-    selectedDateLabel_->setObjectName(QStringLiteral("muted"));
-    detailsLayout->addWidget(selectedDateLabel_);
-    summaryLabel_ = new QLabel(detailsCard);
-    summaryLabel_->setObjectName(QStringLiteral("muted"));
-    detailsLayout->addWidget(summaryLabel_);
-
     detailsLayout->addWidget(makeCardTitle(QStringLiteral("提醒事项"), detailsCard));
     reminderList_ = new QListWidget(detailsCard);
     reminderList_->setObjectName(QStringLiteral("reminderList"));
@@ -230,7 +222,9 @@ CalendarPage::CalendarPage(AppDatabase *database,
 
 void CalendarPage::updateSelectedDate(const QDate &date)
 {
-    selectedDateLabel_->setText(date.toString(QStringLiteral("yyyy 年 MM 月 dd 日")));
+    const QString dateText = date.toString(QStringLiteral("yyyy 年 MM 月 dd 日"));
+    reminderList_->setAccessibleName(dateText + QStringLiteral(" 提醒事项"));
+    diaryList_->setAccessibleName(dateText + QStringLiteral(" 日记"));
     refreshReminderList();
     refreshDiaryList();
 }
@@ -299,9 +293,6 @@ void CalendarPage::refreshReminderList()
     }
     EmptyViewHint::update(reminderList_, reminderList_->count() ? QString()
         : QStringLiteral("当天没有提醒\n点击“添加提醒”安排事项"));
-    summaryLabel_->setText(QStringLiteral("提醒 %1 条 · 日记 %2 条")
-                               .arg(reminderList_->count())
-                               .arg(diaryList_ == nullptr ? 0 : diaryList_->count()));
 }
 
 AppDatabase::Reminder CalendarPage::selectedReminder() const
@@ -566,9 +557,6 @@ void CalendarPage::refreshDiaryList()
                                       entry.updatedAt.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm"))));
         }
     }
-    summaryLabel_->setText(QStringLiteral("提醒 %1 条 · 日记 %2 条")
-                               .arg(reminderList_ == nullptr ? 0 : reminderList_->count())
-                               .arg(entries.size()));
 }
 
 AppDatabase::DiaryEntry CalendarPage::selectedEntry() const

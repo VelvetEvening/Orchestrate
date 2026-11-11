@@ -54,8 +54,6 @@ private:
 
     AppDatabase *database_ = nullptr;
     QCalendarWidget *calendar_ = nullptr;
-    QLabel *selectedDateLabel_ = nullptr;
-    QLabel *summaryLabel_ = nullptr;
     QListWidget *reminderList_ = nullptr;
     QListWidget *diaryList_ = nullptr;
     QPushButton *editReminderButton_ = nullptr;

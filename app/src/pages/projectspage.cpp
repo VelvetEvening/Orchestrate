@@ -41,6 +41,16 @@ constexpr int StarredRole = Qt::UserRole + 3;
 QString projectStatus(bool completed) {
     return completed ? QStringLiteral("已完结") : QStringLiteral("进行中");
 }
+void updateProjectStatus(QListWidgetItem *item, bool completed) {
+    const QString name = item->data(Qt::UserRole + 3).toString();
+    const QString directory = item->data(Qt::UserRole + 1).toString();
+    item->setData(Qt::UserRole + 2, completed);
+    item->setIcon(UiTheme::icon(completed ? QStringLiteral("project-complete") : QStringLiteral("project-active")));
+    item->setData(Qt::AccessibleTextRole, name + QStringLiteral("，") + projectStatus(completed));
+    item->setToolTip(name + QStringLiteral("\n") + projectStatus(completed)
+        + QStringLiteral(" · 右键修改状态或打开项目设置")
+        + (directory.isEmpty() ? QString() : QStringLiteral("\n双击打开目录：") + QDir::toNativeSeparators(directory)));
+}
 QString expandedFoldersKey(int projectId) {
     return QStringLiteral("projects.%1.expanded_record_folders").arg(projectId);
 }
@@ -96,7 +106,8 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     };
     projectList_->setObjectName(QStringLiteral("projectList"));
     projectList_->setContextMenuPolicy(Qt::CustomContextMenu);
-    projectList_->setAccessibleDescription(QStringLiteral("拖动或 Ctrl+上或下箭头调整项目顺序；右键切换状态；双击打开目录"));
+    projectList_->setAccessibleDescription(QStringLiteral("拖动或 Ctrl+上或下箭头调整项目顺序；圆点表示进行中，勾选表示已完结；右键切换状态或打开项目设置；双击打开目录"));
+    projectList_->setIconSize(QSize(18,18));
     styleList(projectList_);
     left->addWidget(projectList_, 1);
     auto *create = new QPushButton(QStringLiteral("新建项目"), listCard);
@@ -120,8 +131,9 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     connect(outlineTitle_, &QPushButton::clicked, this, &ProjectsPage::openOutline);
     outlineTitle_->installEventFilter(this);
     header->addWidget(outlineTitle_);
-    auto *edit = new QPushButton(QStringLiteral("项目设置"), details_);
-    header->addWidget(edit);
+    auto *createFolder = new QPushButton(QStringLiteral("新建文件夹"), details_);
+    createFolder->setObjectName(QStringLiteral("createRecordFolder"));
+    header->addWidget(createFolder);
     detailsLayout_->addLayout(header);
 
     outlineWindow_ = new QDialog(this, Qt::Window);
@@ -145,12 +157,6 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     recordsPanel_->setObjectName(QStringLiteral("recordsPanel"));
     auto *records = new QVBoxLayout(recordsPanel_);
     records->setContentsMargins(0,0,0,0);
-    auto *recordHeader = new QHBoxLayout;
-    recordHeader->addWidget(label(QStringLiteral("协作记录"), QStringLiteral("cardTitle"), recordsPanel_),1);
-    auto *createFolder = new QPushButton(QStringLiteral("新建文件夹"), recordsPanel_);
-    createFolder->setObjectName(QStringLiteral("createRecordFolder"));
-    recordHeader->addWidget(createFolder);
-    records->addLayout(recordHeader);
     search_ = new QLineEdit(recordsPanel_);
     search_->setObjectName(QStringLiteral("recordSearch"));
     search_->setPlaceholderText(QStringLiteral("搜索标题、摘要或文件夹"));
@@ -225,7 +231,6 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     layout->addWidget(splitter,1);
 
     connect(create, &QPushButton::clicked, this, [this]{ projectDialog(true); });
-    connect(edit, &QPushButton::clicked, this, [this]{ projectDialog(false); });
     connect(projectList_, &QListWidget::customContextMenuRequested, this, &ProjectsPage::showProjectContextMenu);
     connect(projectList_, &QListWidget::currentRowChanged, this, [this](int row){
         if (row >= 0) selectProject(projectList_->item(row)->data(Qt::UserRole).toInt());
@@ -256,16 +261,13 @@ void ProjectsPage::loadProjects(int preferred)
     if (!error.isEmpty()) { showError(error); return; }
     int row = 0;
     for (const auto &project : projects) {
-        auto *item = new QListWidgetItem(project.name + QStringLiteral("\n") + projectStatus(project.completed), projectList_);
-        item->setSizeHint(QSize(0,64));
+        auto *item = new QListWidgetItem(project.name, projectList_);
+        item->setSizeHint(QSize(0,44));
         item->setData(Qt::UserRole,project.id);
         item->setData(SiblingOrderScopeRole, QStringLiteral("projects"));
         item->setData(Qt::UserRole + 1, project.directory);
-        item->setData(Qt::UserRole + 2, project.completed);
         item->setData(Qt::UserRole + 3, project.name);
-        item->setToolTip(project.name + QStringLiteral("\n") + projectStatus(project.completed)
-            + QStringLiteral(" · 右键修改状态")
-            + (project.directory.isEmpty() ? QString() : QStringLiteral("\n双击打开目录：") + QDir::toNativeSeparators(project.directory)));
+        updateProjectStatus(item, project.completed);
         if (project.id == preferred) row = projectList_->count()-1;
     }
     EmptyViewHint::update(projectList_, projects.isEmpty()
@@ -302,15 +304,15 @@ void ProjectsPage::showProjectContextMenu(const QPoint &position)
             if (completed == value) return;
             QString error;
             if (!database_->setProjectCompleted(id, value, &error)) { showError(error); return; }
-            const QString name = item->data(Qt::UserRole + 3).toString();
-            const QString directory = item->data(Qt::UserRole + 1).toString();
-            item->setData(Qt::UserRole + 2, value);
-            item->setText(name + QStringLiteral("\n") + projectStatus(value));
-            item->setToolTip(name + QStringLiteral("\n") + projectStatus(value) + QStringLiteral(" · 右键修改状态")
-                + (directory.isEmpty() ? QString() : QStringLiteral("\n双击打开目录：") + QDir::toNativeSeparators(directory)));
+            updateProjectStatus(item, value);
             if (current_.id == id) current_.completed = value;
         });
     }
+    menu.addSeparator();
+    menu.addAction(UiTheme::icon(QStringLiteral("settings")), QStringLiteral("项目设置"), this, [this, item, id] {
+        projectList_->setCurrentItem(item);
+        if (current_.id == id) projectDialog(false);
+    });
     menu.exec(projectList_->viewport()->mapToGlobal(position));
 }
 
