@@ -208,7 +208,7 @@ components:
 - 工作面无外围卡片间隙和圆角，控件保留小圆角；以底色、共享细边界和内部留白建立层级，不使用自定义投影。
 - 导航、输入、保存反馈与工具运行状态共享语义。
 
-依据：`app/src/ui/theme.h`、`theme.cpp`、`app/resources/ui/light.qss`、`app/src/mainwindow.cpp`、页面与共享控件实现。产品约束见 `PRODUCT.md`；浅色主题背景见 `docs/development/light-ui.md`，连续分区方向与本地验收范围见 `docs/development/seamless-workspace.md`。本文记录已获认可方向在当前分支的实现，不表示已合入或发布。前置 token 是规范值，Qt 实现是最终渲染依据。
+依据：`app/src/ui/theme.h`、`theme.cpp`、`app/resources/ui/light.qss`、`app/src/mainwindow.cpp`、页面与共享控件实现。产品约束见 `PRODUCT.md`；浅色主题背景见 `docs/development/light-ui.md`，连续分区方向与验收范围见 `docs/development/seamless-workspace.md`。本文记录用户已验收的 v3.2.2 实现。前置 token 是规范值，Qt 实现是最终渲染依据。
 
 ## Colors
 

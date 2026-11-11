@@ -7,7 +7,7 @@ related_targets: ["app/src/pages/calendarpage.cpp","app/src/pages/projectspage.c
 
 # 连续分区工作台
 
-分支：`design/seamless-workspace`，基于 v3.2.1。用户已认可交互样例的视觉方向并要求正式实现；本轮交付本地验收副本，等待用户验收后再合入、推送和发布。
+开发分支：`design/seamless-workspace`，基于 v3.2.1。用户已于 2026-11-11 验收连续分区与独立顶栏，并授权合入、推送和发布；本次版本为 v3.2.2。
 
 ## Direction contract
 
@@ -28,4 +28,4 @@ FINISH：unreviewed and undocumented is unfinished; this build ends with the fin
 - 仅调整布局、绘制和视觉角色，不改变数据结构或后台任务策略。
 - 顶栏使用普通 QFrame 与统一主题样式，无分区跟踪、轮询、动画或常驻后台任务；保留现有 Windows 标题区域修复。
 - 原型中的示例数据不写入实际用户数据库。验收副本独立存放，使用合成数据并默认关闭监听、快捷键与自动更新。
-- 版本号与发布记录保持 v3.2.1，待验收后按用户指示发布。
+- 验收阶段版本保持 v3.2.1；用户验收后将正式版本更新为 v3.2.2。

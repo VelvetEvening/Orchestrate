@@ -1,6 +1,6 @@
 # 连续分区工作台
 
-分支：`design/seamless-workspace`，基于 v3.2.1。用户已认可交互样例的视觉方向并要求正式实现；本轮交付本地验收副本，等待用户验收后再合入、推送和发布。
+开发分支：`design/seamless-workspace`，基于 v3.2.1。用户已于 2026-11-11 验收连续分区与独立顶栏，并授权合入、推送和发布；本次版本为 v3.2.2。
 
 ## Direction contract
 
@@ -21,7 +21,7 @@ FINISH：unreviewed and undocumented is unfinished; this build ends with the fin
 - 仅调整布局、绘制和视觉角色，不改变数据结构或后台任务策略。
 - 顶栏使用普通 QFrame 与统一主题样式，无分区跟踪、轮询、动画或常驻后台任务；保留现有 Windows 标题区域修复。
 - 原型中的示例数据不写入实际用户数据库。验收副本独立存放，使用合成数据并默认关闭监听、快捷键与自动更新。
-- 版本号与发布记录保持 v3.2.1，待验收后按用户指示发布。
+- 验收阶段版本保持 v3.2.1；用户验收后将正式版本更新为 v3.2.2。
 
 ## 已完成实现
 
@@ -41,4 +41,5 @@ FINISH：unreviewed and undocumented is unfinished; this build ends with the fin
 - Computer Use 整窗截图确认三颗原生系统按钮可见，实际点击最大化与还原通过；控制会话已结束，验收副本保留打开。本次补齐此前因停止状态未完成的整窗目视核对。
 - 实际 Qt 截图保存在本地 `.impeccable/review/seamless/`；本次无交付栅格素材，也未运行不适用的 HTML/CSS 检测器。
 - 验收副本：`app/build-qt/seamless-workspace-preview/Orchestrate.exe`。独立合成数据库、只读示例工具、默认关闭剪贴板监听、全局快捷键及自动更新；未读取或改动正在使用的便携数据库。
-- 待用户验收；尚未合入 main、推送或发布。
+- 用户验收通过，正式版本与变化见 [v3.2.2 发布说明](../releases/v3.2.2.md)。正式包从干净提交构建，排除验收数据库、工具状态及本地测试产物。
+- v3.2.2 版本更新后完整构建及 22 组 CTest 回归全部通过（82.58 秒）；发布准备未追加界面功能，运行时版本与 Windows 文件属性版本均为 3.2.2。

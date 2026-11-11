@@ -2,7 +2,7 @@
 
 Orchestrate 是基于 C++17、Qt 6 Widgets 和 SQLite 的 Windows 桌面工作台。产品统一使用 Orchestrate 名称。
 
-当前版本为 **v3.2.1 紧凑布局与顶栏修复**。沿用浅灰/白色/雾蓝主题，将侧栏开关融入 Windows 顶栏并移除重复标题；剪贴板监听与历史设置集中在右下角，自动化工具移除周期刷新设置及后台轮询。完整变化见 [v3.2.1 发布说明](../docs/releases/v3.2.1.md)，开发及验收过程见 [页面布局调整](../docs/development/page-layout.md)。
+当前版本为 **v3.2.2 连续分区工作台**。五个主页面取消外围卡片间隙，以浅灰导航、灰白索引和白色正文直接衔接；顶部使用独立统一的窗口操作栏，左侧收起/展开，右侧保留原生窗口按钮。完整变化见 [v3.2.2 发布说明](../docs/releases/v3.2.2.md)，开发及验收过程见 [连续分区工作台](../docs/development/seamless-workspace.md)。
 
 v3.1.0 为记录预览加入离线公式排版：支持 `\(…\)`、`\[…\]`、`$…$` 和 `$$…$$`，覆盖分数、上下标、求和、矩阵与中文注释。公式异步生成，编辑与保存保留原文，预览中复制公式仍得到 LaTeX 文本。数据库仍为 schema v7。完整变化见 [v3.1.0 发布说明](../docs/releases/v3.1.0.md)，写法见 [公式示例](../docs/math-preview.md)。
 
@@ -59,9 +59,9 @@ $env:PATH = "$qtRoot/bin;D:/CodeTools/Qt/Qt/Tools/mingw1310_64/bin;$env:PATH"
 
 ## Windows 便携包
 
-从仓库根目录运行 `./app/package.ps1 -ReleaseTag v3.2.1`。需要已提交且干净的工作树、Qt/MinGW/CMake/Ninja，以及与 Qt 对应的源码目录（用于收集第三方许可说明）；工具安装路径均支持脚本参数覆盖。
+从仓库根目录运行 `./app/package.ps1 -ReleaseTag v3.2.2`。需要已提交且干净的工作树、Qt/MinGW/CMake/Ninja，以及与 Qt 对应的源码目录（用于收集第三方许可说明）；工具安装路径均支持脚本参数覆盖。
 
-脚本先检查输出目录已被 Git 忽略，再从 `git archive HEAD` 解出源码，在 `dist/work-*` 中全新 Release 构建（不包含本地测试）。发布前先在 `app/build-qt` 执行本地回归；发布验证完成后可删除 `dist/work-*` 临时目录，只保留发布产物。仅安装程序、更新器与内置工具，再收集 Qt、MinGW 运行库、SQLite 插件、Windows Schannel TLS 插件及许可说明。最终生成 `dist/Orchestrate-v3.2.1-windows-x64.zip` 和 `.zip.sha256`，以及本机构建记录 `.build.json`。ZIP 内含源码提交信息和逐文件校验清单，用户完整解压即可运行。已有同名 ZIP 时拒绝覆盖；可通过 `-OutputDir` 指定另一个已忽略目录。
+脚本先检查输出目录已被 Git 忽略，再从 `git archive HEAD` 解出源码，在 `dist/work-*` 中全新 Release 构建（不包含本地测试）。发布前先在 `app/build-qt` 执行本地回归；发布验证完成后可删除 `dist/work-*` 临时目录，只保留发布产物。仅安装程序、更新器与内置工具，再收集 Qt、MinGW 运行库、SQLite 插件、Windows Schannel TLS 插件及许可说明。最终生成 `dist/Orchestrate-v3.2.2-windows-x64.zip` 和 `.zip.sha256`，以及本机构建记录 `.build.json`。ZIP 内含源码提交信息和逐文件校验清单，用户完整解压即可运行。已有同名 ZIP 时拒绝覆盖；可通过 `-OutputDir` 指定另一个已忽略目录。
 
 应用运行时版本和 Windows 文件属性版本统一由 CMake 的 `project(... VERSION ...)` 生成。打包会校验版本、必要运行库和个人数据排除，不启动内置工具，不修改现用数据库或开机启动配置；真正无 Qt 的干净 Windows 系统验收仍应在发布前完成。
 
