@@ -28,6 +28,7 @@
 #include <QVBoxLayout>
 #include <QUrl>
 #include <QWidget>
+#include <QWindow>
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -76,6 +77,25 @@ MainWindow::MainWindow(QWidget *parent, std::unique_ptr<AutoStart> autoStart)
     globalShortcut_ = new GlobalShortcut(this);
     connect(globalShortcut_, &GlobalShortcut::activated, this, &MainWindow::showMainWindow);
     buildUi();
+#ifdef Q_OS_WIN
+    if (QApplication::platformName() == QStringLiteral("windows")) {
+        // Extend the page header into the caption while Qt keeps the window
+        // buttons, resize borders, system dragging and maximize behavior.
+        setWindowFlags(windowFlags() | Qt::CustomizeWindowHint
+                       | Qt::ExpandedClientAreaHint | Qt::NoTitleBarBackgroundHint);
+        setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, false);
+        winId();
+        // QWidget adds WindowTitleHint when window buttons are requested.
+        // Clear it on QWindow so the caption does not paint an app name/icon.
+        // Keep windowTitle() for taskbar / Alt+Tab identification.
+        windowHandle()->setFlag(Qt::WindowTitleHint, false);
+        const int captionHeight = qMax(32, windowHandle()->safeAreaMargins().top());
+        auto *header = findChild<QFrame *>(QStringLiteral("windowHeader"));
+        header->setFixedHeight(captionHeight);
+        // Qt's Windows caption buttons are each 1.5 times the caption height.
+        header->layout()->setContentsMargins(18, 0, captionHeight * 9 / 2 + 12, 0);
+    }
+#endif
     buildTray();
     switchToPage(0);
 }
@@ -91,13 +111,14 @@ void MainWindow::buildUi()
 
     auto *header = new QFrame(root);
     header->setObjectName(QStringLiteral("windowHeader"));
+    header->setFixedHeight(32);
     auto *headerLayout = new QHBoxLayout(header);
-    headerLayout->setContentsMargins(18, 12, 24, 12);
+    headerLayout->setContentsMargins(18, 0, 24, 0);
     headerLayout->setSpacing(12);
     sidebarToggleButton_ = new QPushButton(header);
     sidebarToggleButton_->setObjectName(QStringLiteral("sidebarToggle"));
     sidebarToggleButton_->setIcon(UiTheme::icon(QStringLiteral("panel-left")));
-    sidebarToggleButton_->setIconSize(QSize(20, 20));
+    sidebarToggleButton_->setIconSize(QSize(18, 18));
     sidebarToggleButton_->setToolTip(QStringLiteral("收起侧边栏"));
     sidebarToggleButton_->setAccessibleName(QStringLiteral("收起侧边栏"));
     sidebarToggleButton_->setCursor(Qt::PointingHandCursor);
