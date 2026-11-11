@@ -17,7 +17,8 @@ class QTimer;
 class ClipboardPage final : public QWidget {
     Q_OBJECT
 public:
-    explicit ClipboardPage(AppDatabase *database, QWidget *parent=nullptr);
+    explicit ClipboardPage(AppDatabase *database, QWidget *parent=nullptr,
+                           QWidget *headerActionsParent=nullptr);
     bool savePendingChanges();
 signals:
     void hideRequested();

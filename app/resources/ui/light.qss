@@ -4,7 +4,8 @@ QMainWindow, QWidget#root, QWidget#settingsPage { background: @background@; }
 QDialog, QMessageBox, QInputDialog { background: @surface@; }
 QLabel { background: transparent; }
 QFrame#sidebar { background: @sidebar@; border: none; border-right: 1px solid @border@; }
-QLabel#pageTitle { color: @text@; font-size: 23px; font-weight: 600; }
+QFrame#windowHeader { background: @background@; border: none; border-bottom: 1px solid @border@; }
+QLabel#pageTitle { color: @text@; font-size: 19px; font-weight: 600; }
 QLabel#cardTitle { color: @text@; font-size: 15px; font-weight: 600; }
 QLabel#toolName { color: @text@; font-size: 19px; font-weight: 600; }
 QLabel#emptyStateTitle { color: @muted@; font-size: 17px; font-weight: 500; }
@@ -45,8 +46,9 @@ QPushButton#navButton { background: transparent; border: 1px solid transparent; 
 QPushButton#navButton:hover { background: #e9edf3; }
 QPushButton#navButton:checked { background: #e2eaf5; color: @accent@; font-weight: 600; }
 QPushButton#navButton:focus { border-color: @focus@; }
-QPushButton#sidebarToggle { background: transparent; padding: 0; min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; border-color: transparent; }
+QPushButton#sidebarToggle { background: transparent; padding: 0; min-width: 32px; max-width: 32px; min-height: 32px; max-height: 32px; border-color: transparent; }
 QPushButton#sidebarToggle:hover { background: #e2e8f0; }
+QPushButton#sidebarToggle:pressed { background: @selection@; }
 QPushButton#sidebarToggle:focus { border-color: @focus@; }
 QLineEdit, QPlainTextEdit, QTextEdit, QAbstractSpinBox, QComboBox {
     background: @surface@; color: @text@; border: 1px solid @controlBorder@;

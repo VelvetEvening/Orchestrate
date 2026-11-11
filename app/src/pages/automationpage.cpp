@@ -75,13 +75,6 @@ QFrame *makeCard(QWidget *parent)
     return card;
 }
 
-QLabel *makeTitle(const QString &text, QWidget *parent)
-{
-    auto *label = new QLabel(text, parent);
-    label->setObjectName(QStringLiteral("pageTitle"));
-    return label;
-}
-
 QLabel *makeCardTitle(const QString &text, QWidget *parent)
 {
     auto *label = new QLabel(text, parent);
@@ -245,10 +238,9 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
 
 
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(24, 24, 24, 24);
+    layout->setContentsMargins(24, 16, 24, 24);
     layout->setSpacing(16);
 
-    layout->addWidget(makeTitle(QStringLiteral("自动化工具"), this));
     auto *toolbar = new QHBoxLayout;
     toolbar->setSpacing(8);
     auto *newGroupButton = new QPushButton(QStringLiteral("新建工具组"), this);

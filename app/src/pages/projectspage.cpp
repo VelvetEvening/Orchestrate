@@ -86,9 +86,8 @@ void styleList(QListWidget *list) {
 ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(parent), database_(database)
 {
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(24, 24, 24, 24);
+    layout->setContentsMargins(24, 16, 24, 24);
     layout->setSpacing(18);
-    layout->addWidget(label(QStringLiteral("项目记录"), QStringLiteral("pageTitle"), this));
     auto *splitter = new QSplitter(this);
     splitter->setChildrenCollapsible(false);
     splitter->setHandleWidth(10);

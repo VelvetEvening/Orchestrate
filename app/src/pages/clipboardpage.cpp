@@ -109,18 +109,21 @@ QString itemTitle(const AppDatabase::ClipboardItem &item)
 }
 }
 
-ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(parent),database_(database)
+ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent, QWidget *headerActionsParent)
+    : QWidget(parent),database_(database)
 {
     setObjectName("clipboardPage");
     monitor_=new ClipboardMonitor(database_,this);
-    auto *layout=new QVBoxLayout(this); layout->setContentsMargins(24,24,24,24); layout->setSpacing(14);
-    auto *header=new QHBoxLayout;
-    header->addWidget(label(QStringLiteral("剪贴板"),"pageTitle",this)); header->addStretch();
-    listening_=new QCheckBox(QStringLiteral("监听剪贴板"),this); listening_->setObjectName("clipboardListening");
+    auto *layout=new QVBoxLayout(this); layout->setContentsMargins(24,16,24,24); layout->setSpacing(14);
+    auto *actionsParent=headerActionsParent ? headerActionsParent : new QWidget(this);
+    auto *header=new QHBoxLayout(actionsParent);
+    header->setContentsMargins(0,0,0,0); header->setSpacing(12);
+    if (!headerActionsParent) header->addStretch();
+    listening_=new QCheckBox(QStringLiteral("监听剪贴板"),actionsParent); listening_->setObjectName("clipboardListening");
     listening_->setToolTip(QStringLiteral("开启后自动记录新复制的内容；关闭后仍可使用已保存的条目。"));
     listening_->setChecked(monitor_->enabled()); header->addWidget(listening_);
-    auto *settings=new QPushButton(QStringLiteral("历史设置"),this); header->addWidget(settings);
-    layout->addLayout(header);
+    auto *settings=new QPushButton(QStringLiteral("历史设置"),actionsParent); header->addWidget(settings);
+    if (!headerActionsParent) layout->addWidget(actionsParent);
 
     auto *tabRow=new QHBoxLayout;
     auto *dropTabs=new ClipboardTabs(this);

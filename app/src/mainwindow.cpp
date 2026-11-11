@@ -85,48 +85,56 @@ void MainWindow::buildUi()
     auto *root = new QWidget(this);
     root->setObjectName(QStringLiteral("root"));
 
-    auto *rootLayout = new QHBoxLayout(root);
+    auto *rootLayout = new QVBoxLayout(root);
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
 
+    auto *header = new QFrame(root);
+    header->setObjectName(QStringLiteral("windowHeader"));
+    auto *headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(18, 12, 24, 12);
+    headerLayout->setSpacing(12);
+    sidebarToggleButton_ = new QPushButton(header);
+    sidebarToggleButton_->setObjectName(QStringLiteral("sidebarToggle"));
+    sidebarToggleButton_->setIcon(UiTheme::icon(QStringLiteral("panel-left")));
+    sidebarToggleButton_->setIconSize(QSize(20, 20));
+    sidebarToggleButton_->setToolTip(QStringLiteral("收起侧边栏"));
+    sidebarToggleButton_->setAccessibleName(QStringLiteral("收起侧边栏"));
+    sidebarToggleButton_->setCursor(Qt::PointingHandCursor);
+    headerLayout->addWidget(sidebarToggleButton_);
+    pageTitle_ = new QLabel(header);
+    pageTitle_->setObjectName(QStringLiteral("pageTitle"));
+    headerLayout->addWidget(pageTitle_, 1);
+    headerActions_ = new QWidget(header);
+    headerActions_->setObjectName(QStringLiteral("pageHeaderActions"));
+    headerLayout->addWidget(headerActions_);
+    rootLayout->addWidget(header);
+    connect(sidebarToggleButton_, &QPushButton::clicked, this, &MainWindow::toggleSidebar);
+
+    auto *bodyLayout = new QHBoxLayout;
+    bodyLayout->setContentsMargins(0, 0, 0, 0);
+    bodyLayout->setSpacing(0);
     sidebar_ = new QFrame(root);
     sidebar_->setObjectName(QStringLiteral("sidebar"));
     sidebar_->setMinimumWidth(72);
     sidebar_->setMaximumWidth(260);
     sidebar_->setFixedWidth(216);
     buildNavigation(sidebar_);
-    rootLayout->addWidget(sidebar_);
+    bodyLayout->addWidget(sidebar_);
 
     pageStack_ = new QStackedWidget(root);
     pageStack_->setObjectName(QStringLiteral("pageStack"));
-    rootLayout->addWidget(pageStack_, 1);
+    bodyLayout->addWidget(pageStack_, 1);
+    rootLayout->addLayout(bodyLayout, 1);
 
     setCentralWidget(root);
-
-
 }
 
 void MainWindow::buildNavigation(QWidget *parent)
 {
     sidebarLayout_ = new QVBoxLayout(parent);
-    sidebarLayout_->setContentsMargins(14, 18, 14, 16);
+    sidebarLayout_->setContentsMargins(14, 16, 14, 16);
     sidebarLayout_->setSpacing(6);
-
-    auto *header = new QHBoxLayout;
-    header->setSpacing(8);
-    header->addStretch(1);
-    sidebarToggleButton_ = new QPushButton(parent);
-    sidebarToggleButton_->setObjectName(QStringLiteral("sidebarToggle"));
-    sidebarToggleButton_->setIcon(UiTheme::icon(QStringLiteral("chevron-left")));
-    sidebarToggleButton_->setIconSize(QSize(18, 18));
-    sidebarToggleButton_->setToolTip(QStringLiteral("收起侧边栏"));
-    sidebarToggleButton_->setAccessibleName(QStringLiteral("收起侧边栏"));
-    sidebarToggleButton_->setCursor(Qt::PointingHandCursor);
-    header->addWidget(sidebarToggleButton_);
-    sidebarLayout_->addLayout(header);
-
-
-    sidebarLayout_->addSpacing(6);
 
     const QStringList labels {
         QStringLiteral("时序记录"),
@@ -145,6 +153,7 @@ void MainWindow::buildNavigation(QWidget *parent)
         auto *button = new QPushButton(labels.at(i), parent);
         button->setObjectName(QStringLiteral("navButton"));
         button->setProperty("expandedText", labels.at(i));
+        button->setProperty("pageTitle", labels.at(i));
         button->setCheckable(true);
         button->setAutoExclusive(true);
         button->setIcon(UiTheme::icon(icons.at(i)));
@@ -161,7 +170,6 @@ void MainWindow::buildNavigation(QWidget *parent)
         });
     }
 
-    connect(sidebarToggleButton_, &QPushButton::clicked, this, &MainWindow::toggleSidebar);
 }
 
 void MainWindow::toggleSidebar()
@@ -182,8 +190,6 @@ void MainWindow::toggleSidebar()
                                   : QString());
     }
 
-    sidebarToggleButton_->setIcon(UiTheme::icon(sidebarCollapsed_
-        ? QStringLiteral("chevron-right") : QStringLiteral("chevron-left")));
     sidebarToggleButton_->setAccessibleName(sidebarCollapsed_ ? QStringLiteral("展开侧边栏") : QStringLiteral("收起侧边栏"));
     sidebarToggleButton_->setToolTip(sidebarCollapsed_ ? QStringLiteral("展开侧边栏")
                                                        : QStringLiteral("收起侧边栏"));
@@ -244,20 +250,15 @@ void MainWindow::switchToPage(int index)
         auto *automationPage = new AutomationPage(&database_, pageStack_);
         pageStack_->addWidget(automationPage);
 
-        auto *clipboardPage = new ClipboardPage(&database_, pageStack_);
+        auto *clipboardPage = new ClipboardPage(&database_, pageStack_, headerActions_);
         pageStack_->addWidget(clipboardPage);
         connect(clipboardPage, &ClipboardPage::hideRequested, this, [this] { hide(); });
 
         auto *settingsPage = new QWidget(pageStack_);
         settingsPage->setObjectName(QStringLiteral("settingsPage"));
         auto *settingsLayout = new QVBoxLayout(settingsPage);
-        settingsLayout->setContentsMargins(24, 24, 24, 24);
+        settingsLayout->setContentsMargins(24, 16, 24, 24);
         settingsLayout->setSpacing(18);
-
-        auto *settingsTitle = new QLabel(QStringLiteral("设置"), settingsPage);
-        settingsTitle->setObjectName(QStringLiteral("pageTitle"));
-        settingsLayout->addWidget(settingsTitle);
-
 
         auto *settingsCard = makeCard(settingsPage);
         auto *settingsCardLayout = new QVBoxLayout(settingsCard);
@@ -340,6 +341,15 @@ void MainWindow::switchToPage(int index)
         settingsScroll->setFrameShape(QFrame::NoFrame);
         settingsScroll->setWidget(settingsPage);
         pageStack_->addWidget(settingsScroll);
+        // Header actions precede navigation in the visible keyboard order.
+        const auto headerControls = headerActions_->findChildren<QWidget *>();
+        QWidget *previous = sidebarToggleButton_;
+        for (QWidget *control : headerControls) {
+            if (control->focusPolicy() == Qt::NoFocus) continue;
+            QWidget::setTabOrder(previous, control);
+            previous = control;
+        }
+        QWidget::setTabOrder(previous, navigationButtons_.first());
         update->startAutomaticChecks();
     }
 
@@ -348,6 +358,8 @@ void MainWindow::switchToPage(int index)
     }
 
     pageStack_->setCurrentIndex(index);
+    pageTitle_->setText(navigationButtons_.at(index)->property("pageTitle").toString());
+    headerActions_->setVisible(index == 3);
     if (index == 4) refreshAutoStartSettings();
     for (int i = 0; i < navigationButtons_.size(); ++i) {
         navigationButtons_.at(i)->setChecked(i == index);

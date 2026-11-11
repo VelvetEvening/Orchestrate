@@ -41,13 +41,6 @@ QFrame *makeCard(QWidget *parent)
     return card;
 }
 
-QLabel *makeTitle(const QString &text, QWidget *parent)
-{
-    auto *label = new QLabel(text, parent);
-    label->setObjectName(QStringLiteral("pageTitle"));
-    return label;
-}
-
 QLabel *makeCardTitle(const QString &text, QWidget *parent)
 {
     auto *label = new QLabel(text, parent);
@@ -78,11 +71,8 @@ CalendarPage::CalendarPage(AppDatabase *database,
     , trayIcon_(trayIcon)
 {
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(24, 24, 24, 24);
+    layout->setContentsMargins(24, 16, 24, 24);
     layout->setSpacing(18);
-
-    layout->addWidget(makeTitle(QStringLiteral("时序记录"), this));
-
 
     auto *contentLayout = new QHBoxLayout;
     contentLayout->setSpacing(18);

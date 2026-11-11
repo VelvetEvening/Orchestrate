@@ -53,6 +53,8 @@ private:
     GlobalShortcut *globalShortcut_ = nullptr;
     QVBoxLayout *sidebarLayout_ = nullptr;
     QPushButton *sidebarToggleButton_ = nullptr;
+    QLabel *pageTitle_ = nullptr;
+    QWidget *headerActions_ = nullptr;
     QStackedWidget *pageStack_ = nullptr;
     QSystemTrayIcon *trayIcon_ = nullptr;
     QMenu *trayMenu_ = nullptr;
