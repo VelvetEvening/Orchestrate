@@ -123,12 +123,7 @@ void MainWindow::buildUi()
     sidebarToggleButton_->setAccessibleName(QStringLiteral("收起侧边栏"));
     sidebarToggleButton_->setCursor(Qt::PointingHandCursor);
     headerLayout->addWidget(sidebarToggleButton_);
-    pageTitle_ = new QLabel(header);
-    pageTitle_->setObjectName(QStringLiteral("pageTitle"));
-    headerLayout->addWidget(pageTitle_, 1);
-    headerActions_ = new QWidget(header);
-    headerActions_->setObjectName(QStringLiteral("pageHeaderActions"));
-    headerLayout->addWidget(headerActions_);
+    headerLayout->addStretch(1);
     rootLayout->addWidget(header);
     connect(sidebarToggleButton_, &QPushButton::clicked, this, &MainWindow::toggleSidebar);
 
@@ -174,7 +169,6 @@ void MainWindow::buildNavigation(QWidget *parent)
         auto *button = new QPushButton(labels.at(i), parent);
         button->setObjectName(QStringLiteral("navButton"));
         button->setProperty("expandedText", labels.at(i));
-        button->setProperty("pageTitle", labels.at(i));
         button->setCheckable(true);
         button->setAutoExclusive(true);
         button->setIcon(UiTheme::icon(icons.at(i)));
@@ -271,7 +265,7 @@ void MainWindow::switchToPage(int index)
         auto *automationPage = new AutomationPage(&database_, pageStack_);
         pageStack_->addWidget(automationPage);
 
-        auto *clipboardPage = new ClipboardPage(&database_, pageStack_, headerActions_);
+        auto *clipboardPage = new ClipboardPage(&database_, pageStack_);
         pageStack_->addWidget(clipboardPage);
         connect(clipboardPage, &ClipboardPage::hideRequested, this, [this] { hide(); });
 
@@ -362,15 +356,7 @@ void MainWindow::switchToPage(int index)
         settingsScroll->setFrameShape(QFrame::NoFrame);
         settingsScroll->setWidget(settingsPage);
         pageStack_->addWidget(settingsScroll);
-        // Header actions precede navigation in the visible keyboard order.
-        const auto headerControls = headerActions_->findChildren<QWidget *>();
-        QWidget *previous = sidebarToggleButton_;
-        for (QWidget *control : headerControls) {
-            if (control->focusPolicy() == Qt::NoFocus) continue;
-            QWidget::setTabOrder(previous, control);
-            previous = control;
-        }
-        QWidget::setTabOrder(previous, navigationButtons_.first());
+        QWidget::setTabOrder(sidebarToggleButton_, navigationButtons_.first());
         update->startAutomaticChecks();
     }
 
@@ -379,8 +365,6 @@ void MainWindow::switchToPage(int index)
     }
 
     pageStack_->setCurrentIndex(index);
-    pageTitle_->setText(navigationButtons_.at(index)->property("pageTitle").toString());
-    headerActions_->setVisible(index == 3);
     if (index == 4) refreshAutoStartSettings();
     for (int i = 0; i < navigationButtons_.size(); ++i) {
         navigationButtons_.at(i)->setChecked(i == index);

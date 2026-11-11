@@ -5,7 +5,6 @@
 #include <QPointer>
 
 class ClipboardMonitor;
-class QCheckBox;
 class QDialog;
 class QLabel;
 class QLineEdit;
@@ -17,8 +16,7 @@ class QTimer;
 class ClipboardPage final : public QWidget {
     Q_OBJECT
 public:
-    explicit ClipboardPage(AppDatabase *database, QWidget *parent=nullptr,
-                           QWidget *headerActionsParent=nullptr);
+    explicit ClipboardPage(AppDatabase *database, QWidget *parent=nullptr);
     bool savePendingChanges();
 signals:
     void hideRequested();
@@ -48,12 +46,10 @@ private:
     QTabBar *tabs_;
     SiblingOrderTree *items_;
     QLineEdit *search_;
-    QCheckBox *listening_;
     QLabel *status_;
     QWidget *previewPane_;
     QLabel *previewImage_;
     QPlainTextEdit *previewText_;
-    QPushButton *copy_;
     QPushButton *edit_;
     QPushButton *remove_;
     QTimer *refreshTimer_;

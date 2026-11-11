@@ -4,7 +4,7 @@
 #include "clipboard/clipboardcontent.h"
 #include "clipboard/clipboardmonitor.h"
 #include "widgets/textlayoutguard.h"
-#include <QCheckBox>
+#include <QAction>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -109,21 +109,12 @@ QString itemTitle(const AppDatabase::ClipboardItem &item)
 }
 }
 
-ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent, QWidget *headerActionsParent)
+ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent)
     : QWidget(parent),database_(database)
 {
     setObjectName("clipboardPage");
     monitor_=new ClipboardMonitor(database_,this);
     auto *layout=new QVBoxLayout(this); layout->setContentsMargins(24,16,24,24); layout->setSpacing(14);
-    auto *actionsParent=headerActionsParent ? headerActionsParent : new QWidget(this);
-    auto *header=new QHBoxLayout(actionsParent);
-    header->setContentsMargins(0,0,0,0); header->setSpacing(12);
-    if (!headerActionsParent) header->addStretch();
-    listening_=new QCheckBox(QStringLiteral("监听剪贴板"),actionsParent); listening_->setObjectName("clipboardListening");
-    listening_->setToolTip(QStringLiteral("开启后自动记录新复制的内容；关闭后仍可使用已保存的条目。"));
-    listening_->setChecked(monitor_->enabled()); header->addWidget(listening_);
-    auto *settings=new QPushButton(QStringLiteral("历史设置"),actionsParent); header->addWidget(settings);
-    if (!headerActionsParent) layout->addWidget(actionsParent);
 
     auto *tabRow=new QHBoxLayout;
     auto *dropTabs=new ClipboardTabs(this);
@@ -165,9 +156,21 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent, QWidget *he
     auto *create=new QPushButton(QStringLiteral("新建"),this); create->setObjectName("clipboardNewItem");
     edit_=new QPushButton(QStringLiteral("编辑"),this); edit_->setObjectName("clipboardEditItem");
     remove_=new QPushButton(QStringLiteral("删除"),this); remove_->setObjectName("clipboardDeleteItems"); UiTheme::setRole(remove_, "danger");
-    copy_=new QPushButton(QStringLiteral("复制并收起"),this); copy_->setObjectName("primaryButton");
-    copy_->setToolTip(QStringLiteral("复制选中条目并隐藏 Orchestrate，随后可手动 Ctrl+V。"));
-    actions->addWidget(create); actions->addWidget(edit_); actions->addWidget(remove_); actions->addStretch(); actions->addWidget(copy_);
+    auto *settings=new QPushButton(QStringLiteral("设置"),this);
+    settings->setObjectName("clipboardSettings");
+    settings->setAccessibleName(QStringLiteral("剪贴板设置"));
+    settings->setToolTip(QStringLiteral("监听开关和历史设置"));
+    auto *settingsMenu=new QMenu(settings);
+    settingsMenu->setObjectName("clipboardSettingsMenu");
+    auto *listening=settingsMenu->addAction(QStringLiteral("监听剪贴板"));
+    listening->setObjectName("clipboardListening");
+    listening->setCheckable(true);
+    listening->setChecked(monitor_->enabled());
+    listening->setToolTip(QStringLiteral("开启后自动记录新复制的内容；关闭后仍可使用已保存的条目。"));
+    settingsMenu->addSeparator();
+    auto *history=settingsMenu->addAction(QStringLiteral("历史设置…"));
+    settings->setMenu(settingsMenu);
+    actions->addWidget(create); actions->addWidget(edit_); actions->addWidget(remove_); actions->addStretch(); actions->addWidget(settings);
     layout->addLayout(actions);
     status_=label(QString(),"clipboardStatus",this); status_->setWordWrap(true);  status_->hide(); layout->addWidget(status_);
 
@@ -179,12 +182,12 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent, QWidget *he
         if (isVisible() && !items_->isDragging()) refreshTimer_->start();
     });
     connect(monitor_,&ClipboardMonitor::captureError,this,&ClipboardPage::report);
-    connect(listening_,&QCheckBox::toggled,this,[this](bool enabled) {
+    connect(listening,&QAction::toggled,this,[this,listening](bool enabled) {
         QString error;
-        if (!monitor_->setEnabled(enabled,&error)) { QSignalBlocker blocker(listening_); listening_->setChecked(monitor_->enabled()); report(error); return; }
+        if (!monitor_->setEnabled(enabled,&error)) { QSignalBlocker blocker(listening); listening->setChecked(monitor_->enabled()); report(error); return; }
         status_->hide();
     });
-    connect(settings,&QPushButton::clicked,this,&ClipboardPage::historySettings);
+    connect(history,&QAction::triggered,this,&ClipboardPage::historySettings);
     connect(newTab,&QPushButton::clicked,this,&ClipboardPage::addTab);
     connect(newFolder,&QPushButton::clicked,this,&ClipboardPage::addFolder);
     connect(tabs_,&QTabBar::currentChanged,this,[this] {
@@ -256,7 +259,6 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent, QWidget *he
     connect(items_,&QTreeWidget::customContextMenuRequested,this,&ClipboardPage::itemMenu);
     connect(create,&QPushButton::clicked,this,[this] { editItem(true); });
     connect(edit_,&QPushButton::clicked,this,[this] { editItem(false); });
-    connect(copy_,&QPushButton::clicked,this,&ClipboardPage::copySelected);
     connect(remove_,&QPushButton::clicked,this,&ClipboardPage::deleteSelected);
     auto *enter=new QShortcut(QKeySequence(Qt::Key_Return),items_); enter->setContext(Qt::WidgetShortcut);
     connect(enter,&QShortcut::activated,this,[this] {
@@ -390,7 +392,7 @@ void ClipboardPage::refreshItems()
 void ClipboardPage::updateActions()
 {
     const auto ids=selectedIds(); const bool single=ids.size()==1;
-    copy_->setEnabled(single); edit_->setEnabled(single); remove_->setEnabled(!ids.isEmpty());
+    edit_->setEnabled(single); remove_->setEnabled(!ids.isEmpty());
 }
 
 void ClipboardPage::updatePreview()

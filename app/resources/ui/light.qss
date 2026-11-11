@@ -50,7 +50,6 @@ QPushButton#sidebarToggle { background: transparent; padding: 0; min-width: 28px
 QPushButton#sidebarToggle:hover { background: #e2e8f0; }
 QPushButton#sidebarToggle:pressed { background: @selection@; }
 QPushButton#sidebarToggle:focus { border-color: @focus@; }
-QWidget#pageHeaderActions QPushButton { min-height: 18px; padding: 4px 10px; }
 QLineEdit, QPlainTextEdit, QTextEdit, QAbstractSpinBox, QComboBox {
     background: @surface@; color: @text@; border: 1px solid @controlBorder@;
     border-radius: 6px; padding: 6px 9px; placeholder-text-color: @muted@;
