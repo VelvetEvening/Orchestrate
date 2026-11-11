@@ -1,5 +1,4 @@
 #include "ui/theme.h"
-#include "ui/workspaceheader.h"
 #include "mainwindow.h"
 
 #include "pages/calendarpage.h"
@@ -78,7 +77,7 @@ MainWindow::MainWindow(QWidget *parent, std::unique_ptr<AutoStart> autoStart)
     buildUi();
 #ifdef Q_OS_WIN
     if (QApplication::platformName() == QStringLiteral("windows")) {
-        // Extend the page header into the caption while Qt keeps the window
+        // Dedicate the caption to window controls while Qt keeps the window
         // buttons, resize borders, system dragging and maximize behavior.
         setWindowFlags(windowFlags() | Qt::CustomizeWindowHint
                        | Qt::ExpandedClientAreaHint | Qt::NoTitleBarBackgroundHint);
@@ -108,7 +107,7 @@ void MainWindow::buildUi()
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
 
-    auto *header = new WorkspaceHeader(root);
+    auto *header = new QFrame(root);
     header->setObjectName(QStringLiteral("windowHeader"));
     header->setFixedHeight(32);
     auto *headerLayout = new QHBoxLayout(header);
@@ -366,8 +365,6 @@ void MainWindow::switchToPage(int index)
     }
 
     pageStack_->setCurrentIndex(index);
-    auto *header = static_cast<WorkspaceHeader *>(findChild<QFrame *>(QStringLiteral("windowHeader")));
-    header->setSurfaces(sidebar_, pageStack_->currentWidget()->findChild<QWidget *>(QStringLiteral("workspaceIndex")));
     if (index == 4) refreshAutoStartSettings();
     for (int i = 0; i < navigationButtons_.size(); ++i) {
         navigationButtons_.at(i)->setChecked(i == index);

@@ -4,7 +4,7 @@ QMainWindow, QWidget#root, QWidget#settingsPage { background: @surface@; }
 QDialog, QMessageBox, QInputDialog { background: @surface@; }
 QLabel { background: transparent; }
 QFrame#sidebar { background: @sidebar@; border: none; }
-QFrame#windowHeader { background: transparent; border: none; }
+QFrame#windowHeader { background: @sidebar@; border: none; border-bottom: 1px solid @border@; }
 QWidget[workspaceSurface="content"], QWidget[workspaceSurface="section"] {
     background: @surface@; border: none; border-radius: 0;
 }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-11T11:22:57.402394Z",
+  "generatedAt": "2026-11-11T11:29:00.620984Z",
   "title": "Design System: Orchestrate",
   "extensions": {
     "colorMeta": {
@@ -422,9 +422,9 @@
       "name": "侧栏导航",
       "kind": "nav",
       "refersTo": "navigation",
-      "description": "融合顶栏与侧栏的浏览器近似：32px 为顶栏高度下限，侧栏展开 216px、收起 72px，左侧开关保持固定；原生窗口按钮、折叠与切页不在静态预览中实现。实际 WorkspaceHeader 延续当前索引及正文底色，响应布局事件而不轮询。",
+      "description": "独立统一顶栏与侧栏的浏览器近似：顶栏只容纳左侧收起/展开和右侧最小化、最大化、关闭，统一使用 sidebar 底色及 1px 底线；工作分区从下方开始。32px 为顶栏高度下限，侧栏展开 216px、收起 72px，左侧开关保持固定；原生窗口按钮、折叠与切页不在静态预览中实现。",
       "html": "<div class=\"ds-shell\"><header class=\"ds-header\"><button class=\"ds-sidebar-toggle\" aria-label=\"收起侧边栏\" title=\"收起侧边栏\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#66737f\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"3\"/><path d=\"M9 4v16\"/></svg></button></header><nav class=\"ds-nav\"><button class=\"ds-nav-button\" aria-current=\"page\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#66737f\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"5\" width=\"16\" height=\"16\" rx=\"2\"/><path d=\"M8 3v4m8-4v4M4 10h16M8 14h2m4 0h2m-8 4h2\"/></svg><span>时序记录</span></button></nav></div>",
-      "css": ".ds-shell{background:#ffffff}.ds-header{display:flex;align-items:center;gap:12px;box-sizing:border-box;height:32px;padding:0 156px 0 18px;border:none;background:#eff3f4}.ds-sidebar-toggle{box-sizing:content-box;display:flex;align-items:center;justify-content:center;width:28px;height:28px;flex-shrink:0;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;cursor:pointer}.ds-sidebar-toggle:hover{background:#e2e8f0}.ds-sidebar-toggle:active{background:#e4edf3}.ds-sidebar-toggle:focus-visible{outline:none;border-color:#7895bc}.ds-nav{background:#eff3f4;padding:16px 14px;width:188px}.ds-nav-button{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;font-size:14px;display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;color:#34404c;border:1px solid transparent;border-radius:7px;padding:10px 12px;min-height:20px}.ds-nav-button svg{width:19px;height:19px;flex-shrink:0}.ds-nav-button:hover{background:#e7edef}.ds-nav-button[aria-current=\"page\"]{background:#e4edf3;color:#41638f;font-weight:600}.ds-nav-button:focus-visible{outline:none;border-color:#7895bc}"
+      "css": ".ds-shell{background:#ffffff}.ds-header{display:flex;align-items:center;gap:12px;box-sizing:border-box;height:32px;padding:0 156px 0 18px;border:none;border-bottom:1px solid #e8edef;background:#eff3f4}.ds-sidebar-toggle{box-sizing:content-box;display:flex;align-items:center;justify-content:center;width:28px;height:28px;flex-shrink:0;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;cursor:pointer}.ds-sidebar-toggle:hover{background:#e2e8f0}.ds-sidebar-toggle:active{background:#e4edf3}.ds-sidebar-toggle:focus-visible{outline:none;border-color:#7895bc}.ds-nav{background:#eff3f4;padding:16px 14px;width:188px}.ds-nav-button{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;font-size:14px;display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;color:#34404c;border:1px solid transparent;border-radius:7px;padding:10px 12px;min-height:20px}.ds-nav-button svg{width:19px;height:19px;flex-shrink:0}.ds-nav-button:hover{background:#e7edef}.ds-nav-button[aria-current=\"page\"]{background:#e4edf3;color:#41638f;font-weight:600}.ds-nav-button:focus-visible{outline:none;border-color:#7895bc}"
     },
     {
       "name": "成功状态",
@@ -446,9 +446,9 @@
       "name": "连续工作面",
       "kind": "custom",
       "refersTo": "workspace-content",
-      "description": "项目正文示例：索引与正文直接衔接，顶栏续接各区底色，1px 分隔线保留原生 QSplitter 调整能力。示例列宽按初始 230:650 比例表达，不承诺固定宽度；工作面无外框和圆角。",
-      "html": "<div class=\"ds-workspace\"><header class=\"ds-workspace-caption\"><span class=\"ds-caption-index\"></span><span class=\"ds-caption-content\"></span></header><div class=\"ds-workspace-body\"><aside class=\"ds-index\"><h3 class=\"ds-surface-title\">项目列表</h3><p class=\"ds-surface-copy\">Orchestrate</p></aside><section class=\"ds-content\"><h3 class=\"ds-surface-title\">Orchestrate</h3><p class=\"ds-surface-copy\">查找、阅读和编辑工作内容。</p></section></div></div>",
-      "css": ".ds-workspace{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#34404c;background:#ffffff}.ds-workspace-caption,.ds-workspace-body{display:grid;grid-template-columns:minmax(0,230fr) minmax(0,650fr)}.ds-workspace-caption{height:32px}.ds-caption-index,.ds-index{background:#f7f9fa}.ds-caption-content,.ds-content{background:#ffffff}.ds-index{padding:22px 16px 24px;border-right:1px solid #e8edef;min-width:0}.ds-content{padding:22px 24px 24px;min-width:0}.ds-surface-title{font-size:15px;font-weight:600;margin:0 0 12px;overflow-wrap:anywhere}.ds-surface-copy{margin:0;overflow-wrap:anywhere}"
+      "description": "项目正文示例：独立统一顶栏下方的索引与正文直接衔接，1px 分隔线保留原生 QSplitter 调整能力。示例列宽按初始 230:650 比例表达，不承诺固定宽度；工作面无外框和圆角。",
+      "html": "<div class=\"ds-workspace\"><header class=\"ds-workspace-caption\" aria-hidden=\"true\"></header><div class=\"ds-workspace-body\"><aside class=\"ds-index\"><h3 class=\"ds-surface-title\">项目列表</h3><p class=\"ds-surface-copy\">Orchestrate</p></aside><section class=\"ds-content\"><h3 class=\"ds-surface-title\">Orchestrate</h3><p class=\"ds-surface-copy\">查找、阅读和编辑工作内容。</p></section></div></div>",
+      "css": ".ds-workspace{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#34404c;background:#ffffff}.ds-workspace-body{display:grid;grid-template-columns:minmax(0,230fr) minmax(0,650fr)}.ds-workspace-caption{box-sizing:border-box;height:32px;background:#eff3f4;border-bottom:1px solid #e8edef}.ds-index{background:#f7f9fa}.ds-content{background:#ffffff}.ds-index{padding:22px 16px 24px;border-right:1px solid #e8edef;min-width:0}.ds-content{padding:22px 24px 24px;min-width:0}.ds-surface-title{font-size:15px;font-weight:600;margin:0 0 12px;overflow-wrap:anywhere}.ds-surface-copy{margin:0;overflow-wrap:anywhere}"
     },
     {
       "name": "预览与编辑页签",
@@ -485,7 +485,7 @@
   ],
   "narrative": {
     "northStar": "浅色日常工作台",
-    "overview": "以浅灰导航、灰白索引区、白色工作面和雾蓝操作构成安静、紧凑的 Windows 工作台。时序记录、项目记录、自动化工具、剪贴板及设置共用连续分区：大区域直接衔接，留白位于分区内部；各模块保留适合其内容的组织方式。\n\n这是 C++17 / Qt 6 Widgets 原生桌面界面，不是网页或移动应用。全局浅色调色板覆盖主窗口、独立阅读编辑窗口、弹窗和菜单；Windows 主窗口将页面顶栏融入窗口标题区域，独立窗口继续沿用 DWM 浅色标题栏。",
+    "overview": "以浅灰导航、灰白索引区、白色工作面和雾蓝操作构成安静、紧凑的 Windows 工作台。时序记录、项目记录、自动化工具、剪贴板及设置共用连续分区：大区域直接衔接，留白位于分区内部；各模块保留适合其内容的组织方式。\n\n这是 C++17 / Qt 6 Widgets 原生桌面界面，不是网页或移动应用。全局浅色调色板覆盖主窗口、独立阅读编辑窗口、弹窗和菜单；Windows 主窗口在标题区域保留独立统一的窗口操作栏，工作分区从其下方开始，独立窗口继续沿用 DWM 浅色标题栏。",
     "keyCharacteristics": [
       "灰白表面、深灰正文，雾蓝标识选择与主要操作。",
       "工作面无外围卡片间隙和圆角，控件保留小圆角；以底色、共享细边界和内部留白建立层级，不使用自定义投影。",
@@ -510,7 +510,7 @@
     ],
     "dos": [
       "Do 从 `UiTheme` 与全局 QSS 复用颜色和状态；新增独立窗口同样安装全局主题。",
-      "Do 使用连续工作面角色组织主页面，把留白放在分区内部，并让顶栏分色跟随当前分区。",
+      "Do 使用连续工作面角色组织主页面，把留白放在分区内部；独立统一的顶栏只容纳窗口操作，工作分区从其下方开始。",
       "Do 为导航与图标操作保留可访问名称、工具提示和键盘焦点；状态通过可见文字、工具提示或可访问名称保留明确语义。",
       "Do 在主窗口最小尺寸下检查长标题换行、表单收缩、滚动区和可见操作；中文正文优先保持阅读面积。",
       "Do 保留现有应用图标与更新标记，新增通用操作沿用 SVG 线性图标。"
