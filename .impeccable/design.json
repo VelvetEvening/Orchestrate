@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-11T03:22:34.668435Z",
+  "generatedAt": "2026-11-11T04:30:51.928750Z",
   "title": "Design System: Orchestrate",
   "extensions": {
     "colorMeta": {
@@ -334,7 +334,7 @@
       },
       "page-title": {
         "displayName": "page-title",
-        "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
+        "purpose": "主窗口全局顶部的当前页标题；使用固定模块名，未指定的属性继承 Qt 全局字体。"
       },
       "tool-title": {
         "displayName": "tool-title",
@@ -414,9 +414,9 @@
       "name": "侧栏导航",
       "kind": "nav",
       "refersTo": "navigation",
-      "description": "可折叠原生导航的展开态；不重复原生标题栏的应用名或工作台分组标签，示例展示当前模块。",
-      "html": "<nav class=\"ds-nav\"><button class=\"ds-nav-button\" aria-current=\"page\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#637184\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"5\" width=\"16\" height=\"16\" rx=\"2\"/><path d=\"M8 3v4m8-4v4M4 10h16M8 14h2m4 0h2m-8 4h2\"/></svg><span>时序记录</span></button></nav>",
-      "css": ".ds-nav{background:#f0f2f5;padding:14px;width:188px}.ds-nav-button{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;font-size:14px;display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;color:#344254;border:1px solid transparent;border-radius:7px;padding:10px 12px;min-height:20px}.ds-nav-button svg{width:19px;height:19px;flex-shrink:0}.ds-nav-button:hover{background:#e9edf3}.ds-nav-button[aria-current=\"page\"]{background:#e2eaf5;color:#41638f;font-weight:600}.ds-nav-button:focus-visible{outline:none;border-color:#7895bc}"
+      "description": "原生全局顶部与展开侧栏的静态预览：固定分栏开关和当前页标题位于上方，侧栏直接导航。实际侧栏为 216 / 72px；监听与历史设置仅在剪贴板页的顶部右侧显示。文档预览不实现 Qt 折叠与页面切换。",
+      "html": "<div class=\"ds-shell\"><header class=\"ds-header\"><button class=\"ds-sidebar-toggle\" aria-label=\"收起侧边栏\" title=\"收起侧边栏\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#637184\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"3\"/><path d=\"M9 4v16\"/></svg></button><h2 class=\"ds-page-title\">时序记录</h2></header><nav class=\"ds-nav\"><button class=\"ds-nav-button\" aria-current=\"page\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#637184\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"5\" width=\"16\" height=\"16\" rx=\"2\"/><path d=\"M8 3v4m8-4v4M4 10h16M8 14h2m4 0h2m-8 4h2\"/></svg><span>时序记录</span></button></nav></div>",
+      "css": ".ds-shell{background:#f6f7f9}.ds-header{display:flex;align-items:center;gap:12px;padding:12px 24px 12px 18px;border-bottom:1px solid #e1e6ed}.ds-sidebar-toggle{box-sizing:content-box;display:flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;cursor:pointer}.ds-sidebar-toggle:hover{background:#e2e8f0}.ds-sidebar-toggle:active{background:#e7eef8}.ds-sidebar-toggle:focus-visible{outline:none;border-color:#7895bc}.ds-page-title{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:19px;font-weight:600;color:#344254;margin:0}.ds-nav{background:#f0f2f5;padding:16px 14px;width:188px}.ds-nav-button{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;font-size:14px;display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;color:#344254;border:1px solid transparent;border-radius:7px;padding:10px 12px;min-height:20px}.ds-nav-button svg{width:19px;height:19px;flex-shrink:0}.ds-nav-button:hover{background:#e9edf3}.ds-nav-button[aria-current=\"page\"]{background:#e2eaf5;color:#41638f;font-weight:600}.ds-nav-button:focus-visible{outline:none;border-color:#7895bc}"
     },
     {
       "name": "成功状态",
