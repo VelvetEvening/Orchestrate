@@ -1,0 +1,29 @@
+# Product
+
+<!-- impeccable:product-schema 1 -->
+
+## Platform
+
+Windows desktop，C++17 / Qt 6 Widgets / SQLite。
+
+## Product Purpose
+
+Orchestrate 是便携的日常工作台，统一承载时序记录、项目记录、自动化工具和剪贴板。当前能力以 app/README.md、CONTEXT.md 和实现为准。
+
+## Users and Operating Context
+
+用户在 Windows 桌面中反复唤起工作台，查找、阅读、编辑记录，运行已注册工具和复用剪贴板内容。具体用户角色不另作推断。
+
+## Capabilities and Constraints
+
+- 四大模块和设置同等重要；独立阅读/编辑窗口、菜单、弹窗及反馈属于本次改造范围。
+- 保持现有数据、便携存储、公式原文、快捷键、拖动归类、工具接入和安全确认约定。
+- 本次开发在美术优化分支进行，完成本地验收候选；发布、打标签与合并须等待用户验收。
+- 用户明确选择简约浅色，避免显眼的深色区域；已认可浅灰、白色内容面和少量雾蓝的方向。
+
+## Product Principles
+
+- 让查找、阅读和操作形成稳定一致的习惯。
+- 颜色帮助识别操作和状态，正文保持清晰可读。
+- 保存失败保留草稿，执行状态和错误恢复入口清楚可见。
+- 轻量原生实现，避免为了装饰引入常驻进程或网络依赖。

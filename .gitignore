@@ -34,3 +34,6 @@ __pycache__/
 
 # Local-only regression tests; do not publish test scripts or artifacts.
 /app/tests/
+
+# Local visual review screenshots and notes
+/.impeccable/review/

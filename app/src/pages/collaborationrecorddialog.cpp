@@ -1,3 +1,4 @@
+#include "ui/theme.h"
 #include "collaborationrecorddialog.h"
 #include "widgets/headingtextedit.h"
 #include "widgets/persistenttextzoom.h"
@@ -39,12 +40,10 @@ CollaborationRecordDialog::CollaborationRecordDialog(AppDatabase *database,
     sections_->setObjectName(QStringLiteral("recordSectionTabs"));
     sections_->setAccessibleName(QStringLiteral("协作记录内容"));
     sections_->setExpanding(false);
+    sections_->setDrawBase(false);
     sections_->addTab(QStringLiteral("摘要"));
     sections_->addTab(QStringLiteral("正文"));
-    sections_->setStyleSheet(QStringLiteral(
-        "QTabBar::tab { font-size: 14px; min-width: 40px; min-height: 20px; padding: 8px 12px; margin-right: 4px; border: 1px solid #d4deeb; border-radius: 6px; background: #f5f7fb; color: #526176; }"
-        "QTabBar::tab:selected { background: #e8f0ff; color: #2456a6; border-color: #9bbbe8; font-weight: 600; }"
-        "QTabBar::tab:hover { background: #edf3ff; }"));
+
     toolbar->addWidget(sections_);
     toolbar->addStretch();
     const auto action = [this, toolbar](const QString &text, const QString &name) {
@@ -58,6 +57,7 @@ CollaborationRecordDialog::CollaborationRecordDialog(AppDatabase *database,
     edit_ = action(QStringLiteral("编辑"), QStringLiteral("editRecord"));
     cancel_ = action(QStringLiteral("取消编辑"), QStringLiteral("cancelRecordEdit"));
     save_ = action(QStringLiteral("保存"), QStringLiteral("saveRecord"));
+    UiTheme::setRole(save_, "primary");
     save_->setToolTip(QStringLiteral("保存标题、摘要和正文（Ctrl+S）"));
     layout->addLayout(toolbar);
 
@@ -198,6 +198,7 @@ void CollaborationRecordDialog::updateActions()
     const bool valid = !title_->text().trimmed().isEmpty() && !draftBodyText_.trimmed().isEmpty();
     save_->setEnabled(editing_ && valid && (record_.id <= 0 || dirty()));
     copy_->setEnabled(!bodyValue().isEmpty());
+    UiTheme::setRole(status_, !error_.isEmpty() ? "error" : dirty() ? "warning" : "muted");
     if (!error_.isEmpty()) status_->setText(error_);
     else if (editing_ && !valid) status_->setText(QStringLiteral("请填写标题和正文，摘要可留空。"));
     else if (dirty()) status_->setText(QStringLiteral("有未保存的修改"));
@@ -230,6 +231,8 @@ bool CollaborationRecordDialog::save()
     rememberDraft();
     setWindowTitle(QStringLiteral("协作记录"));
     setEditing(false);
+    status_->setText(QStringLiteral("已保存"));
+    UiTheme::setRole(status_, "success");
     return true;
 }
 

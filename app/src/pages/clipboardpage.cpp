@@ -1,3 +1,5 @@
+#include "ui/theme.h"
+#include "widgets/emptyviewhint.h"
 #include "clipboardpage.h"
 #include "clipboard/clipboardcontent.h"
 #include "clipboard/clipboardmonitor.h"
@@ -79,8 +81,8 @@ protected:
     void paintEvent(QPaintEvent *event) override {
         QTabBar::paintEvent(event);
         if (dropIndex_<0) return;
-        QPainter painter(this); painter.setPen(QPen(QColor("#2563eb"),2));
-        painter.fillRect(tabRect(dropIndex_),QColor(37,99,235,24));
+        QPainter painter(this); painter.setPen(QPen(QColor(UiTheme::Focus),2));
+        painter.fillRect(tabRect(dropIndex_),QColor(120,149,188,28));
         painter.drawRect(tabRect(dropIndex_).adjusted(1,1,-1,-1));
     }
 private:
@@ -105,19 +107,13 @@ QString itemTitle(const AppDatabase::ClipboardItem &item)
     const auto text=item.text.simplified();
     return text.isEmpty() ? ClipboardContent::kindName(item.kind) : text.left(100);
 }
-void readablePlaceholder(QWidget *widget)
-{
-    // The parent's stylesheet supplies the input palette, so set this in the
-    // stylesheet too; a widget palette alone is overwritten during polishing.
-    widget->setStyleSheet(QStringLiteral("QLineEdit, QPlainTextEdit { placeholder-text-color: #52627a; }"));
-}
 }
 
 ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(parent),database_(database)
 {
     setObjectName("clipboardPage");
     monitor_=new ClipboardMonitor(database_,this);
-    auto *layout=new QVBoxLayout(this); layout->setContentsMargins(34,30,34,24); layout->setSpacing(14);
+    auto *layout=new QVBoxLayout(this); layout->setContentsMargins(24,24,24,24); layout->setSpacing(14);
     auto *header=new QHBoxLayout;
     header->addWidget(label(QStringLiteral("剪贴板"),"pageTitle",this)); header->addStretch();
     listening_=new QCheckBox(QStringLiteral("监听剪贴板"),this); listening_->setObjectName("clipboardListening");
@@ -129,15 +125,15 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
     auto *tabRow=new QHBoxLayout;
     auto *dropTabs=new ClipboardTabs(this);
     tabs_=dropTabs; tabs_->setObjectName("clipboardTabs"); tabs_->setMovable(true); tabs_->setExpanding(false);
+    tabs_->setDrawBase(false);
     tabs_->setIconSize(QSize(16,16));
     tabs_->setUsesScrollButtons(true); tabs_->setElideMode(Qt::ElideRight); tabs_->setContextMenuPolicy(Qt::CustomContextMenu);
     tabs_->setAccessibleName(QStringLiteral("剪贴板标签页"));
-    tabs_->setStyleSheet(QStringLiteral("QTabBar::tab { padding: 9px 16px; margin-right: 3px; border-bottom: 2px solid transparent; color: #52627a; } QTabBar::tab:selected { color: #1d4ed8; border-bottom: 2px solid #2563eb; background: #eaf0ff; } QTabBar::tab:hover { background: #edf2fa; }"));
+
     tabRow->addWidget(tabs_,1);
     auto *newTab=new QPushButton(QStringLiteral("新建标签页"),this); tabRow->addWidget(newTab); layout->addLayout(tabRow);
     auto *searchRow=new QHBoxLayout;
     search_=new QLineEdit(this); search_->setObjectName("clipboardSearch"); search_->setPlaceholderText(QStringLiteral("搜索内容、标题或文件夹"));
-    readablePlaceholder(search_);
     search_->setClearButtonEnabled(true); search_->setAccessibleName(QStringLiteral("搜索剪贴板内容")); searchRow->addWidget(search_,1);
     auto *newFolder=new QPushButton(QStringLiteral("新建文件夹"),this); newFolder->setObjectName("clipboardNewFolder");
     searchRow->addWidget(newFolder); layout->addLayout(searchRow);
@@ -147,7 +143,7 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
     synchronizeTreeAccessibility(items_);
     items_->setHeaderHidden(true); items_->header()->setStretchLastSection(true);
     items_->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    items_->setStyleSheet(QStringLiteral("QTreeWidget::item { padding: 8px 10px; color: #334155; } QTreeWidget::item:hover { background: #f1f5fb; } QTreeWidget::item:selected { color: #1d4ed8; background: #e0ebff; }"));
+
     items_->setContextMenuPolicy(Qt::CustomContextMenu); items_->setMinimumHeight(120); items_->setWordWrap(false);
     items_->setTextElideMode(Qt::ElideRight); items_->setUniformRowHeights(true);
     items_->setIndentation(20); items_->setIconSize(QSize(16,16));
@@ -165,12 +161,12 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent) : QWidget(p
     auto *actions=new QHBoxLayout; actions->setSpacing(6);
     auto *create=new QPushButton(QStringLiteral("新建"),this); create->setObjectName("clipboardNewItem");
     edit_=new QPushButton(QStringLiteral("编辑"),this); edit_->setObjectName("clipboardEditItem");
-    remove_=new QPushButton(QStringLiteral("删除"),this); remove_->setObjectName("clipboardDeleteItems");
+    remove_=new QPushButton(QStringLiteral("删除"),this); remove_->setObjectName("clipboardDeleteItems"); UiTheme::setRole(remove_, "danger");
     copy_=new QPushButton(QStringLiteral("复制并收起"),this); copy_->setObjectName("primaryButton");
     copy_->setToolTip(QStringLiteral("复制选中条目并隐藏 Orchestrate，随后可手动 Ctrl+V。"));
     actions->addWidget(create); actions->addWidget(edit_); actions->addWidget(remove_); actions->addStretch(); actions->addWidget(copy_);
     layout->addLayout(actions);
-    status_=label(QString(),"clipboardStatus",this); status_->setWordWrap(true); status_->setStyleSheet(QStringLiteral("color: #b42318;")); status_->hide(); layout->addWidget(status_);
+    status_=label(QString(),"clipboardStatus",this); status_->setWordWrap(true);  status_->hide(); layout->addWidget(status_);
 
     refreshTimer_=new QTimer(this); refreshTimer_->setSingleShot(true); refreshTimer_->setInterval(100);
     connect(refreshTimer_,&QTimer::timeout,this,&ClipboardPage::refreshItems);
@@ -355,8 +351,7 @@ void ClipboardPage::refreshItems()
         QHash<int,QTreeWidgetItem *> folderNodes;
         QSet<int> matchedFolders;
         for (const auto &entry : entries) matchedFolders.insert(entry.folderId);
-        QIcon folderIcon=style()->standardIcon(QStyle::SP_DirClosedIcon);
-        folderIcon.addPixmap(style()->standardPixmap(QStyle::SP_DirOpenIcon),QIcon::Normal,QIcon::On);
+        QIcon folderIcon=UiTheme::icon(QStringLiteral("folder"));
         const auto savedExpanded=database_->setting(expandedKey(currentTab),QStringLiteral("*")).split(',');
         for (const auto &folder : folders) {
             if (!search.isEmpty() && !matchedFolders.contains(folder.id) && !folder.name.contains(search,Qt::CaseInsensitive)) continue;
@@ -384,6 +379,9 @@ void ClipboardPage::refreshItems()
         items_->verticalScrollBar()->setValue(scroll);
     }
     items_->doItemsLayout(); resetTreeAccessibility(items_); updatePreview();
+    EmptyViewHint::update(items_, items_->topLevelItemCount() ? QString()
+        : search.isEmpty() ? QStringLiteral("还没有剪贴板内容\n开启监听记录新复制的内容，或点击“新建”手动保存。")
+        : QStringLiteral("没有找到匹配内容\n尝试更短的关键词，或清空搜索查看全部内容。"));
 }
 
 void ClipboardPage::updateActions()
@@ -503,13 +501,11 @@ void ClipboardPage::editItem(bool creating)
     dialog.setObjectName("clipboardEditor"); dialog.setWindowTitle(creating ? QStringLiteral("新建剪贴板条目") : QStringLiteral("编辑剪贴板条目")); dialog.resize(640,470);
     auto *layout=new QVBoxLayout(&dialog); auto *form=new QFormLayout;
     auto *title=new QLineEdit(item.title,&dialog); title->setObjectName("clipboardItemTitle"); title->setMaxLength(200); title->setPlaceholderText(QStringLiteral("可选，留空时显示内容开头"));
-    readablePlaceholder(title);
     form->addRow(QStringLiteral("标题"),title); layout->addLayout(form);
     const bool editable=creating || item.kind=="text";
     auto *body=new TextLayoutGuard::Edit(&dialog); body->setObjectName("clipboardItemBody"); body->setReadOnly(!editable); TextLayoutGuard::setPlainText(body,editable ? item.text : item.text.left(200000));
     const QString initialBody=body->toPlainText();
     body->setPlaceholderText(QStringLiteral("填写要保存的文本…")); layout->addWidget(body,1);
-    readablePlaceholder(body);
     if (!editable) {
         auto *hint=label(QStringLiteral("此条目保留原始格式，可修改标题。需要修改正文时，可另存为纯文本条目。"),"muted",&dialog); hint->setWordWrap(true); layout->addWidget(hint);
         if (!item.text.isEmpty()) {

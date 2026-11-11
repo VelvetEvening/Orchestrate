@@ -1,3 +1,4 @@
+#include "ui/theme.h"
 #include "automationpage.h"
 #include "automation/commandarguments.h"
 #include "automation/commandform.h"
@@ -173,41 +174,8 @@ QString resultLabel(const QString &result, const QString &toolId = QString())
     return result.isEmpty() || result == QStringLiteral("unknown") ? QStringLiteral("未知") : result;
 }
 
-QColor resultColor(const QString &result)
-{
-    if (result == QStringLiteral("success") || result == QStringLiteral("already")) {
-        return QColor(QStringLiteral("#15803d"));
-    }
-    if (result == QStringLiteral("failure")) {
-        return QColor(QStringLiteral("#dc2626"));
-    }
-    if (result == QStringLiteral("skipped") || result == QStringLiteral("disabled")
-        || result == QStringLiteral("none")) {
-        return QColor(QStringLiteral("#64748b"));
-    }
-    if (result == QStringLiteral("running") || result == QStringLiteral("loading")) {
-        return QColor(QStringLiteral("#2563eb"));
-    }
-    return QColor(QStringLiteral("#b45309"));
-}
-
-QString badgeStyle(const QString &result)
-{
-    QString background = QStringLiteral("#fef3c7");
-    if (result == QStringLiteral("success") || result == QStringLiteral("already")) {
-        background = QStringLiteral("#dcfce7");
-    } else if (result == QStringLiteral("failure")) {
-        background = QStringLiteral("#fee2e2");
-    } else if (result == QStringLiteral("skipped") || result == QStringLiteral("disabled")
-               || result == QStringLiteral("none")) {
-        background = QStringLiteral("#e2e8f0");
-    } else if (result == QStringLiteral("running") || result == QStringLiteral("loading")) {
-        background = QStringLiteral("#dbeafe");
-    }
-    return QStringLiteral("color: %1; background: %2; border-radius: 11px; padding: 3px 12px;"
-                          " font-weight: 600;")
-        .arg(resultColor(result).name(), background);
-}
+QColor resultColor(const QString &result) { return UiTheme::statusColor(result); }
+QString badgeStyle(const QString &result) { return UiTheme::statusStyle(result); }
 
 QIcon statusDot(const QColor &color)
 {
@@ -224,10 +192,10 @@ QIcon statusDot(const QColor &color)
 void applyToolStatus(QTreeWidgetItem *item, const QJsonObject *state, const QString *error)
 {
     QString text = QStringLiteral("未读取");
-    QColor color(QStringLiteral("#94a3b8"));
+    QColor color(QString::fromLatin1(UiTheme::Muted));
     if (error != nullptr) {
         text = QStringLiteral("读取失败");
-        color = QColor(QStringLiteral("#dc2626"));
+        color = QColor(QString::fromLatin1(UiTheme::Danger));
     } else if (state != nullptr) {
         const QString result = ToolState::displayResult(*state);
         text = resultLabel(result, jsonString(*state, QStringLiteral("tool_id")));
@@ -238,7 +206,7 @@ void applyToolStatus(QTreeWidgetItem *item, const QJsonObject *state, const QStr
     item->setForeground(1, color);
 }
 
-QWidget *makeCommandRow(const AppDatabase::ToolCommand &command, QStyle *style, QWidget *parent)
+QWidget *makeCommandRow(const AppDatabase::ToolCommand &command, QStyle *, QWidget *parent)
 {
     auto *row = new QWidget(parent);
     row->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -247,7 +215,7 @@ QWidget *makeCommandRow(const AppDatabase::ToolCommand &command, QStyle *style, 
     layout->setSpacing(12);
 
     auto *icon = new QLabel(row);
-    icon->setPixmap(style->standardIcon(QStyle::SP_MediaPlay).pixmap(18, 18));
+    icon->setPixmap(UiTheme::icon(QStringLiteral("play")).pixmap(18, 18));
     icon->setFixedSize(22, 22);
     icon->setAlignment(Qt::AlignCenter);
     layout->addWidget(icon);
@@ -274,152 +242,10 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     : QWidget(parent)
     , database_(database)
 {
-    setStyleSheet(QStringLiteral(R"(
-        QTreeWidget#toolTree {
-            border: none;
-            background: transparent;
-            outline: none;
-            show-decoration-selected: 0;
-        }
-        QTreeWidget#toolTree::item {
-            padding: 7px 6px;
-            border: none;
-            color: #334155;
-        }
-        QTreeWidget#toolTree::item:hover {
-            background: #f1f5fb;
-        }
-        QTreeWidget#toolTree::item:selected {
-            background: #e0ebff;
-            color: #1d4ed8;
-        }
-        QTreeWidget#toolTree::item:first {
-            border-top-left-radius: 7px;
-            border-bottom-left-radius: 7px;
-        }
-        QTreeWidget#toolTree::item:last {
-            border-top-right-radius: 7px;
-            border-bottom-right-radius: 7px;
-        }
-        QTreeWidget#toolTree::item:only-one {
-            border-radius: 7px;
-        }
-        QTreeWidget#toolTree::branch {
-            background: transparent;
-        }
-        QListWidget#commandList {
-            border: none;
-            background: transparent;
-            padding: 0;
-            outline: none;
-        }
-        QListWidget#commandList::item {
-            border: 1px solid #e3e8f0;
-            border-radius: 8px;
-            background: #fbfcfe;
-        }
-        QListWidget#commandList::item:hover {
-            background: #f3f7ff;
-            border-color: #bfd3fb;
-        }
-        QListWidget#commandList::item:selected {
-            background: #eaf1ff;
-            border-color: #6ea0f7;
-        }
-        QLabel#toolName {
-            color: #111827;
-            font-size: 20px;
-            font-weight: 700;
-        }
-        QLabel#sourceText {
-            color: #94a3b8;
-            font-size: 12px;
-        }
-        QLabel#stateSummary {
-            color: #1f2937;
-            font-size: 15px;
-        }
-        QLabel#commandName {
-            color: #1f2937;
-            font-size: 14px;
-            font-weight: 600;
-        }
-        QLabel#tag, QLabel#tagDanger, QLabel#tagMuted {
-            border-radius: 8px;
-            padding: 1px 7px;
-            font-size: 11px;
-        }
-        QLabel#tag {
-            color: #1d4ed8;
-            background: #e0ebff;
-        }
-        QLabel#tagDanger {
-            color: #b91c1c;
-            background: #fee2e2;
-        }
-        QLabel#tagMuted {
-            color: #475569;
-            background: #e2e8f0;
-        }
-        QFrame#stateRow {
-            background: #f8fafc;
-            border: 1px solid #edf1f6;
-            border-radius: 8px;
-        }
-        QLabel#stateRowName {
-            color: #1f2937;
-            font-weight: 600;
-        }
-        QFrame#runPanel {
-            background: #111827;
-            border-radius: 8px;
-        }
-        QLabel#runTitle {
-            color: #e5e7eb;
-            font-weight: 600;
-        }
-        QPlainTextEdit#runOutput {
-            background: transparent;
-            border: none;
-            color: #cbd5e1;
-            padding: 0;
-            selection-background-color: #334155;
-            selection-color: #f8fafc;
-        }
-        QLabel#fieldHelp {
-            color: #94a3b8;
-            font-size: 12px;
-        }
-        QDialog#commandParametersDialog QLabel[formHint="true"],
-        QDialog#commandParametersDialog QLabel#fieldHelp {
-            color: #64748b;
-            font-size: 12px;
-        }
-        QLabel#commandContextTitle {
-            color: #334155;
-            font-weight: 600;
-        }
-        QLabel#warningText, QLabel#commandParameterError {
-            color: #92400e;
-            background: #fffbeb;
-            border: 1px solid #fde68a;
-            border-radius: 6px;
-            padding: 7px 10px;
-        }
-        QScrollArea#detailsScroll {
-            background: transparent;
-            border: none;
-        }
-        QWidget#detailsColumn {
-            background: transparent;
-        }
-        QSplitter::handle {
-            background: transparent;
-        }
-    )"));
+
 
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(34, 30, 34, 30);
+    layout->setContentsMargins(24, 24, 24, 24);
     layout->setSpacing(16);
 
     layout->addWidget(makeTitle(QStringLiteral("自动化工具"), this));
@@ -451,7 +277,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
 
     auto *splitter = new QSplitter(Qt::Horizontal, this);
     splitter->setChildrenCollapsible(false);
-    splitter->setHandleWidth(14);
+    splitter->setHandleWidth(10);
 
     // ---- Left: groups and tools ----
     auto *treeCard = makeCard(splitter);
@@ -549,12 +375,13 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     headerRow->setSpacing(8);
     toolName_ = new QLabel(headerCard);
     toolName_->setObjectName(QStringLiteral("toolName"));
-    headerRow->addWidget(toolName_);
+    toolName_->setWordWrap(true);
+    toolName_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    headerRow->addWidget(toolName_, 1);
     toolSource_ = makeTag(QString(), QStringLiteral("tagMuted"), headerCard);
     toolSource_->setToolTip(QStringLiteral("在左侧右键工具，选择“查看工具信息”查看连接与位置。"));
     toolSource_->hide();
     headerRow->addWidget(toolSource_);
-    headerRow->addStretch(1);
     reloadManifestButton_ = new QPushButton(QStringLiteral("重新读取声明"), headerCard);
     reloadManifestButton_->setToolTip(QStringLiteral("重新读取接入声明，更新命令和工具信息；分组与刷新设置保留。"));
     headerRow->addWidget(reloadManifestButton_);
@@ -572,7 +399,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     auto *stateHeader = new QHBoxLayout;
     stateHeader->addWidget(makeCardTitle(QStringLiteral("当前状态"), stateCard));
     stateHeader->addStretch(1);
-    auto *refreshButton = new QPushButton(style()->standardIcon(QStyle::SP_BrowserReload),
+    auto *refreshButton = new QPushButton(UiTheme::icon(QStringLiteral("refresh")),
                                           QStringLiteral("刷新状态"), stateCard);
     refreshButton->setObjectName(QStringLiteral("refreshStateButton"));
     refreshButton->setToolTip(QStringLiteral("重新读取当前状态 JSON，不会运行工具命令。"));
@@ -628,6 +455,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     auto *runHeader = new QHBoxLayout;
     runTitle_ = new QLabel(runPanel_);
     runTitle_->setObjectName(QStringLiteral("runTitle"));
+    runTitle_->setWordWrap(true);
     runHeader->addWidget(runTitle_, 1);
     runStatus_ = new QLabel(runPanel_);
     runHeader->addWidget(runStatus_);
@@ -957,12 +785,12 @@ void AutomationPage::loadAll(int preferredToolId)
         item->setData(0, Qt::UserRole, id);
         item->setData(0, Qt::UserRole + 1, kGroupItem);
         item->setData(0, SiblingOrderScopeRole, QStringLiteral("tool-groups"));
-        item->setIcon(0, style()->standardIcon(QStyle::SP_DirIcon));
+        item->setIcon(0, UiTheme::icon(QStringLiteral("folder")));
         item->setToolTip(0, tooltip);
         QFont font = item->font(0);
         font.setWeight(QFont::DemiBold);
         item->setFont(0, font);
-        item->setForeground(1, QColor(QStringLiteral("#94a3b8")));
+        item->setForeground(1, QColor(QString::fromLatin1(UiTheme::Muted)));
         item->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
         groupItems.insert(id, item);
     };
@@ -2344,11 +2172,11 @@ void AutomationPage::renderRunRecord()
     const RunRecord &record = runRecords_[selectedToolId_];
     runTitle_->setText(QStringLiteral("最近运行：%1").arg(record.title)
         + (record.outputTruncated ? QStringLiteral("（仅保留最近 256 Ki 字符）") : QString()));
-    QString color = QStringLiteral("#4ade80");
+    QString color = QString::fromLatin1(UiTheme::Success);
     if (record.running) {
-        color = QStringLiteral("#93c5fd");
+        color = QString::fromLatin1(UiTheme::Accent);
     } else if (record.failed) {
-        color = QStringLiteral("#f87171");
+        color = QString::fromLatin1(UiTheme::Danger);
     }
     runStatus_->setText(record.status);
     runStatus_->setStyleSheet(QStringLiteral("color: %1; font-weight: 600;").arg(color));

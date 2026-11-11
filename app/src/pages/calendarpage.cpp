@@ -1,3 +1,5 @@
+#include "ui/theme.h"
+#include "widgets/emptyviewhint.h"
 #include "calendarpage.h"
 #include "widgets/persistenttextzoom.h"
 #include "widgets/headingtext.h"
@@ -76,7 +78,7 @@ CalendarPage::CalendarPage(AppDatabase *database,
     , trayIcon_(trayIcon)
 {
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(34, 30, 34, 34);
+    layout->setContentsMargins(24, 24, 24, 24);
     layout->setSpacing(18);
 
     layout->addWidget(makeTitle(QStringLiteral("时序记录"), this));
@@ -92,9 +94,9 @@ CalendarPage::CalendarPage(AppDatabase *database,
     auto *calendarHeader = new QHBoxLayout;
     calendarHeader->addWidget(makeCardTitle(QStringLiteral("日历"), calendarCard),1);
     auto *diaryLegend = new QLabel(QStringLiteral("■ 日记"),calendarCard);
-    diaryLegend->setStyleSheet(QStringLiteral("color: #168b79;"));
+    diaryLegend->setObjectName(QStringLiteral("diaryLegend"));
     auto *reminderLegend = new QLabel(QStringLiteral("▲ 提醒"),calendarCard);
-    reminderLegend->setStyleSheet(QStringLiteral("color: #b57812;"));
+    reminderLegend->setObjectName(QStringLiteral("reminderLegend"));
     calendarHeader->addWidget(diaryLegend);
     calendarHeader->addSpacing(10);
     calendarHeader->addWidget(reminderLegend);
@@ -102,8 +104,8 @@ CalendarPage::CalendarPage(AppDatabase *database,
 
     calendar_ = new WorkspaceCalendar(calendarCard);
     QPalette calendarPalette = calendar_->palette();
-    calendarPalette.setColor(QPalette::Highlight, QColor(QStringLiteral("#3b82d6")));
-    calendarPalette.setColor(QPalette::HighlightedText, Qt::white);
+    calendarPalette.setColor(QPalette::Highlight, QColor(UiTheme::Selection));
+    calendarPalette.setColor(QPalette::HighlightedText, QColor(UiTheme::Accent));
     calendar_->setPalette(calendarPalette);
     calendar_->setGridVisible(false);
     calendar_->setVerticalHeaderFormat(QCalendarWidget::NoVerticalHeader);
@@ -128,7 +130,7 @@ CalendarPage::CalendarPage(AppDatabase *database,
     detailsLayout->addWidget(makeCardTitle(QStringLiteral("提醒事项"), detailsCard));
     reminderList_ = new QListWidget(detailsCard);
     reminderList_->setObjectName(QStringLiteral("reminderList"));
-    reminderList_->setAlternatingRowColors(true);
+    reminderList_->setAlternatingRowColors(false);
     reminderList_->setSelectionMode(QAbstractItemView::SingleSelection);
     reminderList_->setMinimumHeight(110);
     detailsLayout->addWidget(reminderList_, 2);
@@ -145,6 +147,7 @@ CalendarPage::CalendarPage(AppDatabase *database,
     reminderButtonRow->addWidget(completeReminderButton_);
     deleteReminderButton_ = new QPushButton(QStringLiteral("删除"), detailsCard);
     deleteReminderButton_->setEnabled(false);
+    UiTheme::setRole(deleteReminderButton_, "danger");
     reminderButtonRow->addWidget(deleteReminderButton_);
     reminderButtonRow->addStretch(1);
     detailsLayout->addLayout(reminderButtonRow);
@@ -161,7 +164,7 @@ CalendarPage::CalendarPage(AppDatabase *database,
     diaryList_->setSpacing(4);
     diaryList_->setTextElideMode(Qt::ElideRight);
     diaryList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    diaryList_->setAlternatingRowColors(true);
+    diaryList_->setAlternatingRowColors(false);
     diaryList_->setSelectionMode(QAbstractItemView::SingleSelection);
     diaryList_->setMinimumHeight(110);
     detailsLayout->addWidget(diaryList_, 3);
@@ -175,6 +178,7 @@ CalendarPage::CalendarPage(AppDatabase *database,
     diaryButtonRow->addWidget(editButton_);
     deleteButton_ = new QPushButton(QStringLiteral("删除"), detailsCard);
     deleteButton_->setEnabled(false);
+    UiTheme::setRole(deleteButton_, "danger");
     diaryButtonRow->addWidget(deleteButton_);
     diaryButtonRow->addStretch(1);
     detailsLayout->addLayout(diaryButtonRow);
@@ -251,7 +255,7 @@ void CalendarPage::updateCalendarAppearance()
     }
     static_cast<WorkspaceCalendar *>(calendar_)->setRecordDates(diaryDates,reminderDates);
     QTextCharFormat todayFormat;
-    todayFormat.setBackground(QColor(QStringLiteral("#60a5fa")));
+    todayFormat.setBackground(QColor(UiTheme::Selection));
     calendar_->setDateTextFormat(QDate::currentDate(),todayFormat);
 }
 
@@ -261,6 +265,7 @@ void CalendarPage::refreshReminderList()
     editReminderButton_->setEnabled(false);
     completeReminderButton_->setEnabled(false);
     deleteReminderButton_->setEnabled(false);
+    UiTheme::setRole(deleteReminderButton_, "danger");
     if (database_ == nullptr) {
         return;
     }
@@ -289,9 +294,11 @@ void CalendarPage::refreshReminderList()
             QFont font = item->font();
             font.setStrikeOut(true);
             item->setFont(font);
-            item->setForeground(QColor(QStringLiteral("#94a3b8")));
+            item->setForeground(QColor(UiTheme::Muted));
         }
     }
+    EmptyViewHint::update(reminderList_, reminderList_->count() ? QString()
+        : QStringLiteral("当天没有提醒\n点击“添加提醒”安排事项"));
     summaryLabel_->setText(QStringLiteral("提醒 %1 条 · 日记 %2 条")
                                .arg(reminderList_->count())
                                .arg(diaryList_ == nullptr ? 0 : diaryList_->count()));
@@ -533,6 +540,7 @@ void CalendarPage::refreshDiaryList()
     diaryList_->clear();
     editButton_->setEnabled(false);
     deleteButton_->setEnabled(false);
+    UiTheme::setRole(deleteButton_, "danger");
     if (database_ == nullptr) {
         return;
     }
@@ -546,7 +554,7 @@ void CalendarPage::refreshDiaryList()
     }
     if (entries.isEmpty()) {
         auto *item = new QListWidgetItem(QStringLiteral("这一天还没有日记"), diaryList_);
-        item->setForeground(QColor(QStringLiteral("#94a3b8")));
+        item->setForeground(QColor(UiTheme::Muted));
         item->setFlags(item->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
     } else {
         for (const AppDatabase::DiaryEntry &entry : entries) {

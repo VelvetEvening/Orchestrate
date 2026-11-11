@@ -1,0 +1,19 @@
+<RCC>
+  <qresource prefix="/ui">
+    <file>light.qss</file>
+    <file>icons/calendar.svg</file>
+    <file>icons/folder.svg</file>
+    <file>icons/workflow.svg</file>
+    <file>icons/clipboard.svg</file>
+    <file>icons/settings.svg</file>
+    <file>icons/chevron-left.svg</file>
+    <file>icons/chevron-right.svg</file>
+    <file>icons/chevron-up.svg</file>
+    <file>icons/chevron-down.svg</file>
+    <file>icons/check.svg</file>
+    <file>icons/radio.svg</file>
+    <file>icons/play.svg</file>
+    <file>icons/refresh.svg</file>
+    <file>icons/document.svg</file>
+  </qresource>
+</RCC>

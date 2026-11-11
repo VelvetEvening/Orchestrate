@@ -1,3 +1,5 @@
+#include "ui/theme.h"
+#include "widgets/emptyviewhint.h"
 #include "projectspage.h"
 #include "platform/fileaccess.h"
 #include "collaborationrecorddialog.h"
@@ -67,23 +69,19 @@ void styleList(QListWidget *list) {
     list->setTextElideMode(Qt::ElideRight);
     list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    list->setStyleSheet(QStringLiteral(
-        "QListWidget { border: none; background: transparent; outline: none; padding: 0; }"
-        "QListWidget::item { padding: 10px 12px; border-radius: 7px; color: #334155; }"
-        "QListWidget::item:hover { background: #f1f5fb; }"
-        "QListWidget::item:selected { background: #e0ebff; color: #1d4ed8; }"));
+
 }
 }
 
 ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(parent), database_(database)
 {
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(34, 30, 34, 34);
+    layout->setContentsMargins(24, 24, 24, 24);
     layout->setSpacing(18);
     layout->addWidget(label(QStringLiteral("项目记录"), QStringLiteral("pageTitle"), this));
     auto *splitter = new QSplitter(this);
     splitter->setChildrenCollapsible(false);
-    splitter->setHandleWidth(14);
+    splitter->setHandleWidth(10);
     auto *listCard = card(splitter);
     auto *left = new QVBoxLayout(listCard);
     left->setContentsMargins(18,18,18,18);
@@ -112,16 +110,14 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     projectTitle_ = label(QString(), QStringLiteral("cardTitle"), details_);
     projectTitle_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     header->addWidget(projectTitle_,1);
-    outlineTitle_ = label(QStringLiteral("项目大纲"), QStringLiteral("outlineTitle"), details_);
+    outlineTitle_ = new QPushButton(UiTheme::icon(QStringLiteral("document")), QStringLiteral("项目大纲"), details_);
+    outlineTitle_->setObjectName(QStringLiteral("outlineTitle"));
     outlineTitle_->setCursor(Qt::PointingHandCursor);
     outlineTitle_->setFocusPolicy(Qt::StrongFocus);
-    outlineTitle_->setToolTip(QStringLiteral("双击打开项目大纲"));
-    outlineTitle_->setAccessibleDescription(QStringLiteral("双击或按回车打开项目大纲"));
-    outlineTitle_->setStyleSheet(QStringLiteral(
-        "QLabel#outlineTitle { background: #eaf2ff; color: #2456a6; font-size: 14px; font-weight: 600; padding: 8px 14px; border: 1px solid #a9c5eb; border-radius: 6px; }"
-        "QLabel#outlineTitle:hover { background: #dceaff; border-color: #6c9cda; }"
-        "QLabel#outlineTitle:focus { background: #dceaff; border-color: #3474c9; }"
-        "QLabel#outlineTitle:disabled { background: #f1f3f6; color: #98a2b1; border-color: #dce2ea; }"));
+    outlineTitle_->setToolTip(QStringLiteral("打开项目大纲"));
+    outlineTitle_->setAccessibleDescription(QStringLiteral("单击或按回车、空格打开项目大纲"));
+
+    connect(outlineTitle_, &QPushButton::clicked, this, &ProjectsPage::openOutline);
     outlineTitle_->installEventFilter(this);
     header->addWidget(outlineTitle_);
     auto *edit = new QPushButton(QStringLiteral("项目设置"), details_);
@@ -142,7 +138,8 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     outlineLayout->addWidget(outlineEdit_, 1);
     saveStatus_ = label(QString(), QStringLiteral("outlineSaveError"), outlineWindow_);
     saveStatus_->setWordWrap(true);
-    saveStatus_->hide();
+    saveStatus_->setText(QStringLiteral("修改会自动保存"));
+    UiTheme::setRole(saveStatus_, "muted");
     outlineLayout->addWidget(saveStatus_);
     auto *recordsPanel_ = new QWidget(details_);
     recordsPanel_->setObjectName(QStringLiteral("recordsPanel"));
@@ -200,23 +197,20 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     workList_->setAccessibleName(QStringLiteral("协作记录与文件夹"));
     workList_->setToolTip(QStringLiteral("拖入文件夹归类，拖到空白处移回顶层；Ctrl+↑/↓ 调整同层顺序。"));
     workList_->setAccessibleDescription(QStringLiteral("拖动排序或移入文件夹，空白处为项目顶层；Ctrl+上或下箭头调序。搜索时暂停拖动。"));
-    workList_->setStyleSheet(QStringLiteral(
-        "QTreeWidget { border: none; background: transparent; padding: 0; selection-background-color: #e0ebff; selection-color: #1d4ed8; }"
-        "QTreeWidget::item { padding: 8px 10px; color: #334155; }"
-        "QTreeWidget::item:hover { background: #f1f5fb; }"
-        "QTreeWidget::item:selected { background: #e0ebff; color: #1d4ed8; }"));
+
     workList_->installEventFilter(this);
     workList_->setMinimumHeight(120);
     records->addWidget(workList_,1);
     recordHint_ = label(QString(), QStringLiteral("recordHint"), recordsPanel_);
     recordHint_->setWordWrap(true);
-    recordHint_->setStyleSheet(QStringLiteral("color: #52627a;"));
+
     records->addWidget(recordHint_);
     auto *actions = new QHBoxLayout;
     auto *add = new QPushButton(QStringLiteral("添加记录"), recordsPanel_);
     add->setObjectName(QStringLiteral("primaryButton"));
     editWorkButton_ = new QPushButton(QStringLiteral("打开"), recordsPanel_);
     deleteWorkButton_ = new QPushButton(QStringLiteral("删除"), recordsPanel_);
+    UiTheme::setRole(deleteWorkButton_, "danger");
     actions->addWidget(add);
     actions->addWidget(editWorkButton_);
     actions->addWidget(deleteWorkButton_);
@@ -274,6 +268,8 @@ void ProjectsPage::loadProjects(int preferred)
             + (project.directory.isEmpty() ? QString() : QStringLiteral("\n双击打开目录：") + QDir::toNativeSeparators(project.directory)));
         if (project.id == preferred) row = projectList_->count()-1;
     }
+    EmptyViewHint::update(projectList_, projects.isEmpty()
+        ? QStringLiteral("还没有项目\n点击下方“新建项目”开始") : QString());
     if (projects.isEmpty()) {
         current_ = {};
         projectTitle_->setText(QStringLiteral("暂无项目"));
@@ -337,11 +333,14 @@ bool ProjectsPage::saveOutline()
     const QString text = outlineEdit_->toPlainText();
     if (!database_->updateProject(current_.id, current_.name, current_.directory, text, &error)) {
         saveStatus_->setText(QStringLiteral("大纲保存失败：") + error);
+        UiTheme::setRole(saveStatus_, "error");
         saveStatus_->show();
         return false;
     }
     current_.outline = text;
-    saveStatus_->hide();
+    saveStatus_->setText(QStringLiteral("已自动保存"));
+    UiTheme::setRole(saveStatus_, "success");
+    saveStatus_->show();
     return true;
 }
 
@@ -367,6 +366,9 @@ void ProjectsPage::selectProject(int id)
     for (const auto &project : database_->projects(&error)) {
         if (project.id != id) continue;
         current_ = project;
+        saveStatus_->setText(QStringLiteral("修改会自动保存"));
+        UiTheme::setRole(saveStatus_, "muted");
+        saveStatus_->show();
         projectTitle_->setText(project.name);
         projectTitle_->setToolTip(project.name);
         const QSignalBlocker blocker(outlineEdit_);
@@ -413,11 +415,7 @@ void ProjectsPage::projectDialog(bool creating)
         remove->setObjectName(QStringLiteral("deleteProjectButton"));
         remove->setAutoDefault(false);
         remove->setAccessibleDescription(QStringLiteral("打开删除确认，须输入完整确认文字"));
-        remove->setStyleSheet(QStringLiteral(
-            "QPushButton#deleteProjectButton { color: #b42318; background: transparent; border: 1px solid transparent; padding: 7px 8px; }"
-            "QPushButton#deleteProjectButton:hover { color: #912018; background: #fff1f0; }"
-            "QPushButton#deleteProjectButton:pressed { color: #7a271a; background: #fee4e2; }"
-            "QPushButton#deleteProjectButton:focus { border-color: #fda29b; }"));
+
         footer->addWidget(remove);
         connect(remove, &QPushButton::clicked, &dialog, [this, &dialog] {
             if (deleteProject(&dialog)) dialog.reject();
@@ -512,8 +510,7 @@ void ProjectsPage::refreshWorkRecords()
     if (!error.isEmpty()) { showError(error); return; }
     const auto expanded = database_->setting(expandedFoldersKey(current_.id)).split(',');
     QHash<int, QTreeWidgetItem *> folderItems;
-    QIcon folderIcon = style()->standardIcon(QStyle::SP_DirClosedIcon);
-    folderIcon.addPixmap(style()->standardPixmap(QStyle::SP_DirOpenIcon), QIcon::Normal, QIcon::On);
+    QIcon folderIcon = UiTheme::icon(QStringLiteral("folder"));
     const QIcon starredIcon(QStringLiteral(":/icons/star.svg"));
     for (const auto &folder : folders) {
         auto *item = new QTreeWidgetItem(workList_, {folder.name});
@@ -641,7 +638,8 @@ void ProjectsPage::folderDialog(bool creating)
     layout->addLayout(form);
     auto *errorLabel = label(QString(),QStringLiteral("folderError"),&dialog);
     errorLabel->setWordWrap(true);
-    errorLabel->setStyleSheet(QStringLiteral("color: #b42318;"));
+    UiTheme::setRole(errorLabel, "error");
+
     errorLabel->hide();
     layout->addWidget(errorLabel);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel,&dialog);
@@ -775,6 +773,14 @@ void ProjectsPage::deleteWorkRecord()
 }
 bool ProjectsPage::eventFilter(QObject *watched, QEvent *event)
 {
+    // Space is native QPushButton behavior; retain the existing Enter shortcut.
+    if (watched == outlineTitle_ && outlineTitle_->isEnabled() && event->type() == QEvent::KeyPress) {
+        const int key = static_cast<QKeyEvent *>(event)->key();
+        if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+            outlineTitle_->click();
+            return true;
+        }
+    }
     if (watched == workList_ && event->type() == QEvent::KeyPress) {
         const int key = static_cast<QKeyEvent *>(event)->key();
         if (key == Qt::Key_Return || key == Qt::Key_Enter) {
@@ -782,20 +788,6 @@ bool ProjectsPage::eventFilter(QObject *watched, QEvent *event)
             if (item && item->data(0,FolderRole).toBool()) item->setExpanded(!item->isExpanded());
             else recordDialog(false);
             return true;
-        }
-    }
-    if (watched == outlineTitle_ && outlineTitle_->isEnabled()) {
-        if (event->type() == QEvent::MouseButtonDblClick &&
-            static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton) {
-            openOutline();
-            return true;
-        }
-        if (event->type() == QEvent::KeyPress) {
-            const int key = static_cast<QKeyEvent *>(event)->key();
-            if (key == Qt::Key_Return || key == Qt::Key_Enter || key == Qt::Key_Space) {
-                openOutline();
-                return true;
-            }
         }
     }
     return QWidget::eventFilter(watched, event);

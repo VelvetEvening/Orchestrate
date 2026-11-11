@@ -1,3 +1,4 @@
+#include "ui/theme.h"
 #include "mainwindow.h"
 #include "version.h"
 #include "platform/instancelock.h"
@@ -44,6 +45,8 @@ int main(int argc, char *argv[])
     if (QStyleFactory::keys().contains(QStringLiteral("Fusion"))) {
         app.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
     }
+
+    UiTheme::install(app);
 
     MainWindow window;
     window.showMainWindow();

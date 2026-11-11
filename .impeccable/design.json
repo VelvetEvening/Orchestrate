@@ -1,0 +1,504 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-11T03:02:06.098392Z",
+  "title": "Design System: Orchestrate",
+  "extensions": {
+    "colorMeta": {
+      "background": {
+        "role": "neutral",
+        "displayName": "桌面浅灰",
+        "tonalRamp": [
+          "oklch(15% 0.0029 264.54)",
+          "oklch(26% 0.0029 264.54)",
+          "oklch(38% 0.0029 264.54)",
+          "oklch(49% 0.0029 264.54)",
+          "oklch(61% 0.0029 264.54)",
+          "oklch(72% 0.0029 264.54)",
+          "oklch(84% 0.0029 264.54)",
+          "oklch(95% 0.0029 264.54)"
+        ]
+      },
+      "sidebar": {
+        "role": "neutral",
+        "displayName": "侧栏浅灰",
+        "tonalRamp": [
+          "oklch(15% 0.0046 258.32)",
+          "oklch(26% 0.0046 258.32)",
+          "oklch(38% 0.0046 258.32)",
+          "oklch(49% 0.0046 258.32)",
+          "oklch(61% 0.0046 258.32)",
+          "oklch(72% 0.0046 258.32)",
+          "oklch(84% 0.0046 258.32)",
+          "oklch(95% 0.0046 258.32)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "白色工作面",
+        "tonalRamp": [
+          "oklch(15% 0.0000 0.00)",
+          "oklch(26% 0.0000 0.00)",
+          "oklch(38% 0.0000 0.00)",
+          "oklch(49% 0.0000 0.00)",
+          "oklch(61% 0.0000 0.00)",
+          "oklch(72% 0.0000 0.00)",
+          "oklch(84% 0.0000 0.00)",
+          "oklch(95% 0.0000 0.00)"
+        ]
+      },
+      "text": {
+        "role": "neutral",
+        "displayName": "深灰正文",
+        "tonalRamp": [
+          "oklch(15% 0.0360 254.91)",
+          "oklch(26% 0.0360 254.91)",
+          "oklch(38% 0.0360 254.91)",
+          "oklch(49% 0.0360 254.91)",
+          "oklch(61% 0.0360 254.91)",
+          "oklch(72% 0.0360 254.91)",
+          "oklch(84% 0.0360 254.91)",
+          "oklch(95% 0.0360 254.91)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "弱化文字",
+        "tonalRamp": [
+          "oklch(15% 0.0342 256.08)",
+          "oklch(26% 0.0342 256.08)",
+          "oklch(38% 0.0342 256.08)",
+          "oklch(49% 0.0342 256.08)",
+          "oklch(61% 0.0342 256.08)",
+          "oklch(72% 0.0342 256.08)",
+          "oklch(84% 0.0342 256.08)",
+          "oklch(95% 0.0342 256.08)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "内容边界",
+        "tonalRamp": [
+          "oklch(15% 0.0109 256.70)",
+          "oklch(26% 0.0109 256.70)",
+          "oklch(38% 0.0109 256.70)",
+          "oklch(49% 0.0109 256.70)",
+          "oklch(61% 0.0109 256.70)",
+          "oklch(72% 0.0109 256.70)",
+          "oklch(84% 0.0109 256.70)",
+          "oklch(95% 0.0109 256.70)"
+        ]
+      },
+      "control-border": {
+        "role": "neutral",
+        "displayName": "控件边界",
+        "tonalRamp": [
+          "oklch(15% 0.0211 254.93)",
+          "oklch(26% 0.0211 254.93)",
+          "oklch(38% 0.0211 254.93)",
+          "oklch(49% 0.0211 254.93)",
+          "oklch(61% 0.0211 254.93)",
+          "oklch(72% 0.0211 254.93)",
+          "oklch(84% 0.0211 254.93)",
+          "oklch(95% 0.0211 254.93)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "雾蓝强调",
+        "tonalRamp": [
+          "oklch(15% 0.0813 255.33)",
+          "oklch(26% 0.0813 255.33)",
+          "oklch(38% 0.0813 255.33)",
+          "oklch(49% 0.0813 255.33)",
+          "oklch(61% 0.0813 255.33)",
+          "oklch(72% 0.0813 255.33)",
+          "oklch(84% 0.0813 255.33)",
+          "oklch(95% 0.0813 255.33)"
+        ]
+      },
+      "selection": {
+        "role": "primary",
+        "displayName": "浅雾蓝选择",
+        "tonalRamp": [
+          "oklch(15% 0.0154 257.20)",
+          "oklch(26% 0.0154 257.20)",
+          "oklch(38% 0.0154 257.20)",
+          "oklch(49% 0.0154 257.20)",
+          "oklch(61% 0.0154 257.20)",
+          "oklch(72% 0.0154 257.20)",
+          "oklch(84% 0.0154 257.20)",
+          "oklch(95% 0.0154 257.20)"
+        ]
+      },
+      "hover": {
+        "role": "neutral",
+        "displayName": "浅灰悬停",
+        "tonalRamp": [
+          "oklch(15% 0.0062 255.48)",
+          "oklch(26% 0.0062 255.48)",
+          "oklch(38% 0.0062 255.48)",
+          "oklch(49% 0.0062 255.48)",
+          "oklch(61% 0.0062 255.48)",
+          "oklch(72% 0.0062 255.48)",
+          "oklch(84% 0.0062 255.48)",
+          "oklch(95% 0.0062 255.48)"
+        ]
+      },
+      "focus": {
+        "role": "primary",
+        "displayName": "焦点蓝",
+        "tonalRamp": [
+          "oklch(15% 0.0670 255.95)",
+          "oklch(26% 0.0670 255.95)",
+          "oklch(38% 0.0670 255.95)",
+          "oklch(49% 0.0670 255.95)",
+          "oklch(61% 0.0670 255.95)",
+          "oklch(72% 0.0670 255.95)",
+          "oklch(84% 0.0670 255.95)",
+          "oklch(95% 0.0670 255.95)"
+        ]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "成功绿",
+        "tonalRamp": [
+          "oklch(15% 0.0709 159.05)",
+          "oklch(26% 0.0709 159.05)",
+          "oklch(38% 0.0709 159.05)",
+          "oklch(49% 0.0709 159.05)",
+          "oklch(61% 0.0709 159.05)",
+          "oklch(72% 0.0709 159.05)",
+          "oklch(84% 0.0709 159.05)",
+          "oklch(95% 0.0709 159.05)"
+        ]
+      },
+      "success-background": {
+        "role": "semantic",
+        "displayName": "成功浅底",
+        "tonalRamp": [
+          "oklch(15% 0.0116 153.67)",
+          "oklch(26% 0.0116 153.67)",
+          "oklch(38% 0.0116 153.67)",
+          "oklch(49% 0.0116 153.67)",
+          "oklch(61% 0.0116 153.67)",
+          "oklch(72% 0.0116 153.67)",
+          "oklch(84% 0.0116 153.67)",
+          "oklch(95% 0.0116 153.67)"
+        ]
+      },
+      "warning": {
+        "role": "semantic",
+        "displayName": "提醒棕",
+        "tonalRamp": [
+          "oklch(15% 0.0949 77.48)",
+          "oklch(26% 0.0949 77.48)",
+          "oklch(38% 0.0949 77.48)",
+          "oklch(49% 0.0949 77.48)",
+          "oklch(61% 0.0949 77.48)",
+          "oklch(72% 0.0949 77.48)",
+          "oklch(84% 0.0949 77.48)",
+          "oklch(95% 0.0949 77.48)"
+        ]
+      },
+      "warning-background": {
+        "role": "semantic",
+        "displayName": "提醒浅底",
+        "tonalRamp": [
+          "oklch(15% 0.0200 84.59)",
+          "oklch(26% 0.0200 84.59)",
+          "oklch(38% 0.0200 84.59)",
+          "oklch(49% 0.0200 84.59)",
+          "oklch(61% 0.0200 84.59)",
+          "oklch(72% 0.0200 84.59)",
+          "oklch(84% 0.0200 84.59)",
+          "oklch(95% 0.0200 84.59)"
+        ]
+      },
+      "danger": {
+        "role": "semantic",
+        "displayName": "危险红",
+        "tonalRamp": [
+          "oklch(15% 0.1287 22.63)",
+          "oklch(26% 0.1287 22.63)",
+          "oklch(38% 0.1287 22.63)",
+          "oklch(49% 0.1287 22.63)",
+          "oklch(61% 0.1287 22.63)",
+          "oklch(72% 0.1287 22.63)",
+          "oklch(84% 0.1287 22.63)",
+          "oklch(95% 0.1287 22.63)"
+        ]
+      },
+      "danger-background": {
+        "role": "semantic",
+        "displayName": "危险浅底",
+        "tonalRamp": [
+          "oklch(15% 0.0130 17.38)",
+          "oklch(26% 0.0130 17.38)",
+          "oklch(38% 0.0130 17.38)",
+          "oklch(49% 0.0130 17.38)",
+          "oklch(61% 0.0130 17.38)",
+          "oklch(72% 0.0130 17.38)",
+          "oklch(84% 0.0130 17.38)",
+          "oklch(95% 0.0130 17.38)"
+        ]
+      },
+      "disabled": {
+        "role": "neutral",
+        "displayName": "禁用灰",
+        "tonalRamp": [
+          "oklch(15% 0.0236 256.76)",
+          "oklch(26% 0.0236 256.76)",
+          "oklch(38% 0.0236 256.76)",
+          "oklch(49% 0.0236 256.76)",
+          "oklch(61% 0.0236 256.76)",
+          "oklch(72% 0.0236 256.76)",
+          "oklch(84% 0.0236 256.76)",
+          "oklch(95% 0.0236 256.76)"
+        ]
+      },
+      "primary-hover": {
+        "role": "primary",
+        "displayName": "主要操作悬停",
+        "tonalRamp": [
+          "oklch(15% 0.0236 256.10)",
+          "oklch(26% 0.0236 256.10)",
+          "oklch(38% 0.0236 256.10)",
+          "oklch(49% 0.0236 256.10)",
+          "oklch(61% 0.0236 256.10)",
+          "oklch(72% 0.0236 256.10)",
+          "oklch(84% 0.0236 256.10)",
+          "oklch(95% 0.0236 256.10)"
+        ]
+      },
+      "primary-pressed": {
+        "role": "primary",
+        "displayName": "主要操作按下",
+        "tonalRamp": [
+          "oklch(15% 0.0284 256.49)",
+          "oklch(26% 0.0284 256.49)",
+          "oklch(38% 0.0284 256.49)",
+          "oklch(49% 0.0284 256.49)",
+          "oklch(61% 0.0284 256.49)",
+          "oklch(72% 0.0284 256.49)",
+          "oklch(84% 0.0284 256.49)",
+          "oklch(95% 0.0284 256.49)"
+        ]
+      },
+      "nav-hover": {
+        "role": "neutral",
+        "displayName": "导航悬停",
+        "tonalRamp": [
+          "oklch(15% 0.0092 258.34)",
+          "oklch(26% 0.0092 258.34)",
+          "oklch(38% 0.0092 258.34)",
+          "oklch(49% 0.0092 258.34)",
+          "oklch(61% 0.0092 258.34)",
+          "oklch(72% 0.0092 258.34)",
+          "oklch(84% 0.0092 258.34)",
+          "oklch(95% 0.0092 258.34)"
+        ]
+      },
+      "nav-selected": {
+        "role": "primary",
+        "displayName": "导航选择",
+        "tonalRamp": [
+          "oklch(15% 0.0172 256.28)",
+          "oklch(26% 0.0172 256.28)",
+          "oklch(38% 0.0172 256.28)",
+          "oklch(49% 0.0172 256.28)",
+          "oklch(61% 0.0172 256.28)",
+          "oklch(72% 0.0172 256.28)",
+          "oklch(84% 0.0172 256.28)",
+          "oklch(95% 0.0172 256.28)"
+        ]
+      },
+      "danger-hover-border": {
+        "role": "semantic",
+        "displayName": "危险悬停边界",
+        "tonalRamp": [
+          "oklch(15% 0.0375 17.91)",
+          "oklch(26% 0.0375 17.91)",
+          "oklch(38% 0.0375 17.91)",
+          "oklch(49% 0.0375 17.91)",
+          "oklch(61% 0.0375 17.91)",
+          "oklch(72% 0.0375 17.91)",
+          "oklch(84% 0.0375 17.91)",
+          "oklch(95% 0.0375 17.91)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "body": {
+        "displayName": "body",
+        "purpose": "Windows 原生正文；Microsoft YaHei UI 不可用时保留 QApplication 字体。"
+      },
+      "page-title": {
+        "displayName": "page-title",
+        "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
+      },
+      "brand": {
+        "displayName": "brand",
+        "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
+      },
+      "tool-title": {
+        "displayName": "tool-title",
+        "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
+      },
+      "card-title": {
+        "displayName": "card-title",
+        "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
+      },
+      "navigation": {
+        "displayName": "navigation",
+        "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
+      },
+      "navigation-selected": {
+        "displayName": "navigation-selected",
+        "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
+      },
+      "label": {
+        "displayName": "label",
+        "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
+      },
+      "tag": {
+        "displayName": "tag",
+        "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
+      },
+      "button-primary": {
+        "displayName": "button-primary",
+        "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
+      },
+      "status": {
+        "displayName": "status",
+        "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
+      },
+      "calendar-date": {
+        "displayName": "calendar-date",
+        "purpose": "QCalendarWidget 日期；今天与选中日期加粗。"
+      }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": []
+  },
+  "components": [
+    {
+      "name": "主要按钮",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "原生主要操作的浅雾蓝状态预览。",
+      "html": "<button class=\"ds-primary\">保存</button>",
+      "css": ".ds-primary{border:1px solid #c6d0dd;border-radius:6px;padding:6px 11px;min-height:20px;font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;background:#e7eef8;color:#41638f;font-weight:600}.ds-primary:hover{background:#dce7f6;border-color:#7895bc}.ds-primary:active{background:#d4e1f3}.ds-primary:focus-visible{outline:none;border-color:#41638f}.ds-primary:disabled{color:#919ba9;background:#f6f7f9;border-color:#e1e6ed}"
+    },
+    {
+      "name": "次要按钮",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "常规操作与对话框取消按钮。",
+      "html": "<button class=\"ds-secondary\">取消</button>",
+      "css": ".ds-secondary{border:1px solid #c6d0dd;border-radius:6px;padding:6px 11px;min-height:20px;font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;background:#fff;color:#344254}.ds-secondary:hover{background:#f0f3f7;border-color:#7895bc}.ds-secondary:active{background:#e7eef8}.ds-secondary:focus-visible{outline:none;border-color:#41638f}.ds-secondary:disabled{color:#919ba9;background:#f6f7f9;border-color:#e1e6ed}"
+    },
+    {
+      "name": "危险按钮",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "删除与移除注册操作。",
+      "html": "<button class=\"ds-danger\">移除注册</button>",
+      "css": ".ds-danger{border:1px solid #c6d0dd;border-radius:6px;padding:6px 11px;min-height:20px;font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;background:transparent;color:#a64545;border-color:transparent}.ds-danger:hover{background:#fbefef;border-color:#e6c5c5}.ds-danger:focus-visible{outline:none;border-color:#a64545}.ds-danger:disabled{color:#919ba9;background:transparent;border-color:transparent}"
+    },
+    {
+      "name": "单行输入",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "原生输入框的默认、悬停与焦点表达。",
+      "html": "<input class=\"ds-input\" aria-label=\"记录标题\" placeholder=\"记录标题\">",
+      "css": ".ds-input{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#344254;background:#fff;border:1px solid #c6d0dd;border-radius:6px;padding:6px 9px}.ds-input::placeholder{color:#637184}.ds-input:hover{border-color:#7895bc}.ds-input:focus-visible{outline:none;border-color:#41638f}.ds-input:disabled{color:#919ba9;background:#f6f7f9;border-color:#e1e6ed}.ds-input:read-only{background:#f6f7f9;border-color:#e1e6ed}"
+    },
+    {
+      "name": "侧栏导航",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "可折叠原生导航的展开态；示例展示当前模块。",
+      "html": "<nav class=\"ds-nav\"><button class=\"ds-nav-button\" aria-current=\"page\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#637184\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"5\" width=\"16\" height=\"16\" rx=\"2\"/><path d=\"M8 3v4m8-4v4M4 10h16M8 14h2m4 0h2m-8 4h2\"/></svg><span>时序记录</span></button></nav>",
+      "css": ".ds-nav{background:#f0f2f5;padding:14px;width:188px}.ds-nav-button{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;font-size:14px;display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;color:#344254;border:1px solid transparent;border-radius:7px;padding:10px 12px;min-height:20px}.ds-nav-button svg{width:19px;height:19px;flex-shrink:0}.ds-nav-button:hover{background:#e9edf3}.ds-nav-button[aria-current=\"page\"]{background:#e2eaf5;color:#41638f;font-weight:600}.ds-nav-button:focus-visible{outline:none;border-color:#7895bc}"
+    },
+    {
+      "name": "成功状态",
+      "kind": "chip",
+      "refersTo": "status-success",
+      "description": "只读运行状态，文字与语义颜色共同表达结果。",
+      "html": "<span class=\"ds-status\">已完成</span>",
+      "css": ".ds-status{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;display:inline-block;color:#386b50;background:#edf5ef;border:none;border-radius:5px;padding:3px 9px;font-weight:500}"
+    },
+    {
+      "name": "内容卡片",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "白色工作面；示例使用项目详情的内边距。",
+      "html": "<section class=\"ds-card\"><h3 class=\"ds-card-title\">项目记录</h3><p class=\"ds-card-copy\">查找、阅读和编辑工作内容。</p></section>",
+      "css": ".ds-card{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;background:#fff;color:#344254;border:1px solid #e1e6ed;border-radius:10px;padding:18px 22px}.ds-card-title{font-size:15px;font-weight:600;margin:0 0 12px}.ds-card-copy{margin:0}"
+    },
+    {
+      "name": "预览与编辑页签",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "HeadingTextEdit 的模式选择外观；文档预览不实现 Qt 页签切换。",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\" aria-label=\"正文显示模式\"><button class=\"ds-tab\" role=\"tab\" aria-selected=\"true\">预览</button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">编辑</button></div>",
+      "css": ".ds-tab{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#637184;background:transparent;border:1px solid transparent;border-radius:6px;padding:7px 12px;margin-right:4px;min-width:36px;min-height:20px}.ds-tab:hover{background:#f0f3f7}.ds-tab[aria-selected=\"true\"]{color:#41638f;background:#e7eef8;border-color:#c6d0dd;font-weight:600}.ds-tab:focus-visible{outline:none;border-color:#41638f}"
+    },
+    {
+      "name": "选中日期",
+      "kind": "custom",
+      "refersTo": "calendar-selected",
+      "description": "日历日期最大尺寸静态示例；日记方块与提醒三角形来自原生绘制几何。",
+      "html": "<div class=\"ds-date\" aria-label=\"选中日期 11，含日记和提醒\"><span class=\"ds-date-number\">11</span><svg class=\"ds-date-marks\" width=\"24\" height=\"8\" viewBox=\"0 0 24 8\" aria-hidden=\"true\"><rect x=\"3\" y=\"1\" width=\"6\" height=\"6\" rx=\"1\" fill=\"#386b50\"/><path d=\"M18 .5 14.5 7 21.5 7Z\" fill=\"#87611e\"/></svg></div>",
+      "css": ".ds-date{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;font-size:11pt;position:relative;width:44px;height:44px;border:1px solid #e7eef8;border-radius:10px;background:#e7eef8;color:#41638f;font-weight:700}.ds-date-number{position:absolute;inset:0 0 6px;display:flex;align-items:center;justify-content:center}.ds-date-marks{position:absolute;left:10px;bottom:2px}"
+    },
+    {
+      "name": "运行输出",
+      "kind": "custom",
+      "refersTo": "run-panel",
+      "description": "原生浅色输出区的静态外观，等宽字体由运行环境决定。",
+      "html": "<section class=\"ds-run\"><div class=\"ds-run-title\">运行结果</div><pre class=\"ds-run-output\">示例工具运行完成\n状态：成功</pre></section>",
+      "css": ".ds-run{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#344254;background:#f6f7f9;border:none;border-radius:6px;padding:10px 14px}.ds-run-title{font-weight:600;margin-bottom:6px}.ds-run-output{font-family:monospace;background:transparent;border:none;padding:0;margin:0;white-space:pre-wrap}"
+    }
+  ],
+  "narrative": {
+    "northStar": "浅色日常工作台",
+    "overview": "以浅灰桌面底、白色工作面和雾蓝操作构成安静、紧凑的 Windows 工作台。时序记录、项目记录、自动化工具、剪贴板及设置共用同一套视觉语言；各模块保留适合其内容的组织方式。\n\n这是 C++17 / Qt 6 Widgets 原生桌面界面，不是网页或移动应用。全局浅色调色板覆盖主窗口、独立阅读编辑窗口、弹窗和菜单；支持的 Windows 版本通过 DWM 应用浅色标题栏。",
+    "keyCharacteristics": [
+      "灰白表面、深灰正文，雾蓝标识选择与主要操作。",
+      "紧凑间距、小圆角、细边界，不使用自定义投影制造层级。",
+      "导航、输入、保存反馈与工具运行状态共享语义。"
+    ],
+    "rules": [
+      {
+        "name": "浅色贯通",
+        "body": "主窗口、独立窗口、菜单与运行输出共用浅色系统；不要新增显眼的大面积深色区域。",
+        "section": "colors"
+      },
+      {
+        "name": "原生字号",
+        "body": "保留 Qt 的 pt / px 区分与字体回退，不把全部字号强制换成网页单位，不虚构统一行高。",
+        "section": "typography"
+      },
+      {
+        "name": "平面层级",
+        "body": "用灰白表面、细边界和留白区分区域；不要给内容卡片增加自定义投影。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do 从 `UiTheme` 与全局 QSS 复用颜色和状态；新增独立窗口同样安装全局主题。",
+      "Do 为导航与图标操作保留可访问名称、工具提示和键盘焦点；状态同时使用明确文字。",
+      "Do 在主窗口最小尺寸下检查长标题换行、表单收缩、滚动区和可见操作；中文正文优先保持阅读面积。",
+      "Do 保留现有应用图标与更新标记，新增通用操作沿用 SVG 线性图标。"
+    ],
+    "donts": [
+      "Don't 新增大块深色导航、标题栏、编辑面或终端背景。",
+      "Don't 把成功、警告、危险颜色当作装饰色，也不要只用颜色区分日历记录类型。",
+      "Don't 添加装饰动画、大型背景效果、网页式展示大标题或为了装饰引入常驻进程。",
+      "Don't 用侧栏位置推断模块重要性；设置与四大模块遵循同等视觉标准。"
+    ]
+  }
+}

@@ -44,10 +44,8 @@ HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
     tabs_->setObjectName(QStringLiteral("headingModeTabs"));
     tabs_->setAccessibleName(QStringLiteral("正文显示模式"));
     tabs_->setExpanding(false);
-    tabs_->setStyleSheet(QStringLiteral(
-        "QTabBar::tab { font-size: 14px; min-width: 48px; min-height: 20px; padding: 8px 14px; margin-right: 4px; border: 1px solid #d4deeb; border-radius: 6px; background: #f5f7fb; color: #526176; }"
-        "QTabBar::tab:selected { background: #e8f0ff; color: #2456a6; border-color: #9bbbe8; font-weight: 600; }"
-        "QTabBar::tab:hover { background: #edf3ff; }"));
+    tabs_->setDrawBase(false);
+
     tabs_->addTab(QStringLiteral("预览"));
     tabs_->addTab(QStringLiteral("编辑"));
     tabs_->setTabToolTip(PreviewTab, QStringLiteral("标题与公式预览；行内公式用 $…$ 或 \\(…\\)，独立公式用 $$…$$ 或 \\[…\\]。"));

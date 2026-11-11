@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Orchestrate VERSION 3.1.0 LANGUAGES CXX)
+project(Orchestrate VERSION 3.2.0 LANGUAGES CXX)
 
 configure_file(src/version.h.in generated/version.h @ONLY)
 
@@ -11,6 +11,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Qt6 6.11.2 REQUIRED COMPONENTS Widgets Sql Network)
+
+add_library(OrchestrateUi STATIC src/ui/theme.cpp src/ui/theme.h resources/ui/uitheme.qrc)
+target_link_libraries(OrchestrateUi PUBLIC Qt6::Widgets)
+target_include_directories(OrchestrateUi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if(WIN32)
+    target_link_libraries(OrchestrateUi PRIVATE dwmapi)
+endif()
 
 add_subdirectory(third_party)
 add_executable(OrchestrateMath WIN32 src/math/mathworker.cpp)
@@ -23,7 +30,7 @@ add_library(OrchestrateUpdate STATIC
     src/update/updatewidget.cpp src/update/updatewidget.h
     src/platform/instancelock.cpp src/platform/instancelock.h
 )
-target_link_libraries(OrchestrateUpdate PUBLIC Qt6::Widgets Qt6::Network)
+target_link_libraries(OrchestrateUpdate PUBLIC Qt6::Widgets Qt6::Network OrchestrateUi)
 target_include_directories(OrchestrateUpdate PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_library(OrchestrateAutoStart STATIC src/platform/autostart.cpp src/platform/autostart.h)
@@ -46,7 +53,7 @@ add_library(OrchestrateText STATIC
     src/widgets/mathpreview.cpp src/widgets/mathpreview.h
 )
 add_dependencies(OrchestrateText OrchestrateMath)
-target_link_libraries(OrchestrateText PUBLIC Qt6::Widgets)
+target_link_libraries(OrchestrateText PUBLIC Qt6::Widgets OrchestrateUi)
 target_include_directories(OrchestrateText PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 add_library(OrchestrateClipboard STATIC
@@ -54,7 +61,7 @@ add_library(OrchestrateClipboard STATIC
     src/clipboard/clipboardmonitor.cpp src/clipboard/clipboardmonitor.h
     src/pages/clipboardpage.cpp src/pages/clipboardpage.h
 )
-target_link_libraries(OrchestrateClipboard PUBLIC Qt6::Widgets Qt6::Sql)
+target_link_libraries(OrchestrateClipboard PUBLIC Qt6::Widgets Qt6::Sql OrchestrateUi)
 target_include_directories(OrchestrateClipboard PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 qt_add_executable(Orchestrate WIN32

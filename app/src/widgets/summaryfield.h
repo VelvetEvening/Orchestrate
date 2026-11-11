@@ -6,16 +6,13 @@
 #include <QLineEdit>
 #include <QVBoxLayout>
 
-// A fixed shaded caption is visually separate from the editable value.
+// A quiet fixed caption leaves the editable field and its focus border intact.
 inline QLineEdit *addSummaryField(QVBoxLayout *layout, QWidget *parent, const QString &name,
                                  const QString &captionText = QStringLiteral("简介"))
 {
     auto *frame = new QFrame(parent);
     frame->setObjectName(QStringLiteral("summaryField"));
-    frame->setStyleSheet(QStringLiteral(
-        "QFrame#summaryField { border: 1px solid #cfdaea; border-radius: 7px; background: white; }"
-        "QLabel#summaryCaption { background: #eef2f8; color: #526176; font-weight: 600; padding: 9px 14px; border: none; border-right: 1px solid #cfdaea; border-top-left-radius: 6px; border-bottom-left-radius: 6px; }"
-        "QLineEdit { border: none; background: transparent; padding: 8px 10px; }"));
+
     auto *row = new QHBoxLayout(frame);
     row->setContentsMargins(0,0,0,0);
     row->setSpacing(0);

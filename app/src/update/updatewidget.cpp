@@ -91,8 +91,10 @@ UpdateWidget::UpdateWidget(QWidget *parent, UpdateChecker *checker) : QWidget(pa
     checker_(checker ? checker : new UpdateChecker(QString(), nullptr, this))
 {
     setObjectName(QStringLiteral("updateWidget"));
+    setAttribute(Qt::WA_StyledBackground, true);
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 8, 0, 0);
+    layout->setContentsMargins(22, 20, 22, 20);
+    layout->setSpacing(12);
     auto *title = new QLabel(QStringLiteral("版本与更新"), this);
     title->setObjectName(QStringLiteral("cardTitle"));
     layout->addWidget(title);

@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/theme.h"
 
 #include "treeaccessibility.h"
 #include <QDrag>
@@ -169,9 +170,9 @@ protected:
         Base::paintEvent(event);
         if (indicatorY_ < 0 && containerIndicator_.isEmpty()) return;
         QPainter painter(this->viewport());
-        painter.setPen(QPen(QColor(QStringLiteral("#2563eb")), 2));
+        painter.setPen(QPen(QColor(UiTheme::Focus), 2));
         if (!containerIndicator_.isEmpty()) {
-            painter.fillRect(containerIndicator_, QColor(37, 99, 235, 24));
+            painter.fillRect(containerIndicator_, QColor(120, 149, 188, 28));
             painter.drawRect(containerIndicator_.adjusted(1, 1, -1, -1));
             return;
         }

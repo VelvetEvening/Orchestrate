@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/theme.h"
 #include <QCalendarWidget>
 #include <QPainter>
 #include <QSet>
@@ -16,17 +17,12 @@ public:
         dateFont.setPointSize(11);
         setFont(dateFont);
         QTextCharFormat header;
-        header.setForeground(QColor("#64748b"));
+        header.setForeground(QColor(UiTheme::Muted));
         header.setBackground(Qt::white);
         setHeaderTextFormat(header);
         setWeekdayTextFormat(Qt::Saturday, header);
         setWeekdayTextFormat(Qt::Sunday, header);
-        setStyleSheet(QStringLiteral(R"(
-            QCalendarWidget QWidget#qt_calendar_navigationbar { background: white; }
-            QCalendarWidget QToolButton { color: #334155; background: white; border: none; border-radius: 6px; padding: 8px; font-size: 14px; }
-            QCalendarWidget QToolButton:hover { background: #eff6ff; }
-            QCalendarWidget QAbstractItemView { background: white; alternate-background-color: white; border: none; outline: none; }
-        )"));
+
     }
     void setRecordDates(const QSet<QDate> &diaries, const QSet<QDate> &reminders)
     {
@@ -44,16 +40,17 @@ protected:
         const bool inMonth = date.month() == monthShown() && date.year() == yearShown();
         const bool today = inMonth && date == QDate::currentDate();
         const bool future = inMonth && date > QDate::currentDate();
-        QColor foreground(inMonth ? (future ? "#778baa" : "#334155") : "#b8c0cc");
+        QColor foreground(inMonth ? (future ? UiTheme::Muted : UiTheme::Text) : UiTheme::Disabled);
         const int side = qMax(0, qMin(44, qMin(rect.width(), rect.height()) - 8));
         const QRectF tile(rect.center().x() - side / 2.0, rect.center().y() - side / 2.0, side, side);
         painter->setPen(Qt::NoPen);
         if (selected || today) {
-            painter->setBrush(QColor(selected ? "#3b82d6" : "#60a5fa"));
+            painter->setBrush(QColor(selected ? UiTheme::Selection : UiTheme::Surface));
+            painter->setPen(QPen(QColor(today ? UiTheme::Focus : UiTheme::Selection), 1));
             painter->drawRoundedRect(tile, 10, 10);
-            foreground = QColor(selected ? "#ffffff" : "#153e75");
+            foreground = QColor(UiTheme::Accent);
         } else if (future) {
-            painter->setBrush(QColor("#f0f4fa"));
+            painter->setBrush(QColor(UiTheme::Background));
             painter->drawRoundedRect(tile, 10, 10);
         }
         QFont textFont = font();
@@ -64,12 +61,12 @@ protected:
         const qreal markerY = tile.bottom() - 6;
         if (diaryDates_.contains(date)) {
             painter->setPen(Qt::NoPen);
-            painter->setBrush(QColor(!inMonth ? "#b8c0cc" : selected ? "#c5fff1" : "#168b79"));
+            painter->setBrush(QColor(!inMonth ? UiTheme::Disabled : UiTheme::Success));
             painter->drawRoundedRect(QRectF(rect.center().x()-9,markerY-3,6,6),1,1);
         }
         if (reminderDates_.contains(date)) {
             painter->setPen(Qt::NoPen);
-            painter->setBrush(QColor(!inMonth ? "#b8c0cc" : selected ? "#ffe08a" : "#c78719"));
+            painter->setBrush(QColor(!inMonth ? UiTheme::Disabled : UiTheme::Warning));
             QPolygonF triangle;
             triangle << QPointF(rect.center().x()+6,markerY-3.5)
                      << QPointF(rect.center().x()+2.5,markerY+3)

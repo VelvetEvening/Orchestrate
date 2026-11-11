@@ -47,7 +47,7 @@ private:
     QLabel *projectTitle_;
     QLabel *saveStatus_;
     HeadingTextEdit *outlineEdit_;
-    QLabel *outlineTitle_;
+    QPushButton *outlineTitle_;
     QVBoxLayout *detailsLayout_;
     QTreeWidget *workList_;
     QLabel *recordHint_;
