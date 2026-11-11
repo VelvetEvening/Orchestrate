@@ -9,7 +9,6 @@
 #include "widgets/treeaccessibility.h"
 #include "widgets/textlayoutguard.h"
 
-#include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDateTime>
@@ -44,18 +43,17 @@
 #include <QShowEvent>
 #include <QTextCursor>
 #include <QSizePolicy>
-#include <QSpinBox>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStringDecoder>
 #include <QStyle>
-#include <QTimeEdit>
 #include <QTimer>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include "widgets/siblingorderview.h"
 #include <QVBoxLayout>
 
+#include <limits>
 #include <memory>
 
 namespace {
@@ -375,7 +373,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     toolSource_->hide();
     headerRow->addWidget(toolSource_);
     reloadManifestButton_ = new QPushButton(QStringLiteral("重新读取声明"), headerCard);
-    reloadManifestButton_->setToolTip(QStringLiteral("重新读取接入声明，更新命令和工具信息；分组与刷新设置保留。"));
+    reloadManifestButton_->setToolTip(QStringLiteral("重新读取接入声明，更新命令和工具信息；保留分组。"));
     headerRow->addWidget(reloadManifestButton_);
     deleteToolButton_ = new QPushButton(QStringLiteral("移除注册"), headerCard);
     deleteToolButton_->setObjectName(QStringLiteral("dangerButton"));
@@ -466,73 +464,6 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     commandLayout->addWidget(runPanel_);
     columnLayout->addWidget(commandCard);
 
-    // Status refresh settings: only expanded while enabled.
-    auto *refreshCard = makeCard(column);
-    auto *refreshLayout = new QVBoxLayout(refreshCard);
-    refreshLayout->setContentsMargins(22, 16, 22, 18);
-    refreshLayout->setSpacing(10);
-    refreshLayout->addWidget(makeCardTitle(QStringLiteral("状态刷新"), refreshCard));
-    refreshEnabledCheck_ = new QCheckBox(QStringLiteral("启用周期刷新"), refreshCard);
-    refreshLayout->addWidget(refreshEnabledCheck_);
-
-    refreshOptions_ = new QWidget(refreshCard);
-    auto *optionsLayout = new QVBoxLayout(refreshOptions_);
-    optionsLayout->setContentsMargins(26, 0, 0, 0);
-    optionsLayout->setSpacing(8);
-    const auto makeOptionRow = [this](const QString &label, QHBoxLayout **rowLayout) {
-        auto *row = new QWidget(refreshOptions_);
-        auto *layout = new QHBoxLayout(row);
-        layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(8);
-        auto *caption = new QLabel(label, row);
-        caption->setMinimumWidth(72);
-        layout->addWidget(caption);
-        *rowLayout = layout;
-        return row;
-    };
-    QHBoxLayout *modeLayout = nullptr;
-    QWidget *modeRow = makeOptionRow(QStringLiteral("刷新方式"), &modeLayout);
-    refreshModeCombo_ = new QComboBox(modeRow);
-    refreshModeCombo_->addItem(QStringLiteral("按间隔"), QStringLiteral("interval"));
-    refreshModeCombo_->addItem(QStringLiteral("每天固定时间"), QStringLiteral("daily"));
-    refreshModeCombo_->setMinimumWidth(150);
-    modeLayout->addWidget(refreshModeCombo_);
-    modeLayout->addStretch(1);
-    optionsLayout->addWidget(modeRow);
-
-    QHBoxLayout *intervalLayout = nullptr;
-    intervalRow_ = makeOptionRow(QStringLiteral("间隔"), &intervalLayout);
-    refreshIntervalCombo_ = new QComboBox(intervalRow_);
-    refreshIntervalCombo_->addItem(QStringLiteral("1 分钟"), 60);
-    refreshIntervalCombo_->addItem(QStringLiteral("5 分钟"), 5 * 60);
-    refreshIntervalCombo_->addItem(QStringLiteral("30 分钟"), 30 * 60);
-    refreshIntervalCombo_->addItem(QStringLiteral("1 小时"), 60 * 60);
-    refreshIntervalCombo_->addItem(QStringLiteral("24 小时"), 24 * 60 * 60);
-    refreshIntervalCombo_->addItem(QStringLiteral("自定义"), 0);
-    refreshIntervalCombo_->setMinimumWidth(150);
-    intervalLayout->addWidget(refreshIntervalCombo_);
-    customIntervalMinutes_ = new QSpinBox(intervalRow_);
-    customIntervalMinutes_->setRange(1, 10080);
-    customIntervalMinutes_->setValue(15);
-    customIntervalMinutes_->setSuffix(QStringLiteral(" 分钟"));
-    customIntervalMinutes_->setMinimumWidth(110);
-    intervalLayout->addWidget(customIntervalMinutes_);
-    intervalLayout->addStretch(1);
-    optionsLayout->addWidget(intervalRow_);
-
-    QHBoxLayout *dailyLayout = nullptr;
-    dailyRow_ = makeOptionRow(QStringLiteral("每天时间"), &dailyLayout);
-    dailyRefreshTimeEdit_ = new QTimeEdit(QTime(8, 0), dailyRow_);
-    dailyRefreshTimeEdit_->setDisplayFormat(QStringLiteral("HH:mm"));
-    dailyRefreshTimeEdit_->setMinimumWidth(110);
-    dailyLayout->addWidget(dailyRefreshTimeEdit_);
-    dailyLayout->addStretch(1);
-    optionsLayout->addWidget(dailyRow_);
-    refreshLayout->addWidget(refreshOptions_);
-
-    refreshHint_ = makeMuted(QString(), refreshCard);
-    refreshHint_->hide();
-    columnLayout->addWidget(refreshCard);
     columnLayout->addStretch(1);
 
     detailsScroll->setWidget(column);
@@ -557,31 +488,11 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     connect(reloadManifestButton_, &QPushButton::clicked, this, &AutomationPage::reloadManifest);
     connect(deleteToolButton_, &QPushButton::clicked, this, &AutomationPage::deleteTool);
     connect(commandList_, &QListWidget::itemActivated, this, &AutomationPage::runCommand);
-    connect(refreshEnabledCheck_, &QCheckBox::toggled, this, [this] {
-        updateRefreshControlVisibility();
-        saveRefreshSettings();
-    });
-    connect(refreshModeCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this] {
-        updateRefreshControlVisibility();
-        saveRefreshSettings();
-    });
-    connect(refreshIntervalCombo_, qOverload<int>(&QComboBox::currentIndexChanged), this, [this] {
-        updateRefreshControlVisibility();
-        saveRefreshSettings();
-    });
-    connect(customIntervalMinutes_, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
-        updateRefreshControlVisibility();
-        saveRefreshSettings();
-    });
-    connect(dailyRefreshTimeEdit_, &QTimeEdit::timeChanged, this, [this] {
-        updateRefreshControlVisibility();
-        saveRefreshSettings();
-    });
-
-    refreshTimer_ = new QTimer(this);
-    refreshTimer_->setInterval(30000);
-    connect(refreshTimer_, &QTimer::timeout, this, &AutomationPage::refreshDueStates);
-    refreshTimer_->start();
+    // Only wake when a cached status expires; never poll tool state files.
+    stateExpiryTimer_ = new QTimer(this);
+    stateExpiryTimer_->setSingleShot(true);
+    stateExpiryTimer_->setTimerType(Qt::PreciseTimer);
+    connect(stateExpiryTimer_, &QTimer::timeout, this, &AutomationPage::updateCachedStateExpiry);
 
     syncBuiltinTools();
     loadAll();
@@ -971,7 +882,7 @@ void AutomationPage::showEmptyDetails(int groupId)
     detailsStack_->setCurrentIndex(0);
     if (groupId < 0) {
         emptyTitle_->setText(QStringLiteral("选择一个工具"));
-        emptyMessage_->setText(QStringLiteral("在左侧选择工具后，这里会显示它的当前状态、可运行的命令和刷新设置。\n"
+        emptyMessage_->setText(QStringLiteral("在左侧选择工具后，这里会显示它的当前状态和可运行的命令。\n"
                                               "还没有工具时，点击右上角“注册本地工具”选择 orchestrate-tool.json。"));
         return;
     }
@@ -1002,7 +913,6 @@ void AutomationPage::loadToolDetails(int toolId)
                                                                : QStringLiteral("SSH"));
     toolSource_->setVisible(tool.targetType == QStringLiteral("wsl") || tool.targetType == QStringLiteral("ssh"));
     deleteToolButton_->setVisible(!tool.builtin);
-    configureRefreshControls(tool);
 
     commandList_->clear();
     QString error;
@@ -1620,7 +1530,7 @@ void AutomationPage::registerToolManifest(const QByteArray &manifestData,
         }
         if (QMessageBox::question(this, QStringLiteral("工具已注册"),
                                   QStringLiteral("“%1”已经注册过。要用这份声明更新它的命令和信息吗？\n"
-                                                 "分组和刷新设置会保留。")
+                                                 "分组会保留。")
                                       .arg(existing.name),
                                   QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes)
             != QMessageBox::Yes) {
@@ -1649,8 +1559,7 @@ void AutomationPage::registerToolManifest(const QByteArray &manifestData,
 
     AppDatabase::AutomationTool tool = manifest.tool;
     tool.groupId = groupId;
-    // Refresh settings belong to Orchestrate's local database, not the tool manifest.
-    // New registrations are deliberately disabled until the user enables them.
+    // Retain legacy storage defaults for compatibility; these no longer schedule reads.
     tool.refreshEnabled = false;
     tool.refreshMode = QStringLiteral("interval");
     tool.refreshIntervalSeconds = 5 * 60;
@@ -1679,6 +1588,7 @@ bool AutomationPage::applyManifestUpdate(int toolId, ParsedManifest manifest)
     }
     stateCache_.remove(toolId);
     stateErrors_.remove(toolId);
+    updateCachedStateExpiry();
     return true;
 }
 
@@ -1774,8 +1684,8 @@ void AutomationPage::deleteTool()
     }
     stateCache_.remove(toolId);
     stateErrors_.remove(toolId);
+    updateCachedStateExpiry();
     runRecords_.remove(toolId);
-    lastAutoRefreshAt_.remove(toolId);
     tree_->setCurrentItem(nullptr);
     loadAll();
 }
@@ -1863,6 +1773,7 @@ void AutomationPage::applyStateResult(int toolId,
             renderStateMessage(QStringLiteral("读取失败"), QStringLiteral("failure"), error);
         }
     }
+    updateCachedStateExpiry();
 }
 
 void AutomationPage::startAsyncWslStateRead(const AppDatabase::AutomationTool &tool, bool updateVisibleState)
@@ -2011,128 +1922,29 @@ void AutomationPage::refreshAllStates()
     if (!error.isEmpty()) {
         return;
     }
-    const QDateTime now = QDateTime::currentDateTime();
     for (const AppDatabase::AutomationTool &tool : tools) {
         refreshStateForTool(tool.id, tool.id == selectedToolId_);
-        if (tool.refreshEnabled) {
-            lastAutoRefreshAt_.insert(tool.id, now);
-        }
     }
 }
 
-void AutomationPage::refreshDueStates()
+void AutomationPage::updateCachedStateExpiry()
 {
-    if (database_ == nullptr) {
-        return;
-    }
-    QString error;
-    const QList<AppDatabase::AutomationTool> tools = database_->automationTools(0, &error);
-    if (!error.isEmpty()) {
-        return;
-    }
+    stateExpiryTimer_->stop();
     const QDateTime now = QDateTime::currentDateTime();
-    // Expiry also applies to cached snapshots when polling is disabled.
+    QDateTime nextExpiry;
     for (auto it = stateCache_.cbegin(); it != stateCache_.cend(); ++it) {
-        if (ToolState::expired(it.value(), now)) {
+        const auto deadline = ToolState::timestamp(it.value().value(QStringLiteral("expires_at")).toString());
+        if (!deadline.isValid()) continue;
+        if (deadline <= now) {
             updateToolIcon(it.key());
-            if (it.key() == selectedToolId_) renderState(it.value());
+            if (it.key() == selectedToolId_ && isVisible()) renderState(it.value());
+        } else if (!nextExpiry.isValid() || deadline < nextExpiry) {
+            nextExpiry = deadline;
         }
     }
-    for (const AppDatabase::AutomationTool &tool : tools) {
-        if (!tool.refreshEnabled) {
-            lastAutoRefreshAt_.remove(tool.id);
-            continue;
-        }
-        bool due = false;
-        const QDateTime last = lastAutoRefreshAt_.value(tool.id);
-        if (tool.refreshMode == QStringLiteral("daily")) {
-            const QTime target = QTime::fromString(tool.dailyRefreshTime, QStringLiteral("HH:mm"));
-            if (target.isValid()) {
-                const QDateTime targetToday(now.date(), target);
-                // Startup refresh is separate from the daily schedule: if the app
-                // starts before today's target, today's scheduled refresh remains due.
-                due = now >= targetToday && (!last.isValid() || last < targetToday);
-            }
-        } else {
-            const int seconds = qMax(60, tool.refreshIntervalSeconds);
-            due = !last.isValid() || last.secsTo(now) >= seconds;
-        }
-        if (due) {
-            refreshStateForTool(tool.id, tool.id == selectedToolId_);
-            lastAutoRefreshAt_.insert(tool.id, now);
-        }
-    }
-}
-
-void AutomationPage::configureRefreshControls(const AppDatabase::AutomationTool &tool)
-{
-    loadingRefreshSettings_ = true;
-    {
-        const QSignalBlocker enabledBlocker(refreshEnabledCheck_);
-        const QSignalBlocker modeBlocker(refreshModeCombo_);
-        const QSignalBlocker intervalBlocker(refreshIntervalCombo_);
-        const QSignalBlocker customBlocker(customIntervalMinutes_);
-        const QSignalBlocker dailyBlocker(dailyRefreshTimeEdit_);
-        refreshEnabledCheck_->setChecked(tool.refreshEnabled);
-        const int modeIndex = refreshModeCombo_->findData(tool.refreshMode);
-        refreshModeCombo_->setCurrentIndex(modeIndex >= 0 ? modeIndex : 0);
-        int intervalIndex = refreshIntervalCombo_->findData(tool.refreshIntervalSeconds);
-        if (intervalIndex < 0) {
-            intervalIndex = refreshIntervalCombo_->findData(0);
-            customIntervalMinutes_->setValue(qMax(1, tool.refreshIntervalSeconds / 60));
-        }
-        refreshIntervalCombo_->setCurrentIndex(intervalIndex >= 0 ? intervalIndex : 1);
-        const QTime dailyTime = QTime::fromString(tool.dailyRefreshTime, QStringLiteral("HH:mm"));
-        dailyRefreshTimeEdit_->setTime(dailyTime.isValid() ? dailyTime : QTime(8, 0));
-    }
-    loadingRefreshSettings_ = false;
-    updateRefreshControlVisibility();
-}
-
-void AutomationPage::updateRefreshControlVisibility()
-{
-    const bool enabled = refreshEnabledCheck_->isChecked();
-    const bool daily = refreshModeCombo_->currentData().toString() == QStringLiteral("daily");
-    const bool custom = refreshIntervalCombo_->currentData().toInt() == 0;
-    refreshOptions_->setVisible(enabled);
-    intervalRow_->setVisible(!daily);
-    dailyRow_->setVisible(daily);
-    customIntervalMinutes_->setVisible(custom);
-    if (!enabled) {
-        refreshHint_->setText(QStringLiteral("未启用。Orchestrate 启动、手动刷新和命令运行结束后仍会读取一次状态。"));
-    } else if (daily) {
-        refreshHint_->setText(QStringLiteral("每天 %1 读取一次状态 JSON，不会运行工具命令。")
-                                  .arg(dailyRefreshTimeEdit_->time().toString(QStringLiteral("HH:mm"))));
-    } else {
-        const int seconds = refreshIntervalCombo_->currentData().toInt();
-        const int minutes = seconds > 0 ? seconds / 60 : customIntervalMinutes_->value();
-        refreshHint_->setText(QStringLiteral("每 %1 分钟读取一次状态 JSON，不会运行工具命令。").arg(minutes));
-    }
-}
-
-void AutomationPage::saveRefreshSettings()
-{
-    if (loadingRefreshSettings_ || database_ == nullptr || selectedToolId_ <= 0) {
-        return;
-    }
-    const bool enabled = refreshEnabledCheck_->isChecked();
-    const QString mode = refreshModeCombo_->currentData().toString().isEmpty()
-        ? QStringLiteral("interval")
-        : refreshModeCombo_->currentData().toString();
-    int intervalSeconds = refreshIntervalCombo_->currentData().toInt();
-    if (intervalSeconds <= 0) {
-        intervalSeconds = customIntervalMinutes_->value() * 60;
-    }
-    const QString dailyTime = dailyRefreshTimeEdit_->time().toString(QStringLiteral("HH:mm"));
-    QString error;
-    if (!database_->updateToolRefreshSettings(selectedToolId_, enabled, mode, intervalSeconds, dailyTime, &error)) {
-        showError(error);
-        return;
-    }
-    if (enabled) {
-        lastAutoRefreshAt_.insert(selectedToolId_, QDateTime::currentDateTime());
-    } else {
-        lastAutoRefreshAt_.remove(selectedToolId_);
+    if (nextExpiry.isValid()) {
+        const qint64 delay = qMax<qint64>(1, now.msecsTo(nextExpiry));
+        stateExpiryTimer_->start(int(qMin<qint64>(delay, std::numeric_limits<int>::max())));
     }
 }
 
@@ -2203,6 +2015,7 @@ void AutomationPage::renderRunRecord()
 void AutomationPage::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
+    updateCachedStateExpiry();
     renderRunRecord();
 }
 

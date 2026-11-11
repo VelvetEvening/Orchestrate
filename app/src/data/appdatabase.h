@@ -109,6 +109,7 @@ public:
                 && wslDistribution == other.wslDistribution && wslUser == other.wslUser;
         }
         QString workingDirectory;
+        // Legacy preferences retained for database compatibility; no longer scheduled.
         bool refreshEnabled = false;
         QString refreshMode = QStringLiteral("interval");
         int refreshIntervalSeconds = 300;

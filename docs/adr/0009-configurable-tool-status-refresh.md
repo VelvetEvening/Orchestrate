@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: superseded
 ---
 
 # Make automation status refresh configurable per tool
+
+2026-11-11：用户验收后决定移除周期刷新模块。下文保留为历史决策；当前实现取消周期轮询，保留启动、选择详情、手动和命令结束时读取，见 [页面调整记录](../development/page-layout.md#自动化工具移除周期刷新)。
 
 Orchestrate 继续在后台监测启用中的自动化工具，但不为所有工具强制使用同一个刷新频率。刷新设置属于 Orchestrate 自己的本地配置，不写入工具接入声明；每个工具默认关闭周期刷新，用户可以在工具详情中启用按间隔或每天固定时间的状态读取。
 

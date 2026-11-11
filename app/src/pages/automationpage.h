@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QDateTime>
 #include <QHash>
 #include <QJsonObject>
 #include <QPointer>
@@ -9,8 +8,6 @@
 
 #include "../data/appdatabase.h"
 
-class QCheckBox;
-class QComboBox;
 class QFrame;
 class QLabel;
 class QListWidget;
@@ -18,9 +15,7 @@ class QListWidgetItem;
 class QPlainTextEdit;
 class QProcess;
 class QPushButton;
-class QSpinBox;
 class QStackedWidget;
-class QTimeEdit;
 class QTimer;
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -109,14 +104,10 @@ private:
     void applyStateResult(int toolId, bool success, const QJsonObject &state, const QString &error);
     void refreshState();
     void refreshStateForTool(int toolId, bool updateVisibleState);
-    void refreshDueStates();
+    void updateCachedStateExpiry();
     void renderState(const QJsonObject &state);
     void renderStateMessage(const QString &badge, const QString &result, const QString &message);
     void clearStateItems();
-
-    void configureRefreshControls(const AppDatabase::AutomationTool &tool);
-    void updateRefreshControlVisibility();
-    void saveRefreshSettings();
 
     void runCommand(QListWidgetItem *item);
     QString remoteCommandLine(const AppDatabase::AutomationTool &tool,
@@ -160,25 +151,14 @@ private:
     qint64 displayedOutputStart_ = 0;
     qint64 displayedOutputEnd_ = 0;
 
-    QCheckBox *refreshEnabledCheck_ = nullptr;
-    QWidget *refreshOptions_ = nullptr;
-    QComboBox *refreshModeCombo_ = nullptr;
-    QWidget *intervalRow_ = nullptr;
-    QWidget *dailyRow_ = nullptr;
-    QComboBox *refreshIntervalCombo_ = nullptr;
-    QSpinBox *customIntervalMinutes_ = nullptr;
-    QTimeEdit *dailyRefreshTimeEdit_ = nullptr;
-    QLabel *refreshHint_ = nullptr;
-    QTimer *refreshTimer_ = nullptr;
+    QTimer *stateExpiryTimer_ = nullptr;
 
     AppDatabase *database_ = nullptr;
     int selectedGroupId_ = 0;
     int selectedToolId_ = 0;
-    QHash<int, QDateTime> lastAutoRefreshAt_;
     QHash<int, QJsonObject> stateCache_;
     QHash<int, QString> stateErrors_;
     QSet<int> stateReadsInFlight_;
     QHash<int, RunRecord> runRecords_;
     QHash<int, QPointer<QProcess>> runningProcesses_;
-    bool loadingRefreshSettings_ = false;
 };
