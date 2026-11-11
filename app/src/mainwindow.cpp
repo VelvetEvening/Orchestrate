@@ -1,4 +1,5 @@
 #include "ui/theme.h"
+#include "ui/workspaceheader.h"
 #include "mainwindow.h"
 
 #include "pages/calendarpage.h"
@@ -41,12 +42,10 @@
 
 namespace {
 
-QFrame *makeCard(QWidget *parent)
+QFrame *makeSection(QWidget *parent)
 {
     auto *card = new QFrame(parent);
-    card->setObjectName(QStringLiteral("card"));
-    card->setFrameShape(QFrame::StyledPanel);
-    card->setFrameShadow(QFrame::Plain);
+    UiTheme::setSurface(card, "section");
     return card;
 }
 
@@ -109,7 +108,7 @@ void MainWindow::buildUi()
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
 
-    auto *header = new QFrame(root);
+    auto *header = new WorkspaceHeader(root);
     header->setObjectName(QStringLiteral("windowHeader"));
     header->setFixedHeight(32);
     auto *headerLayout = new QHBoxLayout(header);
@@ -272,12 +271,12 @@ void MainWindow::switchToPage(int index)
         auto *settingsPage = new QWidget(pageStack_);
         settingsPage->setObjectName(QStringLiteral("settingsPage"));
         auto *settingsLayout = new QVBoxLayout(settingsPage);
-        settingsLayout->setContentsMargins(24, 16, 24, 24);
-        settingsLayout->setSpacing(18);
+        settingsLayout->setContentsMargins(0, 0, 0, 0);
+        settingsLayout->setSpacing(0);
 
-        auto *settingsCard = makeCard(settingsPage);
+        auto *settingsCard = makeSection(settingsPage);
         auto *settingsCardLayout = new QVBoxLayout(settingsCard);
-        settingsCardLayout->setContentsMargins(22, 20, 22, 20);
+        settingsCardLayout->setContentsMargins(24, 22, 24, 24);
         settingsCardLayout->setSpacing(12);
 
         auto *runtimeTitle = new QLabel(QStringLiteral("运行与托盘"), settingsCard);
@@ -293,7 +292,7 @@ void MainWindow::switchToPage(int index)
         autoStartStatus_->setWordWrap(true);
         settingsCardLayout->addWidget(autoStartStatus_);
         systemStartupButton_ = new QPushButton(QStringLiteral("打开 Windows 启动应用设置"), settingsCard);
-        settingsCardLayout->addWidget(systemStartupButton_);
+        settingsCardLayout->addWidget(systemStartupButton_, 0, Qt::AlignLeft);
         connect(autoStartCheck_, &QCheckBox::toggled, this, [this](bool enabled) {
             QString error;
             autoStart_->setEnabled(enabled, &error);
@@ -331,7 +330,7 @@ void MainWindow::switchToPage(int index)
         });
         auto *retryShortcut = new QPushButton(QStringLiteral("重试注册 Alt+X"), settingsCard);
         retryShortcut->setEnabled(shortcutCheck->isChecked());
-        settingsCardLayout->addWidget(retryShortcut);
+        settingsCardLayout->addWidget(retryShortcut, 0, Qt::AlignLeft);
         connect(shortcutCheck, &QCheckBox::toggled, retryShortcut, &QPushButton::setEnabled);
         connect(retryShortcut, &QPushButton::clicked, this, [this, shortcutCheck] {
             globalShortcut_->configure(shortcutCheck->isChecked());
@@ -341,6 +340,8 @@ void MainWindow::switchToPage(int index)
 
         settingsLayout->addWidget(settingsCard);
         auto *update = new UpdateWidget(settingsPage);
+        UiTheme::setSurface(update, "section");
+        update->layout()->setContentsMargins(24, 22, 24, 24);
         connect(update, &UpdateWidget::installRequested, this, &MainWindow::installUpdate);
         connect(update, &UpdateWidget::updateAvailableChanged, this, &MainWindow::setAvailableUpdate);
         connect(update, &UpdateWidget::updateNotificationRequested, this, [this](const QString &tag) {
@@ -365,6 +366,8 @@ void MainWindow::switchToPage(int index)
     }
 
     pageStack_->setCurrentIndex(index);
+    auto *header = static_cast<WorkspaceHeader *>(findChild<QFrame *>(QStringLiteral("windowHeader")));
+    header->setSurfaces(sidebar_, pageStack_->currentWidget()->findChild<QWidget *>(QStringLiteral("workspaceIndex")));
     if (index == 4) refreshAutoStartSettings();
     for (int i = 0; i < navigationButtons_.size(); ++i) {
         navigationButtons_.at(i)->setChecked(i == index);

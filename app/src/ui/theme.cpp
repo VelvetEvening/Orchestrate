@@ -32,9 +32,13 @@ void lightCaption(QWidget *window)
     if (QApplication::platformName() != QStringLiteral("windows")) return;
     const auto hwnd = reinterpret_cast<HWND>(window->winId());
     const BOOL dark = FALSE;
-    const COLORREF caption = RGB(0xf0, 0xf2, 0xf5);
-    const COLORREF text = RGB(0x34, 0x42, 0x54);
-    const COLORREF border = RGB(0xe1, 0xe6, 0xed);
+    const auto nativeColor = [](const char *token) {
+        const QColor color(QString::fromLatin1(token));
+        return RGB(color.red(), color.green(), color.blue());
+    };
+    const COLORREF caption = nativeColor(UiTheme::Sidebar);
+    const COLORREF text = nativeColor(UiTheme::Text);
+    const COLORREF border = nativeColor(UiTheme::Border);
     DwmSetWindowAttribute(hwnd, 20, &dark, sizeof(dark));
     DwmSetWindowAttribute(hwnd, 35, &caption, sizeof(caption));
     DwmSetWindowAttribute(hwnd, 36, &text, sizeof(text));
@@ -105,7 +109,7 @@ void UiTheme::install(QApplication &app)
     if (sheet.open(QIODevice::ReadOnly)) {
         QString css = QString::fromUtf8(sheet.readAll());
         const std::pair<const char *, const char *> tokens[] = {
-            {"background", Background}, {"sidebar", Sidebar}, {"surface", Surface},
+            {"background", Background}, {"sidebar", Sidebar}, {"surface", Surface}, {"indexSurface", IndexSurface},
             {"text", Text}, {"muted", Muted}, {"border", Border}, {"controlBorder", ControlBorder},
             {"accent", Accent}, {"selection", Selection}, {"hover", Hover}, {"focus", Focus},
             {"success", Success}, {"successBackground", SuccessBackground},
@@ -130,6 +134,15 @@ void UiTheme::setRole(QWidget *widget, const char *role)
     const auto value = QString::fromLatin1(role);
     if (widget->property("uiRole").toString() == value) return;
     widget->setProperty("uiRole", value);
+    widget->style()->unpolish(widget);
+    widget->style()->polish(widget);
+    widget->update();
+}
+
+void UiTheme::setSurface(QWidget *widget, const char *surface)
+{
+    widget->setAttribute(Qt::WA_StyledBackground, true);
+    widget->setProperty("workspaceSurface", QString::fromLatin1(surface));
     widget->style()->unpolish(widget);
     widget->style()->polish(widget);
     widget->update();

@@ -32,12 +32,10 @@
 
 namespace {
 
-QFrame *makeCard(QWidget *parent)
+QFrame *makeSurface(QWidget *parent, const char *surface)
 {
     auto *card = new QFrame(parent);
-    card->setObjectName(QStringLiteral("card"));
-    card->setFrameShape(QFrame::StyledPanel);
-    card->setFrameShadow(QFrame::Plain);
+    UiTheme::setSurface(card, surface);
     return card;
 }
 
@@ -70,16 +68,18 @@ CalendarPage::CalendarPage(AppDatabase *database,
     , database_(database)
     , trayIcon_(trayIcon)
 {
+    UiTheme::setSurface(this, "content");
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(24, 16, 24, 24);
-    layout->setSpacing(18);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
 
     auto *contentLayout = new QHBoxLayout;
-    contentLayout->setSpacing(18);
+    contentLayout->setSpacing(0);
 
-    auto *calendarCard = makeCard(this);
+    auto *calendarCard = makeSurface(this, "index");
+    calendarCard->setObjectName(QStringLiteral("workspaceIndex"));
     auto *calendarLayout = new QVBoxLayout(calendarCard);
-    calendarLayout->setContentsMargins(18, 18, 18, 18);
+    calendarLayout->setContentsMargins(24, 22, 24, 24);
     calendarLayout->setSpacing(10);
     auto *calendarHeader = new QHBoxLayout;
     calendarHeader->addWidget(makeCardTitle(QStringLiteral("日历"), calendarCard),1);
@@ -104,9 +104,9 @@ CalendarPage::CalendarPage(AppDatabase *database,
     calendarLayout->addWidget(calendar_);
     contentLayout->addWidget(calendarCard, 3);
 
-    auto *detailsCard = makeCard(this);
+    auto *detailsCard = makeSurface(this, "content");
     auto *detailsLayout = new QVBoxLayout(detailsCard);
-    detailsLayout->setContentsMargins(20, 18, 20, 18);
+    detailsLayout->setContentsMargins(24, 22, 24, 24);
     detailsLayout->setSpacing(10);
 
     detailsLayout->addWidget(makeCardTitle(QStringLiteral("提醒事项"), detailsCard));
@@ -122,9 +122,11 @@ CalendarPage::CalendarPage(AppDatabase *database,
     addReminderButton->setObjectName(QStringLiteral("primaryButton"));
     reminderButtonRow->addWidget(addReminderButton);
     editReminderButton_ = new QPushButton(QStringLiteral("编辑"), detailsCard);
+    UiTheme::setRole(editReminderButton_, "quiet");
     editReminderButton_->setEnabled(false);
     reminderButtonRow->addWidget(editReminderButton_);
     completeReminderButton_ = new QPushButton(QStringLiteral("完成"), detailsCard);
+    UiTheme::setRole(completeReminderButton_, "quiet");
     completeReminderButton_->setEnabled(false);
     reminderButtonRow->addWidget(completeReminderButton_);
     deleteReminderButton_ = new QPushButton(QStringLiteral("删除"), detailsCard);
@@ -138,6 +140,7 @@ CalendarPage::CalendarPage(AppDatabase *database,
     diaryHeader->addWidget(makeCardTitle(QStringLiteral("日记"),detailsCard),1);
     auto *collectionButton = new QPushButton(QStringLiteral("日记集合"),detailsCard);
     collectionButton->setObjectName(QStringLiteral("diaryCollectionButton"));
+    UiTheme::setRole(collectionButton, "quiet");
     diaryHeader->addWidget(collectionButton);
     detailsLayout->addLayout(diaryHeader);
     connect(collectionButton,&QPushButton::clicked,this,&CalendarPage::openDiaryCollection);
@@ -156,6 +159,7 @@ CalendarPage::CalendarPage(AppDatabase *database,
     addDiaryButton->setObjectName(QStringLiteral("primaryButton"));
     diaryButtonRow->addWidget(addDiaryButton);
     editButton_ = new QPushButton(QStringLiteral("编辑"), detailsCard);
+    UiTheme::setRole(editButton_, "quiet");
     editButton_->setEnabled(false);
     diaryButtonRow->addWidget(editButton_);
     deleteButton_ = new QPushButton(QStringLiteral("删除"), detailsCard);

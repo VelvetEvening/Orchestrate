@@ -113,8 +113,9 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent)
     : QWidget(parent),database_(database)
 {
     setObjectName("clipboardPage");
+    UiTheme::setSurface(this, "content");
     monitor_=new ClipboardMonitor(database_,this);
-    auto *layout=new QVBoxLayout(this); layout->setContentsMargins(24,16,24,24); layout->setSpacing(14);
+    auto *layout=new QVBoxLayout(this); layout->setContentsMargins(24,22,24,24); layout->setSpacing(14);
 
     auto *tabRow=new QHBoxLayout;
     auto *dropTabs=new ClipboardTabs(this);
@@ -126,13 +127,16 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent)
 
     tabRow->addWidget(tabs_,1);
     auto *newTab=new QPushButton(QStringLiteral("新建标签页"),this); tabRow->addWidget(newTab); layout->addLayout(tabRow);
+    UiTheme::setRole(newTab, "quiet");
     auto *searchRow=new QHBoxLayout;
     search_=new QLineEdit(this); search_->setObjectName("clipboardSearch"); search_->setPlaceholderText(QStringLiteral("搜索内容、标题或文件夹"));
     search_->setClearButtonEnabled(true); search_->setAccessibleName(QStringLiteral("搜索剪贴板内容")); searchRow->addWidget(search_,1);
     auto *newFolder=new QPushButton(QStringLiteral("新建文件夹"),this); newFolder->setObjectName("clipboardNewFolder");
+    UiTheme::setRole(newFolder, "quiet");
     searchRow->addWidget(newFolder); layout->addLayout(searchRow);
 
     auto *contentSplit=new QSplitter(Qt::Vertical,this); contentSplit->setChildrenCollapsible(false);
+    contentSplit->setObjectName("workspaceSplit"); contentSplit->setHandleWidth(1);
     items_=new SiblingOrderTree(contentSplit); items_->setObjectName("clipboardItems"); dropTabs->tree=items_;
     synchronizeTreeAccessibility(items_);
     items_->setHeaderHidden(true); items_->header()->setStretchLastSection(true);
@@ -144,7 +148,8 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent)
     items_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); items_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     items_->setAccessibleName(QStringLiteral("剪贴板内容与文件夹"));
 
-    previewPane_=new QWidget(contentSplit); auto *previewLayout=new QVBoxLayout(previewPane_); previewLayout->setContentsMargins(0,4,0,0);
+    previewPane_=new QWidget(contentSplit); UiTheme::setSurface(previewPane_, "inset");
+    auto *previewLayout=new QVBoxLayout(previewPane_); previewLayout->setContentsMargins(0,12,0,0);
     previewImage_=label(QString(),"clipboardImage",previewPane_); previewImage_->setAlignment(Qt::AlignCenter); previewImage_->setMinimumSize(1,1);
     previewImage_->setMaximumHeight(220); previewImage_->hide(); previewLayout->addWidget(previewImage_);
     previewText_=new TextLayoutGuard::Edit(previewPane_); previewText_->setObjectName("clipboardPreview"); previewText_->setReadOnly(true);
@@ -154,10 +159,13 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent)
 
     auto *actions=new QHBoxLayout; actions->setSpacing(6);
     auto *create=new QPushButton(QStringLiteral("新建"),this); create->setObjectName("clipboardNewItem");
+    UiTheme::setRole(create, "primary");
     edit_=new QPushButton(QStringLiteral("编辑"),this); edit_->setObjectName("clipboardEditItem");
+    UiTheme::setRole(edit_, "quiet");
     remove_=new QPushButton(QStringLiteral("删除"),this); remove_->setObjectName("clipboardDeleteItems"); UiTheme::setRole(remove_, "danger");
     auto *settings=new QPushButton(QStringLiteral("设置"),this);
     settings->setObjectName("clipboardSettings");
+    UiTheme::setRole(settings, "quiet");
     settings->setAccessibleName(QStringLiteral("剪贴板设置"));
     settings->setToolTip(QStringLiteral("监听开关和历史设置"));
     auto *settingsMenu=new QMenu(settings);

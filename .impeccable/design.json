@@ -1,35 +1,49 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-11T04:58:27.698527Z",
+  "generatedAt": "2026-11-11T11:22:57.402394Z",
   "title": "Design System: Orchestrate",
   "extensions": {
     "colorMeta": {
       "background": {
         "role": "neutral",
-        "displayName": "桌面浅灰",
+        "displayName": "状态与运行浅灰",
         "tonalRamp": [
-          "oklch(15% 0.0029 264.54)",
-          "oklch(26% 0.0029 264.54)",
-          "oklch(38% 0.0029 264.54)",
-          "oklch(49% 0.0029 264.54)",
-          "oklch(61% 0.0029 264.54)",
-          "oklch(72% 0.0029 264.54)",
-          "oklch(84% 0.0029 264.54)",
-          "oklch(95% 0.0029 264.54)"
+          "oklch(15% 0.0025 228.78)",
+          "oklch(26% 0.0025 228.78)",
+          "oklch(38% 0.0025 228.78)",
+          "oklch(49% 0.0025 228.78)",
+          "oklch(61% 0.0025 228.78)",
+          "oklch(72% 0.0025 228.78)",
+          "oklch(84% 0.0025 228.78)",
+          "oklch(95% 0.0025 228.78)"
         ]
       },
       "sidebar": {
         "role": "neutral",
         "displayName": "侧栏浅灰",
         "tonalRamp": [
-          "oklch(15% 0.0046 258.32)",
-          "oklch(26% 0.0046 258.32)",
-          "oklch(38% 0.0046 258.32)",
-          "oklch(49% 0.0046 258.32)",
-          "oklch(61% 0.0046 258.32)",
-          "oklch(72% 0.0046 258.32)",
-          "oklch(84% 0.0046 258.32)",
-          "oklch(95% 0.0046 258.32)"
+          "oklch(15% 0.0045 214.33)",
+          "oklch(26% 0.0045 214.33)",
+          "oklch(38% 0.0045 214.33)",
+          "oklch(49% 0.0045 214.33)",
+          "oklch(61% 0.0045 214.33)",
+          "oklch(72% 0.0045 214.33)",
+          "oklch(84% 0.0045 214.33)",
+          "oklch(95% 0.0045 214.33)"
+        ]
+      },
+      "index-surface": {
+        "role": "neutral",
+        "displayName": "索引与内衬灰白",
+        "tonalRamp": [
+          "oklch(15% 0.0025 228.78)",
+          "oklch(26% 0.0025 228.78)",
+          "oklch(38% 0.0025 228.78)",
+          "oklch(49% 0.0025 228.78)",
+          "oklch(61% 0.0025 228.78)",
+          "oklch(72% 0.0025 228.78)",
+          "oklch(84% 0.0025 228.78)",
+          "oklch(95% 0.0025 228.78)"
         ]
       },
       "surface": {
@@ -50,42 +64,42 @@
         "role": "neutral",
         "displayName": "深灰正文",
         "tonalRamp": [
-          "oklch(15% 0.0360 254.91)",
-          "oklch(26% 0.0360 254.91)",
-          "oklch(38% 0.0360 254.91)",
-          "oklch(49% 0.0360 254.91)",
-          "oklch(61% 0.0360 254.91)",
-          "oklch(72% 0.0360 254.91)",
-          "oklch(84% 0.0360 254.91)",
-          "oklch(95% 0.0360 254.91)"
+          "oklch(15% 0.0261 248.54)",
+          "oklch(26% 0.0261 248.54)",
+          "oklch(38% 0.0261 248.54)",
+          "oklch(49% 0.0261 248.54)",
+          "oklch(61% 0.0261 248.54)",
+          "oklch(72% 0.0261 248.54)",
+          "oklch(84% 0.0261 248.54)",
+          "oklch(95% 0.0261 248.54)"
         ]
       },
       "muted": {
         "role": "neutral",
         "displayName": "弱化文字",
         "tonalRamp": [
-          "oklch(15% 0.0342 256.08)",
-          "oklch(26% 0.0342 256.08)",
-          "oklch(38% 0.0342 256.08)",
-          "oklch(49% 0.0342 256.08)",
-          "oklch(61% 0.0342 256.08)",
-          "oklch(72% 0.0342 256.08)",
-          "oklch(84% 0.0342 256.08)",
-          "oklch(95% 0.0342 256.08)"
+          "oklch(15% 0.0244 246.11)",
+          "oklch(26% 0.0244 246.11)",
+          "oklch(38% 0.0244 246.11)",
+          "oklch(49% 0.0244 246.11)",
+          "oklch(61% 0.0244 246.11)",
+          "oklch(72% 0.0244 246.11)",
+          "oklch(84% 0.0244 246.11)",
+          "oklch(95% 0.0244 246.11)"
         ]
       },
       "border": {
         "role": "neutral",
         "displayName": "内容边界",
         "tonalRamp": [
-          "oklch(15% 0.0109 256.70)",
-          "oklch(26% 0.0109 256.70)",
-          "oklch(38% 0.0109 256.70)",
-          "oklch(49% 0.0109 256.70)",
-          "oklch(61% 0.0109 256.70)",
-          "oklch(72% 0.0109 256.70)",
-          "oklch(84% 0.0109 256.70)",
-          "oklch(95% 0.0109 256.70)"
+          "oklch(15% 0.0060 223.46)",
+          "oklch(26% 0.0060 223.46)",
+          "oklch(38% 0.0060 223.46)",
+          "oklch(49% 0.0060 223.46)",
+          "oklch(61% 0.0060 223.46)",
+          "oklch(72% 0.0060 223.46)",
+          "oklch(84% 0.0060 223.46)",
+          "oklch(95% 0.0060 223.46)"
         ]
       },
       "control-border": {
@@ -120,28 +134,28 @@
         "role": "primary",
         "displayName": "浅雾蓝选择",
         "tonalRamp": [
-          "oklch(15% 0.0154 257.20)",
-          "oklch(26% 0.0154 257.20)",
-          "oklch(38% 0.0154 257.20)",
-          "oklch(49% 0.0154 257.20)",
-          "oklch(61% 0.0154 257.20)",
-          "oklch(72% 0.0154 257.20)",
-          "oklch(84% 0.0154 257.20)",
-          "oklch(95% 0.0154 257.20)"
+          "oklch(15% 0.0126 236.63)",
+          "oklch(26% 0.0126 236.63)",
+          "oklch(38% 0.0126 236.63)",
+          "oklch(49% 0.0126 236.63)",
+          "oklch(61% 0.0126 236.63)",
+          "oklch(72% 0.0126 236.63)",
+          "oklch(84% 0.0126 236.63)",
+          "oklch(95% 0.0126 236.63)"
         ]
       },
       "hover": {
         "role": "neutral",
         "displayName": "浅灰悬停",
         "tonalRamp": [
-          "oklch(15% 0.0062 255.48)",
-          "oklch(26% 0.0062 255.48)",
-          "oklch(38% 0.0062 255.48)",
-          "oklch(49% 0.0062 255.48)",
-          "oklch(61% 0.0062 255.48)",
-          "oklch(72% 0.0062 255.48)",
-          "oklch(84% 0.0062 255.48)",
-          "oklch(95% 0.0062 255.48)"
+          "oklch(15% 0.0059 239.82)",
+          "oklch(26% 0.0059 239.82)",
+          "oklch(38% 0.0059 239.82)",
+          "oklch(49% 0.0059 239.82)",
+          "oklch(61% 0.0059 239.82)",
+          "oklch(72% 0.0059 239.82)",
+          "oklch(84% 0.0059 239.82)",
+          "oklch(95% 0.0059 239.82)"
         ]
       },
       "focus": {
@@ -288,28 +302,14 @@
         "role": "neutral",
         "displayName": "导航悬停",
         "tonalRamp": [
-          "oklch(15% 0.0092 258.34)",
-          "oklch(26% 0.0092 258.34)",
-          "oklch(38% 0.0092 258.34)",
-          "oklch(49% 0.0092 258.34)",
-          "oklch(61% 0.0092 258.34)",
-          "oklch(72% 0.0092 258.34)",
-          "oklch(84% 0.0092 258.34)",
-          "oklch(95% 0.0092 258.34)"
-        ]
-      },
-      "nav-selected": {
-        "role": "primary",
-        "displayName": "导航选择",
-        "tonalRamp": [
-          "oklch(15% 0.0172 256.28)",
-          "oklch(26% 0.0172 256.28)",
-          "oklch(38% 0.0172 256.28)",
-          "oklch(49% 0.0172 256.28)",
-          "oklch(61% 0.0172 256.28)",
-          "oklch(72% 0.0172 256.28)",
-          "oklch(84% 0.0172 256.28)",
-          "oklch(95% 0.0172 256.28)"
+          "oklch(15% 0.0070 219.56)",
+          "oklch(26% 0.0070 219.56)",
+          "oklch(38% 0.0070 219.56)",
+          "oklch(49% 0.0070 219.56)",
+          "oklch(61% 0.0070 219.56)",
+          "oklch(72% 0.0070 219.56)",
+          "oklch(84% 0.0070 219.56)",
+          "oklch(95% 0.0070 219.56)"
         ]
       },
       "danger-hover-border": {
@@ -342,7 +342,7 @@
       },
       "card-title": {
         "displayName": "card-title",
-        "purpose": "对应 DESIGN.md Typography 中的原生角色；未指定的属性继承 Qt 全局字体。"
+        "purpose": "沿用 Qt cardTitle 角色名，用于连续分区及既有独立组件的标题；未指定属性继承 Qt 全局字体。"
       },
       "navigation": {
         "displayName": "navigation",
@@ -382,17 +382,25 @@
       "name": "主要按钮",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "原生主要操作的浅雾蓝状态预览。",
+      "description": "默认无可见外框的浅雾蓝主要操作；enabled focus 显式恢复雾蓝焦点边框，禁用状态弱化。",
       "html": "<button class=\"ds-primary\">保存</button>",
-      "css": ".ds-primary{border:1px solid #c6d0dd;border-radius:6px;padding:6px 11px;min-height:20px;font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;background:#e7eef8;color:#41638f;font-weight:600}.ds-primary:hover{background:#dce7f6;border-color:#7895bc}.ds-primary:active{background:#d4e1f3}.ds-primary:focus-visible{outline:none;border-color:#41638f}.ds-primary:disabled{color:#919ba9;background:#f6f7f9;border-color:#e1e6ed}"
+      "css": ".ds-primary{border:1px solid transparent;border-radius:6px;padding:6px 11px;min-height:20px;font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;background:#e4edf3;color:#41638f;font-weight:600}.ds-primary:hover{background:#dce7f6;border-color:#7895bc}.ds-primary:active{background:#d4e1f3}.ds-primary:focus-visible:enabled{outline:none;border-color:#41638f}.ds-primary:disabled{color:#919ba9;background:#f7f9fa;border-color:#e8edef}"
     },
     {
       "name": "次要按钮",
       "kind": "button",
       "refersTo": "button-secondary",
-      "description": "常规操作与对话框取消按钮。",
+      "description": "保留白底和控件边框的常规操作与对话框取消按钮；主工作面轻量操作另用 quiet 角色。",
       "html": "<button class=\"ds-secondary\">取消</button>",
-      "css": ".ds-secondary{border:1px solid #c6d0dd;border-radius:6px;padding:6px 11px;min-height:20px;font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;background:#fff;color:#344254}.ds-secondary:hover{background:#f0f3f7;border-color:#7895bc}.ds-secondary:active{background:#e7eef8}.ds-secondary:focus-visible{outline:none;border-color:#41638f}.ds-secondary:disabled{color:#919ba9;background:#f6f7f9;border-color:#e1e6ed}"
+      "css": ".ds-secondary{border:1px solid #c6d0dd;border-radius:6px;padding:6px 11px;min-height:20px;font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;background:#fff;color:#34404c}.ds-secondary:hover{background:#eef2f5;border-color:#7895bc}.ds-secondary:active{background:#e4edf3}.ds-secondary:focus-visible{outline:none;border-color:#41638f}.ds-secondary:disabled{color:#919ba9;background:#f7f9fa;border-color:#e8edef}"
+    },
+    {
+      "name": "轻量按钮",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "主工作面的打开、编辑、刷新、设置等次要操作；透明底与边框，交互时显示底色和焦点。",
+      "html": "<button class=\"ds-quiet\">刷新状态</button>",
+      "css": ".ds-quiet{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#34404c;background:transparent;border:1px solid transparent;border-radius:6px;padding:6px 11px;min-height:20px}.ds-quiet:hover{background:#eef2f5}.ds-quiet:active{background:#e4edf3}.ds-quiet:focus-visible{outline:none;border-color:#7895bc}.ds-quiet:disabled{color:#919ba9;background:#f7f9fa;border-color:#e8edef}"
     },
     {
       "name": "危险按钮",
@@ -408,15 +416,15 @@
       "refersTo": "input",
       "description": "原生输入框的默认、悬停与焦点表达。",
       "html": "<input class=\"ds-input\" aria-label=\"记录标题\" placeholder=\"记录标题\">",
-      "css": ".ds-input{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#344254;background:#fff;border:1px solid #c6d0dd;border-radius:6px;padding:6px 9px}.ds-input::placeholder{color:#637184}.ds-input:hover{border-color:#7895bc}.ds-input:focus-visible{outline:none;border-color:#41638f}.ds-input:disabled{color:#919ba9;background:#f6f7f9;border-color:#e1e6ed}.ds-input:read-only{background:#f6f7f9;border-color:#e1e6ed}"
+      "css": ".ds-input{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#34404c;background:#fff;border:1px solid #c6d0dd;border-radius:6px;padding:6px 9px}.ds-input::placeholder{color:#66737f}.ds-input:hover{border-color:#7895bc}.ds-input:focus-visible{outline:none;border-color:#41638f}.ds-input:disabled{color:#919ba9;background:#f7f9fa;border-color:#e8edef}.ds-input:read-only{background:#f7f9fa;border-color:#e8edef}"
     },
     {
       "name": "侧栏导航",
       "kind": "nav",
       "refersTo": "navigation",
-      "description": "融合顶栏与展开侧栏的静态预览：顶栏仅有分栏开关与 Qt Windows 窗口控件，不显示应用名、图标或模块名称。示例采用 32px 顶栏高度并为窗口按钮预留 156px；实际高度取系统安全区域且不低于 32px。侧栏为 216 / 72px；剪贴板左下角为新建、编辑、删除，右下角为设置；监听和历史设置收进该原生菜单，不再放置常驻复制按钮。文档预览不实现系统窗口控件、折叠或页面切换。",
-      "html": "<div class=\"ds-shell\"><header class=\"ds-header\"><button class=\"ds-sidebar-toggle\" aria-label=\"收起侧边栏\" title=\"收起侧边栏\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#637184\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"3\"/><path d=\"M9 4v16\"/></svg></button></header><nav class=\"ds-nav\"><button class=\"ds-nav-button\" aria-current=\"page\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#637184\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"5\" width=\"16\" height=\"16\" rx=\"2\"/><path d=\"M8 3v4m8-4v4M4 10h16M8 14h2m4 0h2m-8 4h2\"/></svg><span>时序记录</span></button></nav></div>",
-      "css": ".ds-shell{background:#f6f7f9}.ds-header{display:flex;align-items:center;gap:12px;box-sizing:border-box;height:32px;padding:0 156px 0 18px;border-bottom:1px solid #e1e6ed}.ds-sidebar-toggle{box-sizing:content-box;display:flex;align-items:center;justify-content:center;width:28px;height:28px;flex-shrink:0;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;cursor:pointer}.ds-sidebar-toggle:hover{background:#e2e8f0}.ds-sidebar-toggle:active{background:#e7eef8}.ds-sidebar-toggle:focus-visible{outline:none;border-color:#7895bc}.ds-nav{background:#f0f2f5;padding:16px 14px;width:188px}.ds-nav-button{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;font-size:14px;display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;color:#344254;border:1px solid transparent;border-radius:7px;padding:10px 12px;min-height:20px}.ds-nav-button svg{width:19px;height:19px;flex-shrink:0}.ds-nav-button:hover{background:#e9edf3}.ds-nav-button[aria-current=\"page\"]{background:#e2eaf5;color:#41638f;font-weight:600}.ds-nav-button:focus-visible{outline:none;border-color:#7895bc}"
+      "description": "融合顶栏与侧栏的浏览器近似：32px 为顶栏高度下限，侧栏展开 216px、收起 72px，左侧开关保持固定；原生窗口按钮、折叠与切页不在静态预览中实现。实际 WorkspaceHeader 延续当前索引及正文底色，响应布局事件而不轮询。",
+      "html": "<div class=\"ds-shell\"><header class=\"ds-header\"><button class=\"ds-sidebar-toggle\" aria-label=\"收起侧边栏\" title=\"收起侧边栏\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#66737f\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"3\"/><path d=\"M9 4v16\"/></svg></button></header><nav class=\"ds-nav\"><button class=\"ds-nav-button\" aria-current=\"page\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"#66737f\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"5\" width=\"16\" height=\"16\" rx=\"2\"/><path d=\"M8 3v4m8-4v4M4 10h16M8 14h2m4 0h2m-8 4h2\"/></svg><span>时序记录</span></button></nav></div>",
+      "css": ".ds-shell{background:#ffffff}.ds-header{display:flex;align-items:center;gap:12px;box-sizing:border-box;height:32px;padding:0 156px 0 18px;border:none;background:#eff3f4}.ds-sidebar-toggle{box-sizing:content-box;display:flex;align-items:center;justify-content:center;width:28px;height:28px;flex-shrink:0;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;cursor:pointer}.ds-sidebar-toggle:hover{background:#e2e8f0}.ds-sidebar-toggle:active{background:#e4edf3}.ds-sidebar-toggle:focus-visible{outline:none;border-color:#7895bc}.ds-nav{background:#eff3f4;padding:16px 14px;width:188px}.ds-nav-button{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;font-size:14px;display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:transparent;color:#34404c;border:1px solid transparent;border-radius:7px;padding:10px 12px;min-height:20px}.ds-nav-button svg{width:19px;height:19px;flex-shrink:0}.ds-nav-button:hover{background:#e7edef}.ds-nav-button[aria-current=\"page\"]{background:#e4edf3;color:#41638f;font-weight:600}.ds-nav-button:focus-visible{outline:none;border-color:#7895bc}"
     },
     {
       "name": "成功状态",
@@ -427,12 +435,20 @@
       "css": ".ds-status{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;display:inline-block;color:#386b50;background:#edf5ef;border:none;border-radius:5px;padding:3px 9px;font-weight:500}"
     },
     {
-      "name": "内容卡片",
+      "name": "保留的独立卡片",
       "kind": "card",
       "refersTo": "card",
-      "description": "白色工作面；示例使用项目详情内边距。实际项目行高 44px，名称旁为 18px 状态图标，状态文字保留于工具提示与可访问名称；项目设置位于右键菜单末项。",
-      "html": "<section class=\"ds-card\"><h3 class=\"ds-card-title\">项目记录</h3><p class=\"ds-card-copy\">查找、阅读和编辑工作内容。</p></section>",
-      "css": ".ds-card{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;background:#fff;color:#344254;border:1px solid #e1e6ed;border-radius:10px;padding:18px 22px}.ds-card-title{font-size:15px;font-weight:600;margin:0 0 12px}.ds-card-copy{margin:0}"
+      "description": "PlaceholderPage 与独立 UpdateWidget 保留的既有白色圆角样式；五个主页面不使用此卡片外壳。示例按 UpdateWidget 的原生内部边距展示。",
+      "html": "<section class=\"ds-card\"><h3 class=\"ds-card-title\">版本与更新</h3><p class=\"ds-card-copy\">独立组件样式预览。</p></section>",
+      "css": ".ds-card{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;background:#fff;color:#34404c;border:1px solid #e8edef;border-radius:10px;padding:20px 22px}.ds-card-title{font-size:15px;font-weight:600;margin:0 0 12px}.ds-card-copy{margin:0}"
+    },
+    {
+      "name": "连续工作面",
+      "kind": "custom",
+      "refersTo": "workspace-content",
+      "description": "项目正文示例：索引与正文直接衔接，顶栏续接各区底色，1px 分隔线保留原生 QSplitter 调整能力。示例列宽按初始 230:650 比例表达，不承诺固定宽度；工作面无外框和圆角。",
+      "html": "<div class=\"ds-workspace\"><header class=\"ds-workspace-caption\"><span class=\"ds-caption-index\"></span><span class=\"ds-caption-content\"></span></header><div class=\"ds-workspace-body\"><aside class=\"ds-index\"><h3 class=\"ds-surface-title\">项目列表</h3><p class=\"ds-surface-copy\">Orchestrate</p></aside><section class=\"ds-content\"><h3 class=\"ds-surface-title\">Orchestrate</h3><p class=\"ds-surface-copy\">查找、阅读和编辑工作内容。</p></section></div></div>",
+      "css": ".ds-workspace{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#34404c;background:#ffffff}.ds-workspace-caption,.ds-workspace-body{display:grid;grid-template-columns:minmax(0,230fr) minmax(0,650fr)}.ds-workspace-caption{height:32px}.ds-caption-index,.ds-index{background:#f7f9fa}.ds-caption-content,.ds-content{background:#ffffff}.ds-index{padding:22px 16px 24px;border-right:1px solid #e8edef;min-width:0}.ds-content{padding:22px 24px 24px;min-width:0}.ds-surface-title{font-size:15px;font-weight:600;margin:0 0 12px;overflow-wrap:anywhere}.ds-surface-copy{margin:0;overflow-wrap:anywhere}"
     },
     {
       "name": "预览与编辑页签",
@@ -440,31 +456,39 @@
       "refersTo": "tab",
       "description": "HeadingTextEdit 的模式选择外观；文档预览不实现 Qt 页签切换。",
       "html": "<div class=\"ds-tabs\" role=\"tablist\" aria-label=\"正文显示模式\"><button class=\"ds-tab\" role=\"tab\" aria-selected=\"true\">预览</button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">编辑</button></div>",
-      "css": ".ds-tab{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#637184;background:transparent;border:1px solid transparent;border-radius:6px;padding:7px 12px;margin-right:4px;min-width:36px;min-height:20px}.ds-tab:hover{background:#f0f3f7}.ds-tab[aria-selected=\"true\"]{color:#41638f;background:#e7eef8;border-color:#c6d0dd;font-weight:600}.ds-tab:focus-visible{outline:none;border-color:#41638f}"
+      "css": ".ds-tab{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#66737f;background:transparent;border:1px solid transparent;border-radius:6px;padding:7px 12px;margin-right:4px;min-width:36px;min-height:20px}.ds-tab:hover{background:#eef2f5}.ds-tab[aria-selected=\"true\"]{color:#41638f;background:#e4edf3;border-color:#c6d0dd;font-weight:600}.ds-tab:focus-visible{outline:none;border-color:#41638f}"
+    },
+    {
+      "name": "剪贴板标签页",
+      "kind": "nav",
+      "refersTo": "clipboard-tab",
+      "description": "剪贴板专用透明页签；选中用 2px 雾蓝底线，焦点用 focus 底线。保留原生选择、拖放和键盘行为，文档示例只预览外观。",
+      "html": "<div class=\"ds-clip-tabs\" role=\"tablist\" aria-label=\"剪贴板标签页\"><button class=\"ds-clip-tab\" role=\"tab\" aria-selected=\"true\">历史</button><button class=\"ds-clip-tab\" role=\"tab\" aria-selected=\"false\">常用</button></div>",
+      "css": ".ds-clip-tab{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#66737f;background:transparent;border:none;border-bottom:2px solid transparent;border-radius:0;padding:7px 4px;margin-right:14px;min-width:36px;min-height:20px}.ds-clip-tab:hover{background:#eef2f5}.ds-clip-tab[aria-selected=\"true\"]{color:#41638f;border-bottom-color:#41638f;font-weight:600}.ds-clip-tab:focus-visible{outline:none;border-bottom-color:#7895bc}"
     },
     {
       "name": "选中日期",
       "kind": "custom",
       "refersTo": "calendar-selected",
-      "description": "日历日期最大尺寸静态示例；标记来自原生绘制几何。右侧直接呈现提醒与日记，列表可访问名称包含日期，不重复日期和条数摘要。",
-      "html": "<div class=\"ds-date\" aria-label=\"选中日期 11，含日记和提醒\"><span class=\"ds-date-number\">11</span><svg class=\"ds-date-marks\" width=\"24\" height=\"8\" viewBox=\"0 0 24 8\" aria-hidden=\"true\"><rect x=\"3\" y=\"1\" width=\"6\" height=\"6\" rx=\"1\" fill=\"#386b50\"/><path d=\"M18 .5 14.5 7 21.5 7Z\" fill=\"#87611e\"/></svg></div>",
-      "css": ".ds-date{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;font-size:11pt;position:relative;width:44px;height:44px;border:1px solid #e7eef8;border-radius:10px;background:#e7eef8;color:#41638f;font-weight:700}.ds-date-number{position:absolute;inset:0 0 6px;display:flex;align-items:center;justify-content:center}.ds-date-marks{position:absolute;left:10px;bottom:2px}"
+      "description": "日历导航、星期标题与日期共用灰白底；仅选中或今天绘制最大 44px 的日期块。未来日期弱化文字，日记与提醒形状标记保持原生语义。右侧直接显示提醒与日记。",
+      "html": "<div class=\"ds-calendar-surface\"><div class=\"ds-date\" aria-label=\"选中日期 11，含日记和提醒\"><span class=\"ds-date-number\">11</span><svg class=\"ds-date-marks\" width=\"24\" height=\"8\" viewBox=\"0 0 24 8\" aria-hidden=\"true\"><rect x=\"3\" y=\"1\" width=\"6\" height=\"6\" rx=\"1\" fill=\"#386b50\"/><path d=\"M18 .5 14.5 7 21.5 7Z\" fill=\"#87611e\"/></svg></div></div>",
+      "css": ".ds-calendar-surface{background:#f7f9fa;padding:8px}.ds-date{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;font-size:11pt;position:relative;width:44px;height:44px;border:1px solid #e4edf3;border-radius:10px;background:#e4edf3;color:#41638f;font-weight:700}.ds-date-number{position:absolute;inset:0 0 6px;display:flex;align-items:center;justify-content:center}.ds-date-marks{position:absolute;left:10px;bottom:2px}"
     },
     {
       "name": "运行输出",
       "kind": "custom",
       "refersTo": "run-panel",
-      "description": "原生浅色输出区的静态外观，等宽字体由运行环境决定。",
+      "description": "连续工具详情中的平直浅灰输出内衬，无外框或圆角；等宽字体由原生运行环境决定。",
       "html": "<section class=\"ds-run\"><div class=\"ds-run-title\">运行结果</div><pre class=\"ds-run-output\">示例工具运行完成\n状态：成功</pre></section>",
-      "css": ".ds-run{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#344254;background:#f6f7f9;border:none;border-radius:6px;padding:10px 14px}.ds-run-title{font-weight:600;margin-bottom:6px}.ds-run-output{font-family:monospace;background:transparent;border:none;padding:0;margin:0;white-space:pre-wrap}"
+      "css": ".ds-run{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#34404c;background:#f7f9fa;border:none;border-radius:0;padding:10px 14px}.ds-run-title{font-weight:600;margin-bottom:6px}.ds-run-output{font-family:monospace;background:transparent;border:none;padding:0;margin:0;white-space:pre-wrap}"
     }
   ],
   "narrative": {
     "northStar": "浅色日常工作台",
-    "overview": "以浅灰桌面底、白色工作面和雾蓝操作构成安静、紧凑的 Windows 工作台。时序记录、项目记录、自动化工具、剪贴板及设置共用同一套视觉语言；各模块保留适合其内容的组织方式。\n\n这是 C++17 / Qt 6 Widgets 原生桌面界面，不是网页或移动应用。全局浅色调色板覆盖主窗口、独立阅读编辑窗口、弹窗和菜单；Windows 主窗口将页面顶栏融入窗口标题区域，独立窗口继续沿用 DWM 浅色标题栏。",
+    "overview": "以浅灰导航、灰白索引区、白色工作面和雾蓝操作构成安静、紧凑的 Windows 工作台。时序记录、项目记录、自动化工具、剪贴板及设置共用连续分区：大区域直接衔接，留白位于分区内部；各模块保留适合其内容的组织方式。\n\n这是 C++17 / Qt 6 Widgets 原生桌面界面，不是网页或移动应用。全局浅色调色板覆盖主窗口、独立阅读编辑窗口、弹窗和菜单；Windows 主窗口将页面顶栏融入窗口标题区域，独立窗口继续沿用 DWM 浅色标题栏。",
     "keyCharacteristics": [
       "灰白表面、深灰正文，雾蓝标识选择与主要操作。",
-      "紧凑间距、小圆角、细边界，不使用自定义投影制造层级。",
+      "工作面无外围卡片间隙和圆角，控件保留小圆角；以底色、共享细边界和内部留白建立层级，不使用自定义投影。",
       "导航、输入、保存反馈与工具运行状态共享语义。"
     ],
     "rules": [
@@ -480,12 +504,13 @@
       },
       {
         "name": "平面层级",
-        "body": "用灰白表面、细边界和留白区分区域；不要给内容卡片增加自定义投影。",
+        "body": "用连续灰白表面、共享细边界和内部留白区分区域；不要给主工作面恢复独立卡片外壳或增加自定义投影。",
         "section": "elevation"
       }
     ],
     "dos": [
       "Do 从 `UiTheme` 与全局 QSS 复用颜色和状态；新增独立窗口同样安装全局主题。",
+      "Do 使用连续工作面角色组织主页面，把留白放在分区内部，并让顶栏分色跟随当前分区。",
       "Do 为导航与图标操作保留可访问名称、工具提示和键盘焦点；状态通过可见文字、工具提示或可访问名称保留明确语义。",
       "Do 在主窗口最小尺寸下检查长标题换行、表单收缩、滚动区和可见操作；中文正文优先保持阅读面积。",
       "Do 保留现有应用图标与更新标记，新增通用操作沿用 SVG 线性图标。"

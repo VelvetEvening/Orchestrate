@@ -54,9 +54,9 @@ void updateProjectStatus(QListWidgetItem *item, bool completed) {
 QString expandedFoldersKey(int projectId) {
     return QStringLiteral("projects.%1.expanded_record_folders").arg(projectId);
 }
-QFrame *card(QWidget *parent) {
+QFrame *surface(QWidget *parent, const char *role) {
     auto *widget = new QFrame(parent);
-    widget->setObjectName(QStringLiteral("card"));
+    UiTheme::setSurface(widget, role);
     return widget;
 }
 QLabel *label(const QString &text, const QString &name, QWidget *parent) {
@@ -85,15 +85,18 @@ void styleList(QListWidget *list) {
 
 ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(parent), database_(database)
 {
+    UiTheme::setSurface(this, "content");
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(24, 16, 24, 24);
-    layout->setSpacing(18);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
     auto *splitter = new QSplitter(this);
     splitter->setChildrenCollapsible(false);
-    splitter->setHandleWidth(10);
-    auto *listCard = card(splitter);
+    splitter->setObjectName(QStringLiteral("workspaceSplit"));
+    splitter->setHandleWidth(1);
+    auto *listCard = surface(splitter, "index");
+    listCard->setObjectName(QStringLiteral("workspaceIndex"));
     auto *left = new QVBoxLayout(listCard);
-    left->setContentsMargins(18,18,18,18);
+    left->setContentsMargins(16,22,16,24);
     left->addWidget(label(QStringLiteral("项目列表"), QStringLiteral("cardTitle"), listCard));
     auto *orderedProjects = new SiblingOrderList(listCard);
     projectList_ = orderedProjects;
@@ -112,9 +115,9 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     auto *create = new QPushButton(QStringLiteral("新建项目"), listCard);
     create->setObjectName(QStringLiteral("primaryButton"));
     left->addWidget(create);
-    details_ = card(splitter);
+    details_ = surface(splitter, "content");
     detailsLayout_ = new QVBoxLayout(details_);
-    detailsLayout_->setContentsMargins(22,18,22,18);
+    detailsLayout_->setContentsMargins(24,22,24,24);
     detailsLayout_->setSpacing(12);
     auto *header = new QHBoxLayout;
     projectTitle_ = label(QString(), QStringLiteral("cardTitle"), details_);
@@ -122,6 +125,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     header->addWidget(projectTitle_,1);
     outlineTitle_ = new QPushButton(UiTheme::icon(QStringLiteral("document")), QStringLiteral("项目大纲"), details_);
     outlineTitle_->setObjectName(QStringLiteral("outlineTitle"));
+    UiTheme::setRole(outlineTitle_, "quiet");
     outlineTitle_->setCursor(Qt::PointingHandCursor);
     outlineTitle_->setFocusPolicy(Qt::StrongFocus);
     outlineTitle_->setToolTip(QStringLiteral("打开项目大纲"));
@@ -132,6 +136,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     header->addWidget(outlineTitle_);
     auto *createFolder = new QPushButton(QStringLiteral("新建文件夹"), details_);
     createFolder->setObjectName(QStringLiteral("createRecordFolder"));
+    UiTheme::setRole(createFolder, "quiet");
     header->addWidget(createFolder);
     detailsLayout_->addLayout(header);
 
@@ -214,6 +219,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     auto *add = new QPushButton(QStringLiteral("添加记录"), recordsPanel_);
     add->setObjectName(QStringLiteral("primaryButton"));
     editWorkButton_ = new QPushButton(QStringLiteral("打开"), recordsPanel_);
+    UiTheme::setRole(editWorkButton_, "quiet");
     deleteWorkButton_ = new QPushButton(QStringLiteral("删除"), recordsPanel_);
     UiTheme::setRole(deleteWorkButton_, "danger");
     actions->addWidget(add);

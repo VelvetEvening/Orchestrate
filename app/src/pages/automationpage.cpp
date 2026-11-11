@@ -64,12 +64,10 @@ const QString kUngroupedNameKey = QStringLiteral("automation.ungrouped_name");
 const QString kBuiltinGroupKey = QStringLiteral("automation.builtin_group_id");
 const QString kBuiltinGroupName = QStringLiteral("系统工具");
 
-QFrame *makeCard(QWidget *parent)
+QFrame *makeSurface(QWidget *parent, const char *surface = "section")
 {
     auto *card = new QFrame(parent);
-    card->setObjectName(QStringLiteral("card"));
-    card->setFrameShape(QFrame::StyledPanel);
-    card->setFrameShadow(QFrame::Plain);
+    UiTheme::setSurface(card, surface);
     return card;
 }
 
@@ -235,23 +233,33 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
 {
 
 
+    UiTheme::setSurface(this, "content");
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(24, 16, 24, 24);
-    layout->setSpacing(16);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
 
     auto *toolbar = new QHBoxLayout;
     toolbar->setSpacing(8);
     auto *newGroupButton = new QPushButton(QStringLiteral("新建工具组"), this);
+    UiTheme::setRole(newGroupButton, "quiet");
     toolbar->addWidget(newGroupButton);
-    renameGroupButton_ = new QPushButton(QStringLiteral("重命名工具组"), this);
+    renameGroupButton_ = new QPushButton(QStringLiteral("重命名"), this);
+    renameGroupButton_->setAccessibleName(QStringLiteral("重命名工具组"));
+    renameGroupButton_->setToolTip(QStringLiteral("重命名工具组"));
+    UiTheme::setRole(renameGroupButton_, "quiet");
     renameGroupButton_->setEnabled(false);
     toolbar->addWidget(renameGroupButton_);
-    deleteGroupButton_ = new QPushButton(QStringLiteral("删除工具组"), this);
+    deleteGroupButton_ = new QPushButton(QStringLiteral("删除"), this);
+    deleteGroupButton_->setAccessibleName(QStringLiteral("删除工具组"));
+    deleteGroupButton_->setToolTip(QStringLiteral("删除工具组"));
+    UiTheme::setRole(deleteGroupButton_, "danger");
     deleteGroupButton_->setEnabled(false);
     toolbar->addWidget(deleteGroupButton_);
-    toolbar->addStretch(1);
+    auto *registration = new QHBoxLayout;
+    registration->setSpacing(8);
     auto *importRemoteButton = new QPushButton(QStringLiteral("注册远程工具"), this);
     importRemoteButton->setObjectName(QStringLiteral("importRemoteTool"));
+    UiTheme::setRole(importRemoteButton, "quiet");
     importRemoteButton->setToolTip(QStringLiteral("选择 WSL 本地 Linux 环境或 SSH 服务器，注册其中的工具。"));
     auto *remoteMenu = new QMenu(importRemoteButton);
     auto *importWslAction = remoteMenu->addAction(QStringLiteral("WSL 工具…"));
@@ -259,20 +267,21 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     auto *importSshAction = remoteMenu->addAction(QStringLiteral("SSH 服务器工具…"));
     importSshAction->setObjectName(QStringLiteral("importSshAction"));
     importRemoteButton->setMenu(remoteMenu);
-    toolbar->addWidget(importRemoteButton);
+    registration->addWidget(importRemoteButton);
     auto *importButton = new QPushButton(QStringLiteral("注册本地工具"), this);
     importButton->setObjectName(QStringLiteral("primaryButton"));
-    toolbar->addWidget(importButton);
-    layout->addLayout(toolbar);
+    registration->addWidget(importButton);
 
     auto *splitter = new QSplitter(Qt::Horizontal, this);
     splitter->setChildrenCollapsible(false);
-    splitter->setHandleWidth(10);
+    splitter->setObjectName(QStringLiteral("workspaceSplit"));
+    splitter->setHandleWidth(1);
 
     // ---- Left: groups and tools ----
-    auto *treeCard = makeCard(splitter);
+    auto *treeCard = makeSurface(splitter, "index");
+    treeCard->setObjectName(QStringLiteral("workspaceIndex"));
     auto *treeLayout = new QVBoxLayout(treeCard);
-    treeLayout->setContentsMargins(16, 18, 16, 16);
+    treeLayout->setContentsMargins(16, 22, 16, 24);
     treeLayout->setSpacing(8);
     auto *treeTitle = makeCardTitle(QStringLiteral("工具组"), treeCard);
     treeTitle->setContentsMargins(4, 0, 0, 0);
@@ -324,11 +333,13 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     tree_->setAccessibleDescription(QStringLiteral("拖动工具组或工具排序，拖入其他工具组归类；Ctrl+上或下箭头调序。"));
     tree_->setToolTip(QStringLiteral("拖入工具组归类；拖动或 Ctrl+↑/↓ 调整同层顺序。"));
     treeLayout->addWidget(tree_, 1);
+    treeLayout->addLayout(toolbar);
+    treeLayout->addLayout(registration);
 
     // ---- Right: empty state or tool details ----
     detailsStack_ = new QStackedWidget(splitter);
 
-    auto *emptyPage = makeCard(detailsStack_);
+    auto *emptyPage = makeSurface(detailsStack_, "content");
     auto *emptyLayout = new QVBoxLayout(emptyPage);
     emptyLayout->setContentsMargins(36, 36, 36, 36);
     emptyLayout->setSpacing(10);
@@ -353,13 +364,14 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     column->setObjectName(QStringLiteral("detailsColumn"));
     column->setAutoFillBackground(false);
     auto *columnLayout = new QVBoxLayout(column);
-    columnLayout->setContentsMargins(0, 0, 6, 0);
-    columnLayout->setSpacing(14);
+    UiTheme::setSurface(column, "content");
+    columnLayout->setContentsMargins(0, 0, 0, 0);
+    columnLayout->setSpacing(0);
 
     // Header: identity and registration actions.
-    auto *headerCard = makeCard(column);
+    auto *headerCard = makeSurface(column);
     auto *headerLayout = new QVBoxLayout(headerCard);
-    headerLayout->setContentsMargins(22, 18, 22, 18);
+    headerLayout->setContentsMargins(24, 22, 24, 22);
     headerLayout->setSpacing(6);
     auto *headerRow = new QHBoxLayout;
     headerRow->setSpacing(8);
@@ -373,6 +385,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     toolSource_->hide();
     headerRow->addWidget(toolSource_);
     reloadManifestButton_ = new QPushButton(QStringLiteral("重新读取声明"), headerCard);
+    UiTheme::setRole(reloadManifestButton_, "quiet");
     reloadManifestButton_->setToolTip(QStringLiteral("重新读取接入声明，更新命令和工具信息；保留分组。"));
     headerRow->addWidget(reloadManifestButton_);
     deleteToolButton_ = new QPushButton(QStringLiteral("移除注册"), headerCard);
@@ -382,9 +395,9 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     columnLayout->addWidget(headerCard);
 
     // Current state.
-    auto *stateCard = makeCard(column);
+    auto *stateCard = makeSurface(column);
     auto *stateLayout = new QVBoxLayout(stateCard);
-    stateLayout->setContentsMargins(22, 16, 22, 18);
+    stateLayout->setContentsMargins(24, 22, 24, 24);
     stateLayout->setSpacing(8);
     auto *stateHeader = new QHBoxLayout;
     stateHeader->addWidget(makeCardTitle(QStringLiteral("当前状态"), stateCard));
@@ -392,6 +405,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     auto *refreshButton = new QPushButton(UiTheme::icon(QStringLiteral("refresh")),
                                           QStringLiteral("刷新状态"), stateCard);
     refreshButton->setObjectName(QStringLiteral("refreshStateButton"));
+    UiTheme::setRole(refreshButton, "quiet");
     refreshButton->setToolTip(QStringLiteral("重新读取当前状态 JSON，不会运行工具命令。"));
     stateHeader->addWidget(refreshButton);
     stateLayout->addLayout(stateHeader);
@@ -416,9 +430,9 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     columnLayout->addWidget(stateCard);
 
     // Commands and the output of the latest run.
-    auto *commandCard = makeCard(column);
+    auto *commandCard = makeSurface(column, "content");
     auto *commandLayout = new QVBoxLayout(commandCard);
-    commandLayout->setContentsMargins(22, 16, 22, 18);
+    commandLayout->setContentsMargins(24, 22, 24, 24);
     commandLayout->setSpacing(10);
     auto *commandHeader = new QHBoxLayout;
     commandHeader->addWidget(makeCardTitle(QStringLiteral("工具命令"), commandCard));
@@ -430,7 +444,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     commandLayout->addLayout(commandHeader);
     commandList_ = new QListWidget(commandCard);
     commandList_->setObjectName(QStringLiteral("commandList"));
-    commandList_->setSpacing(3);
+    commandList_->setSpacing(0);
     commandList_->setSelectionMode(QAbstractItemView::SingleSelection);
     commandList_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     commandList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);

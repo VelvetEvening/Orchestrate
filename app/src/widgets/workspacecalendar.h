@@ -18,7 +18,7 @@ public:
         setFont(dateFont);
         QTextCharFormat header;
         header.setForeground(QColor(UiTheme::Muted));
-        header.setBackground(Qt::white);
+        header.setBackground(QColor(UiTheme::IndexSurface));
         setHeaderTextFormat(header);
         setWeekdayTextFormat(Qt::Saturday, header);
         setWeekdayTextFormat(Qt::Sunday, header);
@@ -35,7 +35,7 @@ protected:
     {
         painter->save();
         painter->setRenderHint(QPainter::Antialiasing);
-        painter->fillRect(rect, Qt::white);
+        painter->fillRect(rect, QColor(UiTheme::IndexSurface));
         const bool selected = date == selectedDate();
         const bool inMonth = date.month() == monthShown() && date.year() == yearShown();
         const bool today = inMonth && date == QDate::currentDate();
@@ -45,13 +45,10 @@ protected:
         const QRectF tile(rect.center().x() - side / 2.0, rect.center().y() - side / 2.0, side, side);
         painter->setPen(Qt::NoPen);
         if (selected || today) {
-            painter->setBrush(QColor(selected ? UiTheme::Selection : UiTheme::Surface));
+            painter->setBrush(QColor(selected ? UiTheme::Selection : UiTheme::IndexSurface));
             painter->setPen(QPen(QColor(today ? UiTheme::Focus : UiTheme::Selection), 1));
             painter->drawRoundedRect(tile, 10, 10);
             foreground = QColor(UiTheme::Accent);
-        } else if (future) {
-            painter->setBrush(QColor(UiTheme::Background));
-            painter->drawRoundedRect(tile, 10, 10);
         }
         QFont textFont = font();
         textFont.setBold(selected || today);
