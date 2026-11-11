@@ -29,3 +29,13 @@
 - 一体化顶栏的独立验收副本位于 `app/build-qt/integrated-header-preview/Orchestrate.exe`。桌面验证后重置了控制会话，并确认 `codex-computer-use.exe` 捕获辅助进程退出。
 - 移除模块标题、将设置移至右下角并删除常驻复制按钮后，重新构建并通过 `heading_text`、`clipboard` 两组回归（14.02 秒）；检查了最新大小窗口截图、菜单勾选状态和历史设置对话框。
 - 最新验收副本位于 `app/build-qt/clipboard-settings-preview/Orchestrate.exe`，采用独立数据并默认关闭剪贴板监听、全局快捷键和自动更新检查；保留正在运行的上一版验收窗口。
+
+## 标题栏重复绘制修复
+
+用户验收发现顶栏偶发出现旧式渐变背景、Orchestrate 名称及重复窗口按钮。在 Windows 平台回归中，向主窗口发送 `WM_NCACTIVATE` 可稳定复现：默认非客户区绘制覆盖了 Qt 已绘制的融合顶栏。Qt 6.11.2 的 Windows 后端对 `FramelessWindowHint` 已避免这一默认绘制，但没有覆盖本项目使用的 `ExpandedClientAreaHint`。
+
+主窗口的 `nativeEvent` 现在仅在启用融合顶栏时处理 `WM_NCACTIVATE` 并返回成功；其他消息，包括负责实际激活的 `WM_ACTIVATE`，继续交给 Qt。保留标题元数据、窗口按钮、边缘缩放和系统窗口行为，不增加定时器或后台任务。
+
+- 原生回归先在旧实现上失败，再在修复后通过；检查激活、失活、整窗重绘、最大化、还原、最小化恢复和托盘恢复时的实际窗口像素。测试及截图保留在本地 `app/build-qt/tests/heading-text-test/artifacts/native-caption-*`。
+- 完整构建通过，四组相关回归通过（17.23 秒）。Windows 实机确认最大化/还原按钮、侧栏开关、弹窗打开取消及页面切换正常。
+- `app/build-qt/clipboard-settings-preview/Orchestrate.exe` 已更新；实机验证副本位于 `app/build-qt/caption-repaint-preview/Orchestrate.exe`，两者与本次构建的可执行文件哈希一致。

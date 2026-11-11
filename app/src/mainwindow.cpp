@@ -439,6 +439,22 @@ bool MainWindow::mainWindowVisible() const
     return true;
 }
 
+#ifdef Q_OS_WIN
+bool MainWindow::nativeEvent(const QByteArray &eventType, void *message, qintptr *result)
+{
+    const auto *nativeMessage = static_cast<const MSG *>(message);
+    if (eventType == "windows_generic_MSG" && nativeMessage->message == WM_NCACTIVATE
+        && windowHandle() && windowHandle()->flags().testFlag(Qt::ExpandedClientAreaHint)) {
+        // Qt already draws the expanded caption. DefWindowProc would paint a
+        // second, classic caption over it when the window's activation changes.
+        // Only suppress non-client painting; WM_ACTIVATE still reaches Qt.
+        *result = TRUE;
+        return true;
+    }
+    return QMainWindow::nativeEvent(eventType, message, result);
+}
+#endif
+
 void MainWindow::quitApplication()
 {
     if (!savePendingChanges()) return;
