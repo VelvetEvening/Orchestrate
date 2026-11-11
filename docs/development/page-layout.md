@@ -1,6 +1,6 @@
 # 顶部导航与页面布局调整
 
-分支：`design/page-layout`，从已发布 v3.2.0 的 main 创建。本轮交付为可验收的分支版本。
+分支：`design/page-layout`，从已发布 v3.2.0 的 main 创建。本轮调整纳入 v3.2.1，发布前的稳定性与后台资源复核见 [审查记录](../project-review-2026-11-11-layout.md)。
 
 ## 用户反馈与方向
 
