@@ -1,4 +1,5 @@
 #include "ui/theme.h"
+#include "ui/contentworkspace.h"
 #include "widgets/emptyviewhint.h"
 #include "clipboardpage.h"
 #include "clipboard/clipboardcontent.h"
@@ -46,21 +47,6 @@ bool isEntry(const QTreeWidgetItem *item)
     }
     return true;
 }
-class ClipboardEditorDialog final : public QDialog {
-public:
-    using QDialog::QDialog;
-    std::function<bool()> dirty;
-    std::function<void()> save;
-    void reject() override {
-        if (dirty && dirty()) {
-            const auto choice=QMessageBox::warning(this,QStringLiteral("保存修改"),QStringLiteral("条目有未保存的修改。"),
-                QMessageBox::Save|QMessageBox::Discard|QMessageBox::Cancel,QMessageBox::Save);
-            if (choice==QMessageBox::Cancel) return;
-            if (choice==QMessageBox::Save) { if (save) save(); return; }
-        }
-        QDialog::reject();
-    }
-};
 class ClipboardTabs final : public QTabBar {
 public:
     explicit ClipboardTabs(QWidget *parent) : QTabBar(parent) { setAcceptDrops(true); }
@@ -508,43 +494,67 @@ void ClipboardPage::editItem(bool creating)
         const auto ids=selectedIds(); if (ids.size()!=1) return;
         item=database_->clipboardItem(ids.first(),&error); if (!item.id) { report(error); return; }
     }
-    ClipboardEditorDialog dialog(this); editor_=&dialog;
-    monitor_->setEditingItem(item.id);
-    const auto editingGuard=qScopeGuard([this] { monitor_->setEditingItem(0); });
-    dialog.setObjectName("clipboardEditor"); dialog.setWindowTitle(creating ? QStringLiteral("新建剪贴板条目") : QStringLiteral("编辑剪贴板条目")); dialog.resize(640,470);
-    auto *layout=new QVBoxLayout(&dialog); auto *form=new QFormLayout;
-    auto *title=new QLineEdit(item.title,&dialog); title->setObjectName("clipboardItemTitle"); title->setMaxLength(200); title->setPlaceholderText(QStringLiteral("可选，留空时显示内容开头"));
+    auto *workspace=ContentWorkspace::find(this);
+    const QString key=creating ? QStringLiteral("clipboard/new/%1/%2").arg(item.tabId).arg(item.folderId)
+        : QStringLiteral("clipboard/item/%1").arg(item.id);
+    if (workspace && workspace->activate(key,this)) return;
+    auto *dialog=new DraftDialog(this); editor_=dialog;
+    dialog->setObjectName(QStringLiteral("clipboardEditor"));
+    dialog->setWindowTitle(creating ? QStringLiteral("新建剪贴板条目") : QStringLiteral("编辑剪贴板条目"));
+    dialog->resize(640,470);
+    monitor_->protectEditingItem(item.id,true);
+    connect(dialog,&QObject::destroyed,monitor_,[monitor=monitor_,id=item.id]{ monitor->protectEditingItem(id,false); });
+    auto *layout=new QVBoxLayout(dialog); layout->setContentsMargins(22,20,22,20); auto *form=new QFormLayout;
+    auto *title=new QLineEdit(item.title,dialog); title->setObjectName(QStringLiteral("clipboardItemTitle"));
+    title->setMaxLength(200); title->setPlaceholderText(QStringLiteral("可选，留空时显示内容开头"));
     form->addRow(QStringLiteral("标题"),title); layout->addLayout(form);
     const bool editable=creating || item.kind=="text";
-    auto *body=new TextLayoutGuard::Edit(&dialog); body->setObjectName("clipboardItemBody"); body->setReadOnly(!editable); TextLayoutGuard::setPlainText(body,editable ? item.text : item.text.left(200000));
-    const QString initialBody=body->toPlainText();
+    auto *body=new TextLayoutGuard::Edit(dialog); body->setObjectName(QStringLiteral("clipboardItemBody"));
+    body->setReadOnly(!editable); TextLayoutGuard::setPlainText(body,editable ? item.text : item.text.left(200000));
     body->setPlaceholderText(QStringLiteral("填写要保存的文本…")); layout->addWidget(body,1);
+    auto saved=std::make_shared<AppDatabase::ClipboardItem>(item);
+    auto savedBody=std::make_shared<QString>(body->toPlainText());
+    auto *status=label(QString(),"clipboardEditorError",dialog); status->setWordWrap(true); layout->addWidget(status);
     if (!editable) {
-        auto *hint=label(QStringLiteral("此条目保留原始格式，可修改标题。需要修改正文时，可另存为纯文本条目。"),"muted",&dialog); hint->setWordWrap(true); layout->addWidget(hint);
+        auto *hint=label(QStringLiteral("此条目保留原始格式，可修改标题。需要修改正文时，可另存为纯文本条目。"),"muted",dialog);
+        hint->setWordWrap(true); layout->addWidget(hint);
         if (!item.text.isEmpty()) {
-            auto *asText=new QPushButton(QStringLiteral("另存为纯文本"),&dialog); layout->addWidget(asText,0,Qt::AlignLeft);
-            connect(asText,&QPushButton::clicked,&dialog,[&] {
-                AppDatabase::ClipboardItem copy; copy.tabId=item.tabId; copy.folderId=item.folderId; copy.title=title->text().trimmed(); QString e;
-                if (!ClipboardContent::plainText(item.text,&copy,&e) || !database_->saveClipboardItem(&copy,&e)) { QMessageBox::warning(&dialog,QStringLiteral("保存失败"),e); return; }
-                dialog.accept();
+            auto *asText=new QPushButton(QStringLiteral("另存为纯文本"),dialog); layout->addWidget(asText,0,Qt::AlignLeft);
+            connect(asText,&QPushButton::clicked,dialog,[=,this] {
+                AppDatabase::ClipboardItem copy; copy.tabId=saved->tabId; copy.folderId=saved->folderId;
+                copy.title=title->text().trimmed(); QString error;
+                if (!ClipboardContent::plainText(saved->text,&copy,&error) || !database_->saveClipboardItem(&copy,&error)) {
+                    status->setText(error); return;
+                }
+                status->setText(QStringLiteral("已另存为纯文本")); refreshItems();
             });
         }
     }
-    auto *errorLabel=label(QString(),"clipboardEditorError",&dialog); errorLabel->setWordWrap(true); layout->addWidget(errorLabel);
-    auto *buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel,&dialog); buttons->button(QDialogButtonBox::Save)->setText(QStringLiteral("保存")); buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消")); layout->addWidget(buttons);
-    connect(buttons,&QDialogButtonBox::accepted,&dialog,[&] {
-        QString e; auto saved=item; saved.title=title->text().trimmed();
-        if (editable && (creating || body->toPlainText()!=initialBody)
-            && !ClipboardContent::plainText(body->toPlainText(),&saved,&e)) { errorLabel->setText(e); return; }
-        if (!database_->saveClipboardItem(&saved,&e)) { errorLabel->setText(e); return; }
-        dialog.accept();
-    });
-    connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
-    dialog.dirty=[&] { return title->text()!=item.title || (editable && body->toPlainText()!=initialBody); };
-    dialog.save=[&] { buttons->button(QDialogButtonBox::Save)->click(); };
-    auto *save=new QShortcut(QKeySequence::Save,&dialog); connect(save,&QShortcut::activated,buttons->button(QDialogButtonBox::Save),&QPushButton::click);
-    if (dialog.exec()==QDialog::Accepted) refreshItems();
-    editor_.clear();
+    auto *buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel,dialog);
+    buttons->button(QDialogButtonBox::Save)->setText(QStringLiteral("保存"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("关闭")); layout->addWidget(buttons);
+    dialog->dirty=[=] { return title->text()!=saved->title || (editable && body->toPlainText()!=*savedBody); };
+    dialog->saveDraft=[=,this] {
+        QString error;
+        auto updated=saved->id ? database_->clipboardItem(saved->id,&error) : *saved;
+        if (saved->id && !updated.id) { status->setText(error.isEmpty() ? QStringLiteral("条目已被删除，请保留并复制当前草稿。") : error); return false; }
+        updated.title=title->text().trimmed();
+        if (editable && (!saved->id || body->toPlainText()!=*savedBody)
+            && !ClipboardContent::plainText(body->toPlainText(),&updated,&error)) { status->setText(error); return false; }
+        if (!database_->saveClipboardItem(&updated,&error)) { status->setText(error); return false; }
+        *saved=updated; *savedBody=body->toPlainText(); title->setText(saved->title);
+        if (workspace) workspace->rekey(dialog->property("contentKey").toString(),QStringLiteral("clipboard/item/%1").arg(saved->id));
+        dialog->setWindowTitle(QStringLiteral("编辑剪贴板条目")); status->setText(QStringLiteral("已保存"));
+        refreshItems();
+        if (!workspace) dialog->accept();
+        return true;
+    };
+    connect(buttons,&QDialogButtonBox::accepted,dialog,[dialog]{ dialog->saveDraft(); });
+    connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
+    auto *shortcut=new QShortcut(QKeySequence::Save,dialog); shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(shortcut,&QShortcut::activated,dialog,[dialog]{ dialog->saveDraft(); });
+    if (workspace) workspace->present(key,dialog,this);
+    else { dialog->exec(); delete dialog; }
 }
 
 bool ClipboardPage::savePendingChanges()
@@ -568,6 +578,8 @@ void ClipboardPage::deleteSelected()
         dialog.setEscapeButton(QMessageBox::No);
         if (dialog.exec()!=QMessageBox::Yes) return;
     }
+    if (auto *workspace=ContentWorkspace::find(this))
+        for (int id:ids) if (!workspace->closePage(QStringLiteral("clipboard/item/%1").arg(id))) return;
     QString error; if (!database_->deleteClipboardItems(ids,&error)) { report(error); return; } refreshItems();
 }
 

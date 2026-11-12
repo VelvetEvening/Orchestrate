@@ -23,6 +23,7 @@
 #include <QSignalBlocker>
 #include <QScrollArea>
 #include <QStackedWidget>
+#include "ui/contentworkspace.h"
 #include <QStyle>
 #include <QSystemTrayIcon>
 #include <QVBoxLayout>
@@ -254,17 +255,22 @@ void MainWindow::switchToPage(int index)
     }
 
     if (pageStack_->count() == 0) {
+        const auto addWorkspace = [this](QWidget *root, int index) {
+            auto *workspace = new ContentWorkspace(root, pageStack_);
+            pageStack_->addWidget(workspace);
+            connect(workspace, &ContentWorkspace::activationRequested, this, [this,index] { switchToPage(index); });
+        };
         auto *calendarPage = new CalendarPage(&database_, trayIcon_, pageStack_);
-        pageStack_->addWidget(calendarPage);
+        addWorkspace(calendarPage,0);
 
         auto *projectsPage = new ProjectsPage(&database_, pageStack_);
-        pageStack_->addWidget(projectsPage);
+        addWorkspace(projectsPage,1);
 
         auto *automationPage = new AutomationPage(&database_, pageStack_);
         pageStack_->addWidget(automationPage);
 
         auto *clipboardPage = new ClipboardPage(&database_, pageStack_);
-        pageStack_->addWidget(clipboardPage);
+        addWorkspace(clipboardPage,3);
         connect(clipboardPage, &ClipboardPage::hideRequested, this, [this] { hide(); });
 
         auto *settingsPage = new QWidget(pageStack_);
@@ -490,6 +496,9 @@ void MainWindow::installUpdate()
 
 bool MainWindow::savePendingChanges()
 {
+    for (auto *workspace : findChildren<ContentWorkspace *>()) {
+        if (!workspace->closeAll()) return false;
+    }
     for (auto *page : findChildren<ClipboardPage *>()) {
         if (!page->savePendingChanges()) return false;
     }

@@ -538,7 +538,7 @@ QList<QDate> AppDatabase::diaryDates(const QDate &from, const QDate &to, QString
     return dates;
 }
 
-bool AppDatabase::addDiaryEntry(const QDate &date, const QString &title, const QString &content, QString *errorMessage)
+bool AppDatabase::addDiaryEntry(const QDate &date, const QString &title, const QString &content, QString *errorMessage, int *newId)
 {
     if (!isOpen()) {
         return fail(errorMessage, QStringLiteral("数据库尚未打开。"));
@@ -556,6 +556,7 @@ bool AppDatabase::addDiaryEntry(const QDate &date, const QString &title, const Q
         setError(errorMessage, query);
         return false;
     }
+    if (newId) *newId = query.lastInsertId().toInt();
     return true;
 }
 
@@ -1843,7 +1844,7 @@ bool AppDatabase::saveClipboardItem(ClipboardItem *item, QString *errorMessage)
     return true;
 }
 
-bool AppDatabase::captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage, int editingItemId)
+bool AppDatabase::captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage, int editingItemId, const QList<int> &editingItemIds)
 {
     if (!item || item->id!=0) return fail(errorMessage, QStringLiteral("无法记录此剪贴板内容。"));
     auto database=QSqlDatabase::database(connectionName_);
@@ -1862,10 +1863,11 @@ bool AppDatabase::captureClipboardItem(ClipboardItem *item, int historyLimit, QS
     position.addBindValue(saved.id);
     if (!position.exec()) { setError(errorMessage,position); database.rollback(); return false; }
     QSqlQuery trim(database);
-    // Evict from the bottom of the actual list, skipping the open editor.
-    // Count the edited item toward the limit so other automatic entries still fit.
-    trim.prepare(QStringLiteral("DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1 AND id<>? ORDER BY position DESC,id ASC LIMIT (SELECT MAX(0,COUNT(*)-?) FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1))"));
-    trim.addBindValue(editingItemId);
+    // Retained drafts remain protected even while their module is hidden.
+    auto protectedIds=editingItemIds; protectedIds.append(editingItemId);
+    QStringList placeholders; for (int id:protectedIds) { Q_UNUSED(id); placeholders.append(QStringLiteral("?")); }
+    trim.prepare(QStringLiteral("DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1 AND id NOT IN (%1) ORDER BY position DESC,id ASC LIMIT (SELECT MAX(0,COUNT(*)-?) FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1))").arg(placeholders.join(',')));
+    for (int id:protectedIds) trim.addBindValue(id);
     trim.addBindValue(qBound(100,historyLimit,10000));
     if (!trim.exec()) { setError(errorMessage,trim); database.rollback(); return false; }
     if (!database.commit()) { const auto e=database.lastError().text(); database.rollback(); return fail(errorMessage,e); }

@@ -1,4 +1,5 @@
 #include "ui/theme.h"
+#include "ui/contentworkspace.h"
 #include "widgets/emptyviewhint.h"
 #include "projectspage.h"
 #include "platform/fileaccess.h"
@@ -442,6 +443,8 @@ bool ProjectsPage::deleteProject(QWidget *parent)
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, [&] {
         if (confirmation->text() != required || current_.id != projectId || current_.name != projectName) return;
+        if (auto *workspace=ContentWorkspace::find(this))
+            if (!workspace->closePrefix(QStringLiteral("project/%1/").arg(projectId))) return;
         QString error;
         if (!database_->deleteProject(projectId, &error)) {
             QMessageBox::critical(&dialog, QStringLiteral("删除失败"), error);
@@ -713,19 +716,22 @@ void ProjectsPage::recordDialog(bool creating)
     QString location = QStringLiteral("项目顶层");
     for (const auto &folder : database_->recordFolders(projectId))
         if (folder.id == folderId) location = folder.name;
-    CollaborationRecordDialog dialog(database_, record, location, this);
-    dialog.exec();
-    if (!dialog.hasSaved()) return;
-    if (creating) {
+    auto *workspace=ContentWorkspace::find(this);
+    const QString prefix=QStringLiteral("project/%1/record/").arg(projectId);
+    const QString key=prefix+(creating ? QStringLiteral("new/%1").arg(folderId) : QString::number(record.id));
+    if (workspace && workspace->activate(key,this)) return;
+    auto *dialog=new CollaborationRecordDialog(database_, record, location, this);
+    connect(dialog,&CollaborationRecordDialog::savedRecord,this,[this,dialog,workspace,prefix,projectId,folderId](int id) {
+        if (workspace) workspace->rekey(dialog->property("contentKey").toString(),prefix+QString::number(id));
         if (folderId > 0) {
             auto expanded = database_->setting(expandedFoldersKey(projectId)).split(',',Qt::SkipEmptyParts);
             if (!expanded.contains(QString::number(folderId))) expanded.append(QString::number(folderId));
             database_->setSetting(expandedFoldersKey(projectId),expanded.join(','));
         }
-        const QSignalBlocker blocker(search_);
-        search_->clear();
-    }
-    refreshWorkRecords();
+        if (current_.id==projectId) refreshWorkRecords();
+    });
+    if (workspace) workspace->present(key,dialog,this);
+    else { dialog->exec(); delete dialog; }
 }
 void ProjectsPage::deleteWorkRecord()
 {
@@ -733,6 +739,8 @@ void ProjectsPage::deleteWorkRecord()
     if(record.id<=0) return;
     if(QMessageBox::question(this,QStringLiteral("删除协作记录"),QStringLiteral("确定删除这条协作记录吗？"),
                              QMessageBox::Yes|QMessageBox::No,QMessageBox::No)!=QMessageBox::Yes) return;
+    if (auto *workspace=ContentWorkspace::find(this))
+        if (!workspace->closePage(QStringLiteral("project/%1/record/%2").arg(record.projectId).arg(record.id))) return;
     QString error;
     if(!database_->deleteWorkRecord(record.id,&error)) { showError(error); return; }
     refreshWorkRecords();
@@ -763,8 +771,15 @@ void ProjectsPage::openGitHistory()
 {
     if (current_.id <= 0) return;
     if (current_.directory.isEmpty()) { projectDialog(false); if(current_.id<=0 || current_.directory.isEmpty())return; }
+    auto *workspace=ContentWorkspace::find(this);
+    const QString key=QStringLiteral("project/%1/git").arg(current_.id);
+    if (workspace && workspace->activate(key,this)) return;
     auto &window=gitWindows_[current_.id];
-    if (!window) window=new GitHistoryWindow(current_.name,current_.repository(),this);
+    if (!window) {
+        window=new GitHistoryWindow(current_.name,current_.repository(),this);
+        connect(window,&QDialog::finished,this,[this,id=current_.id]{ gitWindows_.remove(id); });
+    }
+    if (workspace) { workspace->present(key,window,this); return; }
     if (window->isMinimized()) window->showNormal(); else window->show();
     window->raise(); window->activateWindow();
 }

@@ -42,7 +42,7 @@ void ClipboardMonitor::capture()
     AppDatabase::ClipboardItem item; QString error;
     if (!ClipboardContent::read(mime,&item,&error)) { if (!error.isEmpty()) emit captureError(error); return; }
     if (mime->data(ClipboardContent::OwnerFormat)==item.fingerprint) return;
-    if (!database_->captureClipboardItem(&item,historyLimit_,&error,editingItemId_)) { emit captureError(QStringLiteral("剪贴板未保存：")+error); return; }
+    if (!database_->captureClipboardItem(&item,historyLimit_,&error,editingItemId_,editingItems_.values())) { emit captureError(QStringLiteral("剪贴板未保存：")+error); return; }
     emit recorded();
 }
 

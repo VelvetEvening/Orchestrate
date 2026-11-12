@@ -152,7 +152,7 @@ public:
     DiaryEntry diaryEntry(int id, QString *errorMessage = nullptr) const;
     QList<QDate> diaryDates(const QDate &from, const QDate &to, QString *errorMessage = nullptr) const;
     bool addDiaryEntry(const QDate &date, const QString &content, QString *errorMessage = nullptr);
-    bool addDiaryEntry(const QDate &date, const QString &title, const QString &content, QString *errorMessage = nullptr);
+    bool addDiaryEntry(const QDate &date, const QString &title, const QString &content, QString *errorMessage = nullptr, int *newId = nullptr);
     bool updateDiaryEntry(int id, const QString &content, QString *errorMessage = nullptr);
     bool updateDiaryEntry(int id, const QString &title, const QString &content, QString *errorMessage = nullptr);
     bool deleteDiaryEntry(int id, QString *errorMessage = nullptr);
@@ -242,7 +242,7 @@ public:
     bool renameClipboardFolder(int id, const QString &name, QString *errorMessage = nullptr);
     bool deleteClipboardFolder(int id, QString *errorMessage = nullptr);
     bool saveClipboardItem(ClipboardItem *item, QString *errorMessage = nullptr);
-    bool captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage = nullptr, int editingItemId = 0);
+    bool captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage = nullptr, int editingItemId = 0, const QList<int> &editingItemIds = {});
     bool moveClipboardItems(const QList<int> &ids, int tabId, int folderId, QString *errorMessage = nullptr);
     bool deleteClipboardItems(const QList<int> &ids, QString *errorMessage = nullptr);
     bool reorderClipboardTabs(const QList<int> &ids, QString *errorMessage = nullptr);

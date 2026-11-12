@@ -18,6 +18,8 @@ public:
     bool hasSaved() const { return saved_; }
     const AppDatabase::WorkRecord &record() const { return record_; }
     void reject() override;
+signals:
+    void savedRecord(int id);
 
 private:
     bool dirty() const;

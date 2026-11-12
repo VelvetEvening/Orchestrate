@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Orchestrate VERSION 3.3.0 LANGUAGES CXX)
+project(Orchestrate VERSION 3.4.0 LANGUAGES CXX)
 
 configure_file(src/version.h.in generated/version.h @ONLY)
 
@@ -12,7 +12,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(Qt6 6.11.2 REQUIRED COMPONENTS Widgets Sql Network)
 
-add_library(OrchestrateUi STATIC src/ui/theme.cpp src/ui/theme.h resources/ui/uitheme.qrc)
+add_library(OrchestrateUi STATIC src/ui/theme.cpp src/ui/theme.h
+    src/ui/contentworkspace.cpp src/ui/contentworkspace.h resources/ui/uitheme.qrc)
 target_link_libraries(OrchestrateUi PUBLIC Qt6::Widgets)
 target_include_directories(OrchestrateUi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 if(WIN32)

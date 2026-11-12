@@ -233,6 +233,7 @@ bool CollaborationRecordDialog::save()
     setEditing(false);
     status_->setText(QStringLiteral("已保存"));
     UiTheme::setRole(status_, "success");
+    emit savedRecord(record_.id);
     return true;
 }
 

@@ -39,7 +39,7 @@ private:
     void refreshReminderList();
     void checkDueReminders();
     AppDatabase::Reminder selectedReminder() const;
-    bool showReminderDialog(AppDatabase::Reminder *reminder, bool editing);
+    void showReminderDialog(AppDatabase::Reminder reminder, bool editing);
     void updateSelectedDate(const QDate &date);
     void updateCalendarAppearance();
     void addDiaryEntry();

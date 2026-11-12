@@ -1,4 +1,5 @@
 #include "githistorywindow.h"
+#include "ui/contentworkspace.h"
 #include "gitcommitdialog.h"
 #include <QShortcut>
 #include "ui/theme.h"
@@ -287,6 +288,15 @@ void GitHistoryWindow::openCommit()
 {
     const int row = history_->currentIndex().row();
     if (row < 0 || row >= model_->commits.size()) return;
+    if (auto *workspace = ContentWorkspace::find(this)) {
+        const QString key = property("contentKey").toString() + QStringLiteral("/commit");
+        if (!detail_) {
+            detail_ = new GitCommitDialog(target_,this);
+            workspace->present(key,detail_,this);
+        } else workspace->activate(key);
+        detail_->setCommit(model_->commits[row]);
+        return;
+    }
     if (!detail_) detail_ = new GitCommitDialog(target_,this);
     detail_->setCommit(model_->commits[row]);
     if (detail_->isMinimized()) detail_->showNormal(); else detail_->show();
