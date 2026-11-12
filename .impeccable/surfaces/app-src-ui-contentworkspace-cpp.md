@@ -21,4 +21,4 @@ FINISH：unreviewed and undocumented is unfinished; this build ends with the fin
 - 内容容器与页面栈已接入时序记录、项目记录和剪贴板；返回与切换模块保留实例，关闭检查未保存修改，独立打开与收回移动同一内容分支。主窗口 Alt+左箭头只作用于当前嵌入内容，模块根页不影响独立窗口。
 - 工作面使用现有 `workspaceSurface=content`，外层边距与间距为 0；操作行内边距为左右 16、上下 8，间距为 10，复用 `quiet` 按钮、现有 SVG 返回图标和继承字体。统一独立容器默认 1100×760、最小 720×520（Qt 逻辑尺寸），沿用系统窗口层级与浅色标题栏。
 - 已比对 `DESIGN.md`、`.impeccable/design.json`、`ui/theme.h`、`theme.cpp` 与 `light.qss`。本次沿用既有灰白与雾蓝 token、原生字体、小圆角控件及平面层级；设计系统文件保持不变，没有新增分发栅格素材。
-- 最终审阅对已修正的快捷返回问题给出 ship；回归与隔离 Windows 桌面验收范围见 `docs/development/content-navigation.md`，视觉证据位于 `.impeccable/review/v3.4.0/`。开发版尚未发布，等待用户验收。
+- 最终审阅对已修正的快捷返回问题给出 ship；回归与隔离 Windows 桌面验收范围见 `docs/development/content-navigation.md`，视觉证据位于 `.impeccable/review/v3.4.0/`。用户已验收导航与入口精简，并授权检查通过后合并、推送和发布。
