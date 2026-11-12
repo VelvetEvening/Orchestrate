@@ -18,22 +18,17 @@
 #include <QVBoxLayout>
 
 CollaborationRecordDialog::CollaborationRecordDialog(AppDatabase *database,
-    AppDatabase::WorkRecord record, const QString &location, QWidget *parent)
+    AppDatabase::WorkRecord record, QWidget *parent)
     : QDialog(parent), database_(database), record_(std::move(record))
 {
     setObjectName(QStringLiteral("collaborationRecordDialog"));
-    setWindowTitle(record_.id > 0 ? QStringLiteral("协作记录") : QStringLiteral("添加协作记录"));
+    setWindowTitle(record_.id > 0 ? QStringLiteral("编辑记录") : QStringLiteral("添加记录"));
     setWindowFlag(Qt::WindowMaximizeButtonHint);
     resize(880, 660);
     setMinimumSize(560, 400);
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(22, 20, 22, 20);
     layout->setSpacing(12);
-    auto *locationLabel = new QLabel(QStringLiteral("位置：%1").arg(location), this);
-    locationLabel->setObjectName(QStringLiteral("recordLocation"));
-    locationLabel->setTextFormat(Qt::PlainText);
-    locationLabel->setWordWrap(true);
-    layout->addWidget(locationLabel);
     title_ = addSummaryField(layout, this, QStringLiteral("workRecordTitle"), QStringLiteral("标题"));
     auto *toolbar = new QHBoxLayout;
     sections_ = new QTabBar(this);
@@ -229,7 +224,7 @@ bool CollaborationRecordDialog::save()
     saved_ = true;
     error_.clear();
     rememberDraft();
-    setWindowTitle(QStringLiteral("协作记录"));
+    setWindowTitle(QStringLiteral("编辑记录"));
     setEditing(false);
     status_->setText(QStringLiteral("已保存"));
     UiTheme::setRole(status_, "success");

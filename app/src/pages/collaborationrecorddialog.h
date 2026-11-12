@@ -14,7 +14,7 @@ class CollaborationRecordDialog final : public QDialog {
     Q_OBJECT
 public:
     CollaborationRecordDialog(AppDatabase *database, AppDatabase::WorkRecord record,
-                              const QString &location, QWidget *parent = nullptr);
+                              QWidget *parent = nullptr);
     bool hasSaved() const { return saved_; }
     const AppDatabase::WorkRecord &record() const { return record_; }
     void reject() override;

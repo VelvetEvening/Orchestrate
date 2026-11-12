@@ -707,14 +707,11 @@ void ProjectsPage::recordDialog(bool creating)
         record.projectId = projectId;
         record.folderId = folderId;
     }
-    QString location = QStringLiteral("项目顶层");
-    for (const auto &folder : database_->recordFolders(projectId))
-        if (folder.id == folderId) location = folder.name;
     auto *workspace=ContentWorkspace::find(this);
     const QString prefix=QStringLiteral("project/%1/record/").arg(projectId);
     const QString key=prefix+(creating ? QStringLiteral("new/%1").arg(folderId) : QString::number(record.id));
     if (workspace && workspace->activate(key,this)) return;
-    auto *dialog=new CollaborationRecordDialog(database_, record, location, this);
+    auto *dialog=new CollaborationRecordDialog(database_, record, this);
     connect(dialog,&CollaborationRecordDialog::savedRecord,this,[this,dialog,workspace,prefix,projectId,folderId](int id) {
         if (workspace) workspace->rekey(dialog->property("contentKey").toString(),prefix+QString::number(id));
         if (folderId > 0) {
