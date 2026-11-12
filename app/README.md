@@ -2,7 +2,7 @@
 
 Orchestrate 是基于 C++17、Qt 6 Widgets 和 SQLite 的 Windows 桌面工作台。产品统一使用 Orchestrate 名称。
 
-当前开发版本为 **v3.3.0 项目 Git 历史**。项目可绑定本地、WSL、SSH 目录；原“项目大纲”入口替换为独立 Git 历史窗口，提供提交图、详情、文件 Diff 和实时分支对比。完整范围见 [开发说明与检查步骤](../docs/development/git-history.md)，变更见 [v3.3.0 开发版说明](../docs/releases/v3.3.0.md)。沿用 v3.2.2 的浅色连续分区工作台。
+当前版本为 **v3.3.0 项目 Git 历史**。项目可绑定本地、WSL、SSH 目录；原“项目大纲”入口替换为独立 Git 历史窗口，提供提交图、详情、文件 Diff 和实时分支对比。完整范围见 [开发说明与检查步骤](../docs/development/git-history.md)，变更见 [v3.3.0 发布说明](../docs/releases/v3.3.0.md)。沿用 v3.2.2 的浅色连续分区工作台。
 
 v3.1.0 为记录预览加入离线公式排版：支持 `\(…\)`、`\[…\]`、`$…$` 和 `$$…$$`，覆盖分数、上下标、求和、矩阵与中文注释。公式异步生成，编辑与保存保留原文，预览中复制公式仍得到 LaTeX 文本。该版本数据库为 schema v7。完整变化见 [v3.1.0 发布说明](../docs/releases/v3.1.0.md)，写法见 [公式示例](../docs/math-preview.md)。
 

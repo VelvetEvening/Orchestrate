@@ -9,7 +9,7 @@ Windows 桌面工作台：时序记录、项目记录、自动化工具和剪贴
 - [可运行的最小适配样例](docs/examples/tool-adapter/README.md)：本地、SSH 和只读监测三种声明。
 - [项目术语](CONTEXT.md)
 - [v3.3.0 开发说明与检查步骤](docs/development/git-history.md)
-- [v3.3.0 开发版变更](docs/releases/v3.3.0.md)
+- [v3.3.0 发布说明](docs/releases/v3.3.0.md)
 - [v3.2.2 发布说明](docs/releases/v3.2.2.md)
 - [连续分区与独立顶栏的实现及验收](docs/development/seamless-workspace.md)
 - [v3.2.1 稳定性与后台资源审查](docs/project-review-2026-11-11-layout.md)
