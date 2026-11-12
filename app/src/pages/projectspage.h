@@ -50,7 +50,6 @@ private:
     QLabel *recordHint_;
     int recordsProjectId_ = 0;
     class QLineEdit *search_;
-    QPushButton *editWorkButton_;
     QPushButton *deleteWorkButton_;
     QHash<int, QPointer<GitHistoryWindow>> gitWindows_;
 };

@@ -35,6 +35,19 @@
 
 namespace {
 
+template<typename Open>
+void bindListOpen(QListWidget *list, QObject *context, Open open)
+{
+    list->setToolTip(QStringLiteral("双击或按 Enter 打开"));
+    list->setAccessibleDescription(QStringLiteral("双击或按 Enter 打开选中的内容。"));
+    QObject::connect(list, &QListWidget::itemDoubleClicked, context, [open](QListWidgetItem *) { open(); });
+    for (const auto key : {Qt::Key_Return, Qt::Key_Enter}) {
+        auto *shortcut = new QShortcut(QKeySequence(key), list);
+        shortcut->setContext(Qt::WidgetShortcut);
+        QObject::connect(shortcut, &QShortcut::activated, context, open);
+    }
+}
+
 QFrame *makeSurface(QWidget *parent, const char *surface)
 {
     auto *card = new QFrame(parent);
@@ -124,10 +137,6 @@ CalendarPage::CalendarPage(AppDatabase *database,
     auto *addReminderButton = new QPushButton(QStringLiteral("添加提醒"), detailsCard);
     addReminderButton->setObjectName(QStringLiteral("primaryButton"));
     reminderButtonRow->addWidget(addReminderButton);
-    editReminderButton_ = new QPushButton(QStringLiteral("编辑"), detailsCard);
-    UiTheme::setRole(editReminderButton_, "quiet");
-    editReminderButton_->setEnabled(false);
-    reminderButtonRow->addWidget(editReminderButton_);
     completeReminderButton_ = new QPushButton(QStringLiteral("完成"), detailsCard);
     UiTheme::setRole(completeReminderButton_, "quiet");
     completeReminderButton_->setEnabled(false);
@@ -161,10 +170,6 @@ CalendarPage::CalendarPage(AppDatabase *database,
     auto *addDiaryButton = new QPushButton(QStringLiteral("添加日记"), detailsCard);
     addDiaryButton->setObjectName(QStringLiteral("primaryButton"));
     diaryButtonRow->addWidget(addDiaryButton);
-    editButton_ = new QPushButton(QStringLiteral("编辑"), detailsCard);
-    UiTheme::setRole(editButton_, "quiet");
-    editButton_->setEnabled(false);
-    diaryButtonRow->addWidget(editButton_);
     deleteButton_ = new QPushButton(QStringLiteral("删除"), detailsCard);
     deleteButton_->setEnabled(false);
     UiTheme::setRole(deleteButton_, "danger");
@@ -181,31 +186,25 @@ CalendarPage::CalendarPage(AppDatabase *database,
     connect(calendar_, &QCalendarWidget::currentPageChanged, this,
             [this](int, int) { updateCalendarAppearance(); });
     connect(addReminderButton, &QPushButton::clicked, this, &CalendarPage::addReminder);
-    connect(editReminderButton_, &QPushButton::clicked, this, &CalendarPage::editReminder);
     connect(completeReminderButton_, &QPushButton::clicked, this, &CalendarPage::completeReminder);
     connect(deleteReminderButton_, &QPushButton::clicked, this, &CalendarPage::deleteReminder);
     connect(reminderList_, &QListWidget::itemSelectionChanged, this, [this] {
         const bool hasSelection = reminderList_->currentItem()
             && reminderList_->currentItem()->data(Qt::UserRole).isValid();
-        editReminderButton_->setEnabled(hasSelection);
         completeReminderButton_->setEnabled(hasSelection
                                              && !reminderList_->currentItem()->data(Qt::UserRole + 1).toBool());
         deleteReminderButton_->setEnabled(hasSelection);
     });
-    connect(reminderList_, &QListWidget::itemDoubleClicked, this,
-            [this](QListWidgetItem *) { editReminder(); });
+    bindListOpen(reminderList_, this, [this] { editReminder(); });
 
     connect(addDiaryButton, &QPushButton::clicked, this, &CalendarPage::addDiaryEntry);
-    connect(editButton_, &QPushButton::clicked, this, &CalendarPage::editDiaryEntry);
     connect(deleteButton_, &QPushButton::clicked, this, &CalendarPage::deleteDiaryEntry);
     connect(diaryList_, &QListWidget::itemSelectionChanged, this, [this] {
         const bool hasSelection = diaryList_->currentItem()
             && diaryList_->currentItem()->data(Qt::UserRole).isValid();
-        editButton_->setEnabled(hasSelection);
         deleteButton_->setEnabled(hasSelection);
     });
-    connect(diaryList_, &QListWidget::itemDoubleClicked, this,
-            [this](QListWidgetItem *) { editDiaryEntry(); });
+    bindListOpen(diaryList_, this, [this] { editDiaryEntry(); });
 
     reminderTimer_ = new QTimer(this);
     reminderTimer_->setInterval(30000);
@@ -253,7 +252,6 @@ void CalendarPage::updateCalendarAppearance()
 void CalendarPage::refreshReminderList()
 {
     reminderList_->clear();
-    editReminderButton_->setEnabled(false);
     completeReminderButton_->setEnabled(false);
     deleteReminderButton_->setEnabled(false);
     UiTheme::setRole(deleteReminderButton_, "danger");
@@ -523,7 +521,6 @@ void CalendarPage::checkDueReminders()
 void CalendarPage::refreshDiaryList()
 {
     diaryList_->clear();
-    editButton_->setEnabled(false);
     deleteButton_->setEnabled(false);
     UiTheme::setRole(deleteButton_, "danger");
     if (database_ == nullptr) {
@@ -686,10 +683,7 @@ void CalendarPage::openDiaryCollection()
             if (!error.isEmpty()) { showDatabaseError(diaryCollection_,error); return; }
             if (entry.id>0) diaryDialog(entry,false,diaryCollection_);
         };
-        connect(collectionList_,&QListWidget::itemDoubleClicked,this,[openCurrent]{ openCurrent(); });
-        auto *open=new QPushButton(QStringLiteral("查看日记"),diaryCollection_);
-        layout->addWidget(open,0,Qt::AlignRight);
-        connect(open,&QPushButton::clicked,this,openCurrent);
+        bindListOpen(collectionList_, diaryCollection_, openCurrent);
     }
     refreshDiaryCollection();
     if (workspace) { workspace->present(QStringLiteral("diary/collection"),diaryCollection_,this); return; }

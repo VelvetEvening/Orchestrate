@@ -56,10 +56,8 @@ private:
     QCalendarWidget *calendar_ = nullptr;
     QListWidget *reminderList_ = nullptr;
     QListWidget *diaryList_ = nullptr;
-    QPushButton *editReminderButton_ = nullptr;
     QPushButton *completeReminderButton_ = nullptr;
     QPushButton *deleteReminderButton_ = nullptr;
-    QPushButton *editButton_ = nullptr;
     QPushButton *deleteButton_ = nullptr;
     QSystemTrayIcon *trayIcon_ = nullptr;
     QTimer *reminderTimer_ = nullptr;

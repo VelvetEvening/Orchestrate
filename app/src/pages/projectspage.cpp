@@ -187,8 +187,8 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     workList_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     workList_->setContextMenuPolicy(Qt::CustomContextMenu);
     workList_->setAccessibleName(QStringLiteral("协作记录与文件夹"));
-    workList_->setToolTip(QStringLiteral("拖入文件夹归类，拖到空白处移回顶层；Ctrl+↑/↓ 调整同层顺序。"));
-    workList_->setAccessibleDescription(QStringLiteral("拖动排序或移入文件夹，空白处为项目顶层；Ctrl+上或下箭头调序。搜索时暂停拖动。"));
+    workList_->setToolTip(QStringLiteral("双击或按 Enter 打开记录；拖入文件夹归类，拖到空白处移回顶层；Ctrl+↑/↓ 调整同层顺序。"));
+    workList_->setAccessibleDescription(QStringLiteral("双击或按 Enter 打开记录；拖动排序或移入文件夹，空白处为项目顶层；Ctrl+上或下箭头调序。搜索时暂停拖动。"));
 
     workList_->installEventFilter(this);
     workList_->setMinimumHeight(120);
@@ -200,12 +200,9 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     auto *actions = new QHBoxLayout;
     auto *add = new QPushButton(QStringLiteral("添加记录"), recordsPanel_);
     add->setObjectName(QStringLiteral("primaryButton"));
-    editWorkButton_ = new QPushButton(QStringLiteral("打开"), recordsPanel_);
-    UiTheme::setRole(editWorkButton_, "quiet");
     deleteWorkButton_ = new QPushButton(QStringLiteral("删除"), recordsPanel_);
     UiTheme::setRole(deleteWorkButton_, "danger");
     actions->addWidget(add);
-    actions->addWidget(editWorkButton_);
     actions->addWidget(deleteWorkButton_);
     actions->addStretch();
     records->addLayout(actions);
@@ -228,7 +225,6 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     });
     connect(add, &QPushButton::clicked, this, [this]{ recordDialog(true); });
     connect(createFolder, &QPushButton::clicked, this, [this]{ folderDialog(true); });
-    connect(editWorkButton_, &QPushButton::clicked, this, [this]{ recordDialog(false); });
     connect(deleteWorkButton_, &QPushButton::clicked, this, &ProjectsPage::deleteWorkRecord);
     connect(workList_, &QTreeWidget::itemDoubleClicked, this, [this]{ recordDialog(false); });
     connect(workList_, &QTreeWidget::itemSelectionChanged, this, &ProjectsPage::updateRecordActions);
@@ -468,7 +464,6 @@ void ProjectsPage::refreshWorkRecords()
     const QSignalBlocker blocker(workList_);
     workList_->clear();
     recordsProjectId_ = current_.id;
-    editWorkButton_->setEnabled(false);
     deleteWorkButton_->setEnabled(false);
     recordHint_->hide();
     if (current_.id<=0) return;
@@ -569,7 +564,6 @@ void ProjectsPage::updateRecordActions()
     const auto *item = workList_->currentItem();
     const bool selected = item && !item->data(0,FolderRole).toBool() && !item->isHidden()
         && (!item->parent() || (!item->parent()->isHidden() && item->parent()->isExpanded()));
-    editWorkButton_->setEnabled(selected);
     deleteWorkButton_->setEnabled(selected);
 }
 
