@@ -7,6 +7,7 @@
 #include <QString>
 #include <QStringList>
 #include <QVariant>
+#include "git/repositorytarget.h"
 
 class AppDatabase
 {
@@ -47,10 +48,13 @@ public:
         int id = 0;
         QString name;
         QString directory;
-        QString outline;
+        QString targetType = QStringLiteral("local");
+        QString targetName;
+        QString targetUser;
         QDateTime createdAt;
         QDateTime updatedAt;
         bool completed = false;
+        RepositoryTarget repository() const { return {targetType, targetName, targetUser, directory}; }
     };
 
     struct RecordFolder {
@@ -167,14 +171,14 @@ public:
     QList<Project> projects(QString *errorMessage = nullptr) const;
     bool addProject(const QString &name,
                     const QString &directory,
-                    const QString &outline,
                     int *projectId = nullptr,
                     QString *errorMessage = nullptr);
     bool updateProject(int id,
                        const QString &name,
                        const QString &directory,
-                       const QString &outline,
                        QString *errorMessage = nullptr);
+    bool addProject(const Project &project, int *projectId = nullptr, QString *errorMessage = nullptr);
+    bool updateProject(const Project &project, QString *errorMessage = nullptr);
     bool deleteProject(int id, QString *errorMessage = nullptr);
     bool setProjectCompleted(int id, bool completed, QString *errorMessage = nullptr);
     QList<RecordFolder> recordFolders(int projectId, QString *errorMessage = nullptr) const;

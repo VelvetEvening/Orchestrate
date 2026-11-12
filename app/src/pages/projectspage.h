@@ -1,10 +1,11 @@
 #pragma once
 #include <QWidget>
 #include <QPointer>
+#include <QHash>
 #include "../data/appdatabase.h"
 class QListWidget;
 class QTreeWidget;
-class HeadingTextEdit;
+class GitHistoryWindow;
 class QLabel;
 class QPushButton;
 class QVBoxLayout;
@@ -15,20 +16,18 @@ class ProjectsPage final : public QWidget
     Q_OBJECT
 public:
     explicit ProjectsPage(AppDatabase *database, QWidget *parent = nullptr);
-    bool savePendingChanges();
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 private:
     void loadProjects(int preferred = 0);
     void selectProject(int id);
     void projectDialog(bool creating);
-    void openProjectDirectory(const QString &directory);
-    bool saveOutline();
+    void openProjectDirectory(const AppDatabase::Project &project);
     bool deleteProject(QWidget *parent);
     void refreshWorkRecords();
     void recordDialog(bool creating);
     void deleteWorkRecord();
-    void openOutline();
+    void openGitHistory();
     void filterRecords();
     void updateRecordActions();
     void showProjectContextMenu(const QPoint &position);
@@ -45,9 +44,7 @@ private:
     QListWidget *projectList_;
     QWidget *details_;
     QLabel *projectTitle_;
-    QLabel *saveStatus_;
-    HeadingTextEdit *outlineEdit_;
-    QPushButton *outlineTitle_;
+    QPushButton *gitHistoryButton_;
     QVBoxLayout *detailsLayout_;
     QTreeWidget *workList_;
     QLabel *recordHint_;
@@ -55,5 +52,5 @@ private:
     class QLineEdit *search_;
     QPushButton *editWorkButton_;
     QPushButton *deleteWorkButton_;
-    QPointer<QDialog> outlineWindow_;
+    QHash<int, QPointer<GitHistoryWindow>> gitWindows_;
 };

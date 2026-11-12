@@ -3,12 +3,14 @@
 #include "projectspage.h"
 #include "platform/fileaccess.h"
 #include "collaborationrecorddialog.h"
-#include "widgets/persistenttextzoom.h"
-#include "widgets/headingtextedit.h"
+#include "githistorywindow.h"
+#include "repositorybinding.h"
 #include "widgets/summaryfield.h"
 #include "widgets/treeaccessibility.h"
 #include "widgets/siblingorderview.h"
 #include <QDesktopServices>
+#include <QApplication>
+#include <QClipboard>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -123,40 +125,19 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     projectTitle_ = label(QString(), QStringLiteral("cardTitle"), details_);
     projectTitle_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     header->addWidget(projectTitle_,1);
-    outlineTitle_ = new QPushButton(UiTheme::icon(QStringLiteral("document")), QStringLiteral("项目大纲"), details_);
-    outlineTitle_->setObjectName(QStringLiteral("outlineTitle"));
-    UiTheme::setRole(outlineTitle_, "quiet");
-    outlineTitle_->setCursor(Qt::PointingHandCursor);
-    outlineTitle_->setFocusPolicy(Qt::StrongFocus);
-    outlineTitle_->setToolTip(QStringLiteral("打开项目大纲"));
-    outlineTitle_->setAccessibleDescription(QStringLiteral("单击或按回车、空格打开项目大纲"));
-
-    connect(outlineTitle_, &QPushButton::clicked, this, &ProjectsPage::openOutline);
-    outlineTitle_->installEventFilter(this);
-    header->addWidget(outlineTitle_);
+    gitHistoryButton_ = new QPushButton(QStringLiteral("Git 历史"), details_);
+    gitHistoryButton_->setObjectName(QStringLiteral("gitHistoryButton"));
+    UiTheme::setRole(gitHistoryButton_, "quiet");
+    gitHistoryButton_->setToolTip(QStringLiteral("查看提交历史和分支对比"));
+    connect(gitHistoryButton_, &QPushButton::clicked, this, &ProjectsPage::openGitHistory);
+    gitHistoryButton_->installEventFilter(this);
+    header->addWidget(gitHistoryButton_);
     auto *createFolder = new QPushButton(QStringLiteral("新建文件夹"), details_);
     createFolder->setObjectName(QStringLiteral("createRecordFolder"));
     UiTheme::setRole(createFolder, "quiet");
     header->addWidget(createFolder);
     detailsLayout_->addLayout(header);
 
-    outlineWindow_ = new QDialog(this, Qt::Window);
-    outlineWindow_->setObjectName(QStringLiteral("outlineWindow"));
-    outlineWindow_->setWindowFlag(Qt::WindowMaximizeButtonHint);
-    outlineWindow_->resize(940, 720);
-    outlineWindow_->setMinimumSize(560, 400);
-    auto *outlineLayout = new QVBoxLayout(outlineWindow_);
-    outlineLayout->setContentsMargins(24,24,24,24);
-    outlineEdit_ = new HeadingTextEdit(outlineWindow_);
-    bindPersistentTextZoom(outlineEdit_, database_, QStringLiteral("text_zoom.outline"));
-    outlineEdit_->setObjectName(QStringLiteral("projectOutline"));
-    outlineEdit_->setMinimumHeight(150);
-    outlineLayout->addWidget(outlineEdit_, 1);
-    saveStatus_ = label(QString(), QStringLiteral("outlineSaveError"), outlineWindow_);
-    saveStatus_->setWordWrap(true);
-    saveStatus_->setText(QStringLiteral("修改会自动保存"));
-    UiTheme::setRole(saveStatus_, "muted");
-    outlineLayout->addWidget(saveStatus_);
     auto *recordsPanel_ = new QWidget(details_);
     recordsPanel_->setObjectName(QStringLiteral("recordsPanel"));
     auto *records = new QVBoxLayout(recordsPanel_);
@@ -241,9 +222,9 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
         if (row >= 0) selectProject(projectList_->item(row)->data(Qt::UserRole).toInt());
     });
     connect(projectList_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
-        if (item) openProjectDirectory(item->data(Qt::UserRole + 1).toString());
+        if (item) for (const auto &project : database_->projects())
+            if (project.id == item->data(Qt::UserRole).toInt()) { openProjectDirectory(project); break; }
     });
-    connect(outlineEdit_, &HeadingTextEdit::textChanged, this, [this]{ saveOutline(); });
     connect(add, &QPushButton::clicked, this, [this]{ recordDialog(true); });
     connect(createFolder, &QPushButton::clicked, this, [this]{ folderDialog(true); });
     connect(editWorkButton_, &QPushButton::clicked, this, [this]{ recordDialog(false); });
@@ -281,8 +262,6 @@ void ProjectsPage::loadProjects(int preferred)
         current_ = {};
         projectTitle_->setText(QStringLiteral("暂无项目"));
         details_->setEnabled(false);
-        const QSignalBlocker outlineBlock(outlineEdit_);
-        outlineEdit_->clear();
         refreshWorkRecords();
         return;
     }
@@ -321,9 +300,34 @@ void ProjectsPage::showProjectContextMenu(const QPoint &position)
     menu.exec(projectList_->viewport()->mapToGlobal(position));
 }
 
-void ProjectsPage::openProjectDirectory(const QString &directory)
+void ProjectsPage::openProjectDirectory(const AppDatabase::Project &project)
 {
+    const QString directory = project.directory;
     if (directory.isEmpty() || openingDirectory_) return;
+    if (project.targetType == QStringLiteral("ssh")) {
+        QDialog dialog(this); dialog.setWindowTitle(project.name + QStringLiteral(" · SSH 目录")); dialog.resize(580,220);
+        auto *layout = new QVBoxLayout(&dialog);
+        auto *info = label(project.repository().description(),QStringLiteral("sshProjectDirectory"),&dialog);
+        info->setWordWrap(true); info->setTextInteractionFlags(Qt::TextSelectableByMouse); layout->addWidget(info);
+        auto *copy = new QPushButton(QStringLiteral("复制路径"),&dialog); layout->addWidget(copy);
+        connect(copy,&QPushButton::clicked,&dialog,[directory]{ QApplication::clipboard()->setText(directory); });
+        auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close,&dialog); buttons->button(QDialogButtonBox::Close)->setText(QStringLiteral("关闭"));
+        connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject); layout->addWidget(buttons); dialog.exec(); return;
+    }
+    if (project.targetType == QStringLiteral("wsl")) {
+        openingDirectory_ = true;
+        auto *reader = new Git::Reader(this);
+        reader->probe(project.repository(),[this,reader,project](Git::Result result){
+            openingDirectory_ = false; reader->deleteLater();
+            const auto fields = result.output.split('\0');
+            if (!result.ok || fields.size()!=3 || !fields[1].startsWith('/')) {
+                QMessageBox::warning(this,QStringLiteral("无法打开 WSL 目录"),result.ok?QStringLiteral("无法识别目录，请在项目设置中重新验证。"):result.error); return;
+            }
+            auto local = project; local.targetType = QStringLiteral("local");
+            local.directory = QStringLiteral("//wsl.localhost/") + project.targetName + QString::fromUtf8(fields[1]);
+            openProjectDirectory(local);
+        }); return;
+    }
     openingDirectory_ = true;
     FileAccess::request(this, QStringLiteral("open-directory"), directory,
         [this, directory](bool ok, const QByteArray &, const QString &error) {
@@ -333,59 +337,18 @@ void ProjectsPage::openProjectDirectory(const QString &directory)
         });
 }
 
-bool ProjectsPage::saveOutline()
-{
-    if (current_.id <= 0 || current_.outline == outlineEdit_->toPlainText()) return true;
-    QString error;
-    const QString text = outlineEdit_->toPlainText();
-    if (!database_->updateProject(current_.id, current_.name, current_.directory, text, &error)) {
-        saveStatus_->setText(QStringLiteral("大纲保存失败：") + error);
-        UiTheme::setRole(saveStatus_, "error");
-        saveStatus_->show();
-        return false;
-    }
-    current_.outline = text;
-    saveStatus_->setText(QStringLiteral("已自动保存"));
-    UiTheme::setRole(saveStatus_, "success");
-    saveStatus_->show();
-    return true;
-}
-
-bool ProjectsPage::savePendingChanges()
-{
-    if (saveOutline()) return true;
-    openOutline();
-    QMessageBox::warning(outlineWindow_, QStringLiteral("暂时无法退出"),
-                         QStringLiteral("项目大纲尚未保存，已取消退出。请保留当前窗口，恢复数据库后重试，或先复制大纲备份。\n\n")
-                             + saveStatus_->text());
-    return false;
-}
-
 void ProjectsPage::selectProject(int id)
 {
-    if (!saveOutline()) {
-        const QSignalBlocker blocker(projectList_);
-        for(int i=0;i<projectList_->count();++i)
-            if(projectList_->item(i)->data(Qt::UserRole).toInt()==current_.id) projectList_->setCurrentRow(i);
-        return;
-    }
     QString error;
     for (const auto &project : database_->projects(&error)) {
         if (project.id != id) continue;
         current_ = project;
-        saveStatus_->setText(QStringLiteral("修改会自动保存"));
-        UiTheme::setRole(saveStatus_, "muted");
-        saveStatus_->show();
         projectTitle_->setText(project.name);
         projectTitle_->setToolTip(project.name);
-        const QSignalBlocker blocker(outlineEdit_);
-        outlineEdit_->setPlainText(project.outline);
-        outlineEdit_->setPreviewMode(true);
         database_->setSetting(QStringLiteral("projects.last_selected"),QString::number(id));
         const QSignalBlocker searchBlock(search_);
         search_->clear();
         refreshWorkRecords();
-        if (outlineWindow_) outlineWindow_->setWindowTitle(project.name + QStringLiteral(" · 项目大纲"));
         return;
     }
     if (!error.isEmpty()) showError(error);
@@ -393,24 +356,19 @@ void ProjectsPage::selectProject(int id)
 
 void ProjectsPage::projectDialog(bool creating)
 {
-    if (!saveOutline() || (!creating && current_.id <= 0)) return;
+    if (!creating && current_.id <= 0) return;
     QDialog dialog(this);
     dialog.setWindowTitle(creating ? QStringLiteral("新建项目") : QStringLiteral("项目设置"));
-    dialog.resize(520,220);
+    dialog.resize(640,360);
     auto *layout = new QVBoxLayout(&dialog);
     auto *form = new QFormLayout;
     auto *name = new QLineEdit(&dialog);
     name->setObjectName(QStringLiteral("projectName"));
-    auto *directory = new QLineEdit(&dialog);
-    directory->setObjectName(QStringLiteral("projectDirectory"));
-    auto *directoryRow = new QHBoxLayout;
-    auto *browse = new QPushButton(QStringLiteral("选择"),&dialog);
-    directoryRow->addWidget(directory,1);
-    directoryRow->addWidget(browse);
     form->addRow(QStringLiteral("项目名称"),name);
-    form->addRow(QStringLiteral("项目目录（可选）"),directoryRow);
     layout->addLayout(form);
-    if (!creating) { name->setText(current_.name); directory->setText(current_.directory); }
+    auto *binding = new RepositoryBinding(creating ? RepositoryTarget{} : current_.repository(),&dialog);
+    layout->addWidget(binding);
+    if (!creating) name->setText(current_.name);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel,&dialog);
     auto *save = buttons->button(QDialogButtonBox::Save);
     save->setText(creating ? QStringLiteral("新建") : QStringLiteral("保存"));
@@ -432,20 +390,22 @@ void ProjectsPage::projectDialog(bool creating)
     footer->addWidget(buttons);
     layout->addLayout(footer);
     connect(name,&QLineEdit::textChanged,&dialog,[name,save]{ save->setEnabled(!name->text().trimmed().isEmpty()); });
-    connect(browse,&QPushButton::clicked,&dialog,[&dialog,directory] {
-        const QString selected=QFileDialog::getExistingDirectory(&dialog,QStringLiteral("选择项目目录"),directory->text());
-        if (!selected.isEmpty()) directory->setText(selected);
-    });
     connect(buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
     connect(buttons,&QDialogButtonBox::accepted,&dialog,[&] {
-        QString error;
-        int id=current_.id;
-        const bool ok=creating
-            ? database_->addProject(name->text().trimmed(),directory->text().trimmed(),QStringLiteral(""),&id,&error)
-            : database_->updateProject(id,name->text().trimmed(),directory->text().trimmed(),current_.outline,&error);
-        if (!ok) { QMessageBox::critical(&dialog,QStringLiteral("保存失败"),error); return; }
-        dialog.accept();
-        loadProjects(id);
+        if (name->text().trimmed().isEmpty()) return;
+        save->setEnabled(false); name->setEnabled(false);
+        binding->resolve([&, creating](bool valid, RepositoryTarget target, const QString &) {
+            save->setEnabled(true); name->setEnabled(true);
+            if (!valid) return;
+            auto project = creating ? AppDatabase::Project{} : current_;
+            project.name=name->text().trimmed(); project.directory=target.directory;
+            project.targetType=target.type; project.targetName=target.location; project.targetUser=target.user;
+            QString error; int id=project.id;
+            const bool ok=creating ? database_->addProject(project,&id,&error) : database_->updateProject(project,&error);
+            if (!ok) { QMessageBox::critical(&dialog,QStringLiteral("保存失败"),error); return; }
+            if (gitWindows_.value(id) && !(gitWindows_[id]->target()==target)) gitWindows_[id]->close();
+            dialog.accept(); loadProjects(id);
+        });
     });
     name->setFocus();
     dialog.exec();
@@ -462,7 +422,7 @@ bool ProjectsPage::deleteProject(QWidget *parent)
     dialog.setWindowTitle(QStringLiteral("确认删除项目"));
     dialog.resize(580, 240);
     auto *layout = new QVBoxLayout(&dialog);
-    auto *message = label(QStringLiteral("将删除项目“%1”、项目大纲、全部协作记录及文件夹，此操作无法撤销。项目目录中的文件不会删除。\n\n如果确定要删除，请完整输入：\n%2")
+    auto *message = label(QStringLiteral("将删除项目“%1”、全部协作记录及文件夹，此操作无法撤销。项目目录中的文件不会删除。\n\n如果确定要删除，请完整输入：\n%2")
                               .arg(projectName, required), QStringLiteral("deleteProjectPrompt"), &dialog);
     message->setWordWrap(true);
     layout->addWidget(message);
@@ -487,10 +447,9 @@ bool ProjectsPage::deleteProject(QWidget *parent)
             QMessageBox::critical(&dialog, QStringLiteral("删除失败"), error);
             return;
         }
-        if (outlineWindow_) outlineWindow_->close();
+        if (gitWindows_.value(projectId)) gitWindows_[projectId]->close();
+        gitWindows_.remove(projectId);
         current_ = {};
-        { const QSignalBlocker blocker(outlineEdit_); outlineEdit_->clear(); }
-        saveStatus_->hide();
         dialog.accept();
         loadProjects();
     });
@@ -781,10 +740,10 @@ void ProjectsPage::deleteWorkRecord()
 bool ProjectsPage::eventFilter(QObject *watched, QEvent *event)
 {
     // Space is native QPushButton behavior; retain the existing Enter shortcut.
-    if (watched == outlineTitle_ && outlineTitle_->isEnabled() && event->type() == QEvent::KeyPress) {
+    if (watched == gitHistoryButton_ && gitHistoryButton_->isEnabled() && event->type() == QEvent::KeyPress) {
         const int key = static_cast<QKeyEvent *>(event)->key();
         if (key == Qt::Key_Return || key == Qt::Key_Enter) {
-            outlineTitle_->click();
+            gitHistoryButton_->click();
             return true;
         }
     }
@@ -800,14 +759,14 @@ bool ProjectsPage::eventFilter(QObject *watched, QEvent *event)
     return QWidget::eventFilter(watched, event);
 }
 
-void ProjectsPage::openOutline()
+void ProjectsPage::openGitHistory()
 {
     if (current_.id <= 0) return;
-    if (!outlineWindow_->isVisible()) outlineEdit_->setPreviewMode(true);
-    if (outlineWindow_->isMinimized()) outlineWindow_->showNormal();
-    else outlineWindow_->show();
-    outlineWindow_->raise();
-    outlineWindow_->activateWindow();
+    if (current_.directory.isEmpty()) { projectDialog(false); if(current_.id<=0 || current_.directory.isEmpty())return; }
+    auto &window=gitWindows_[current_.id];
+    if (!window) window=new GitHistoryWindow(current_.name,current_.repository(),this);
+    if (window->isMinimized()) window->showNormal(); else window->show();
+    window->raise(); window->activateWindow();
 }
 void ProjectsPage::showError(const QString &message)
 {

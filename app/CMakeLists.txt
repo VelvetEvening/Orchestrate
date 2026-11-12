@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Orchestrate VERSION 3.2.2 LANGUAGES CXX)
+project(Orchestrate VERSION 3.3.0 LANGUAGES CXX)
 
 configure_file(src/version.h.in generated/version.h @ONLY)
 
@@ -56,6 +56,14 @@ add_dependencies(OrchestrateText OrchestrateMath)
 target_link_libraries(OrchestrateText PUBLIC Qt6::Widgets OrchestrateUi)
 target_include_directories(OrchestrateText PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+add_library(OrchestrateGit STATIC
+    src/git/gitreader.cpp src/git/gitreader.h src/git/repositorytarget.h
+    src/pages/githistorywindow.cpp src/pages/githistorywindow.h
+    src/pages/repositorybinding.cpp src/pages/repositorybinding.h
+)
+target_link_libraries(OrchestrateGit PUBLIC Qt6::Widgets OrchestrateUi)
+target_include_directories(OrchestrateGit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
 add_library(OrchestrateClipboard STATIC
     src/clipboard/clipboardcontent.cpp src/clipboard/clipboardcontent.h
     src/clipboard/clipboardmonitor.cpp src/clipboard/clipboardmonitor.h
@@ -93,7 +101,7 @@ if (WIN32)
     target_link_libraries(Orchestrate PRIVATE dwmapi)
 endif()
 
-target_link_libraries(Orchestrate PRIVATE Qt6::Widgets Qt6::Sql OrchestrateText OrchestrateShortcut OrchestrateAutoStart OrchestrateUpdate OrchestrateClipboard)
+target_link_libraries(Orchestrate PRIVATE Qt6::Widgets Qt6::Sql OrchestrateText OrchestrateShortcut OrchestrateAutoStart OrchestrateUpdate OrchestrateClipboard OrchestrateGit)
 
 target_include_directories(Orchestrate PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/generated

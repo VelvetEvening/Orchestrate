@@ -17,7 +17,7 @@
 
 namespace {
 
-constexpr int CurrentSchemaVersion = 7;
+constexpr int CurrentSchemaVersion = 8;
 
 QString nowIso()
 {
@@ -217,6 +217,27 @@ bool AppDatabase::open(QString *errorMessage)
         }
     }
     if (migrated && version < 7) migrated = initializeClipboardSchema(errorMessage);
+    if (migrated && version < 8) {
+        QSqlQuery columns(database);
+        QSet<QString> projectColumns;
+        migrated = columns.exec(QStringLiteral("PRAGMA table_info(projects)"));
+        while (columns.next()) projectColumns.insert(columns.value(1).toString());
+        columns.finish();
+        QStringList statements;
+        if (!projectColumns.contains(QStringLiteral("target_type"))) statements << QStringLiteral("ALTER TABLE projects ADD COLUMN target_type TEXT NOT NULL DEFAULT 'local' CHECK(target_type IN ('local','wsl','ssh'))");
+        if (!projectColumns.contains(QStringLiteral("target_name"))) statements << QStringLiteral("ALTER TABLE projects ADD COLUMN target_name TEXT NOT NULL DEFAULT ''");
+        if (!projectColumns.contains(QStringLiteral("target_user"))) statements << QStringLiteral("ALTER TABLE projects ADD COLUMN target_user TEXT NOT NULL DEFAULT ''");
+        statements << QStringLiteral("DELETE FROM app_settings WHERE key = 'text_zoom.outline' OR key GLOB 'project.*.outline_expanded'");
+        if (projectColumns.contains(QStringLiteral("outline"))) statements << QStringLiteral("ALTER TABLE projects DROP COLUMN outline");
+        for (const auto &statement : statements) {
+            QSqlQuery migration(database);
+            if (!migrated || !migration.exec(statement)) {
+                setError(errorMessage, migration);
+                migrated = false;
+                break;
+            }
+        }
+    }
     if (!migrated || !setVersion.exec(QStringLiteral("PRAGMA user_version = %1").arg(CurrentSchemaVersion))) {
         if (errorMessage && errorMessage->isEmpty()) setError(errorMessage, setVersion);
         database.rollback();
@@ -853,7 +874,7 @@ QList<AppDatabase::Project> AppDatabase::projects(QString *errorMessage) const
     }
     QSqlQuery query(QSqlDatabase::database(connectionName_));
     if (!query.exec(QStringLiteral(
-            "SELECT id, name, directory, outline, created_at, updated_at, completed "
+            "SELECT id, name, directory, target_type, created_at, updated_at, completed, target_name, target_user "
             "FROM projects ORDER BY updated_at DESC, id DESC"))) {
         setError(errorMessage, query);
         return result;
@@ -863,7 +884,9 @@ QList<AppDatabase::Project> AppDatabase::projects(QString *errorMessage) const
         project.id = query.value(0).toInt();
         project.name = query.value(1).toString();
         project.directory = query.value(2).toString();
-        project.outline = query.value(3).toString();
+        project.targetType = query.value(3).toString();
+        project.targetName = query.value(7).toString();
+        project.targetUser = query.value(8).toString();
         project.createdAt = QDateTime::fromString(query.value(4).toString(), Qt::ISODateWithMs);
         project.updatedAt = QDateTime::fromString(query.value(5).toString(), Qt::ISODateWithMs);
         project.completed = query.value(6).toBool();
@@ -875,20 +898,29 @@ QList<AppDatabase::Project> AppDatabase::projects(QString *errorMessage) const
 
 bool AppDatabase::addProject(const QString &name,
                              const QString &directory,
-                             const QString &outline,
                              int *projectId,
                              QString *errorMessage)
+{
+    Project project;
+    project.name = name;
+    project.directory = directory;
+    return addProject(project, projectId, errorMessage);
+}
+
+bool AppDatabase::addProject(const Project &project, int *projectId, QString *errorMessage)
 {
     if (!isOpen()) {
         return fail(errorMessage, QStringLiteral("数据库尚未打开。"));
     }
     QSqlQuery query(QSqlDatabase::database(connectionName_));
     query.prepare(QStringLiteral(
-        "INSERT INTO projects(name, directory, outline, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"));
+        "INSERT INTO projects(name, directory, target_type, target_name, target_user, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"));
     const QString timestamp = nowIso();
-    query.addBindValue(name);
-    query.addBindValue(text(directory));
-    query.addBindValue(text(outline));
+    query.addBindValue(project.name);
+    query.addBindValue(text(project.directory));
+    query.addBindValue(project.targetType);
+    query.addBindValue(text(project.targetName));
+    query.addBindValue(text(project.targetUser));
     query.addBindValue(timestamp);
     query.addBindValue(timestamp);
     if (!query.exec()) {
@@ -904,20 +936,32 @@ bool AppDatabase::addProject(const QString &name,
 bool AppDatabase::updateProject(int id,
                                 const QString &name,
                                 const QString &directory,
-                                const QString &outline,
                                 QString *errorMessage)
+{
+    for (auto project : projects(errorMessage)) {
+        if (project.id != id) continue;
+        project.name = name;
+        project.directory = directory;
+        return updateProject(project, errorMessage);
+    }
+    return fail(errorMessage, QStringLiteral("项目不存在。"));
+}
+
+bool AppDatabase::updateProject(const Project &project, QString *errorMessage)
 {
     if (!isOpen()) {
         return fail(errorMessage, QStringLiteral("数据库尚未打开。"));
     }
     QSqlQuery query(QSqlDatabase::database(connectionName_));
     query.prepare(QStringLiteral(
-        "UPDATE projects SET name = ?, directory = ?, outline = ?, updated_at = ? WHERE id = ?"));
-    query.addBindValue(name);
-    query.addBindValue(text(directory));
-    query.addBindValue(text(outline));
+        "UPDATE projects SET name = ?, directory = ?, target_type = ?, target_name = ?, target_user = ?, updated_at = ? WHERE id = ?"));
+    query.addBindValue(project.name);
+    query.addBindValue(text(project.directory));
+    query.addBindValue(project.targetType);
+    query.addBindValue(text(project.targetName));
+    query.addBindValue(text(project.targetUser));
     query.addBindValue(nowIso());
-    query.addBindValue(id);
+    query.addBindValue(project.id);
     if (!query.exec()) {
         setError(errorMessage, query);
         return false;

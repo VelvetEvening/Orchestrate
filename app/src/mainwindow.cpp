@@ -490,9 +490,6 @@ void MainWindow::installUpdate()
 
 bool MainWindow::savePendingChanges()
 {
-    for (auto *page : findChildren<ProjectsPage *>()) {
-        if (!page->savePendingChanges()) return false;
-    }
     for (auto *page : findChildren<ClipboardPage *>()) {
         if (!page->savePendingChanges()) return false;
     }
