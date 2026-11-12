@@ -1,21 +1,18 @@
 #include "githistorywindow.h"
+#include "gitcommitdialog.h"
+#include <QShortcut>
 #include "ui/theme.h"
 #include <QAbstractTableModel>
 #include <QCheckBox>
 #include <QComboBox>
-#include <QFontDatabase>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
-#include <QListWidget>
 #include <QPainter>
 #include <QPainterPath>
-#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSignalBlocker>
-#include <QSplitter>
 #include <QStyledItemDelegate>
-#include <QSyntaxHighlighter>
 #include <QTableView>
 #include <QTableWidget>
 #include <QTabWidget>
@@ -39,20 +36,6 @@ void tableStyle(QTableView *table) {
     table->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     table->horizontalHeader()->setStretchLastSection(false);
 }
-class DiffHighlighter final : public QSyntaxHighlighter {
-public:
-    explicit DiffHighlighter(QTextDocument *document) : QSyntaxHighlighter(document) {}
-    void highlightBlock(const QString &text) override {
-        QTextCharFormat format;
-        if (text.startsWith(QStringLiteral("+++")) || text.startsWith(QStringLiteral("---")) || text.startsWith(QStringLiteral("diff "))) {
-            format.setForeground(QColor(UiTheme::Text)); format.setFontWeight(QFont::DemiBold);
-        } else if (text.startsWith('+')) { format.setForeground(QColor(UiTheme::Success)); format.setBackground(QColor(UiTheme::SuccessBackground)); }
-        else if (text.startsWith('-')) { format.setForeground(QColor(UiTheme::Danger)); format.setBackground(QColor(UiTheme::DangerBackground)); }
-        else if (text.startsWith(QStringLiteral("@@"))) { format.setForeground(QColor(UiTheme::Accent)); format.setBackground(QColor(UiTheme::Selection)); }
-        else return;
-        setFormat(0, text.size(), format);
-    }
-};
 struct Edge { int from; int to; bool upper; int color; };
 struct GraphRow { int lane = 0; int color = 0; QList<Edge> edges; };
 QColor laneColor(int lane) {
@@ -162,7 +145,7 @@ public:
 }
 
 GitHistoryWindow::GitHistoryWindow(const QString &projectName, const RepositoryTarget &target, QWidget *parent)
-    : QDialog(parent, Qt::Window), target_(target), historyReader_(this), detailReader_(this), fileReader_(this), diffReader_(this), compareReader_(this)
+    : QDialog(parent, Qt::Window), target_(target), historyReader_(this), compareReader_(this)
 {
     setObjectName(QStringLiteral("gitHistoryWindow"));
     setAttribute(Qt::WA_DeleteOnClose); setWindowFlag(Qt::WindowMaximizeButtonHint);
@@ -174,34 +157,25 @@ GitHistoryWindow::GitHistoryWindow(const QString &projectName, const RepositoryT
     auto *historyPage = new QWidget(tabs_); auto *historyLayout = new QVBoxLayout(historyPage);
     historyLayout->setContentsMargins(0,12,0,0);
     auto *toolbar = new QHBoxLayout;
-    branch_ = new QComboBox(historyPage); branch_->setObjectName(QStringLiteral("gitBranch")); branch_->setAccessibleName(QStringLiteral("提交范围"));
-    branch_->setMinimumContentsLength(16); branch_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    branch_->addItem(QStringLiteral("所有分支与标签"), QString());
+    branch_ = new QComboBox(historyPage); branch_->setObjectName(QStringLiteral("gitBranch")); branch_->setAccessibleName(QStringLiteral("分支"));
+    branch_->setPlaceholderText(QStringLiteral("选择分支"));
+    branch_->setMinimumContentsLength(10); branch_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    branch_->addItem(QStringLiteral("全部历史"), QString());
+    tag_ = new QComboBox(historyPage); tag_->setObjectName(QStringLiteral("gitTag")); tag_->setAccessibleName(QStringLiteral("标签"));
+    tag_->setMinimumContentsLength(8); tag_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    tag_->addItem(QStringLiteral("选择标签"), QString());
     search_ = new QLineEdit(historyPage); search_->setPlaceholderText(QStringLiteral("查找已加载的提交、作者或编号")); search_->setAccessibleName(search_->placeholderText()); search_->setClearButtonEnabled(true);
     auto *find = new QPushButton(QStringLiteral("查找下一个"), historyPage); UiTheme::setRole(find, "quiet");
     refresh_ = new QPushButton(QStringLiteral("刷新"), historyPage); refresh_->setObjectName(QStringLiteral("gitRefresh"));
-    auto *detailsToggle = new QCheckBox(QStringLiteral("提交详情"), historyPage); detailsToggle->setChecked(true);
-    toolbar->addWidget(branch_); toolbar->addWidget(search_, 1); toolbar->addWidget(find); toolbar->addWidget(detailsToggle); toolbar->addWidget(refresh_); historyLayout->addLayout(toolbar);
-    auto *split = new QSplitter(Qt::Vertical, historyPage); split->setChildrenCollapsible(false); historyLayout->addWidget(split, 1);
+    toolbar->addWidget(new QLabel(QStringLiteral("分支"), historyPage)); toolbar->addWidget(branch_); toolbar->addWidget(new QLabel(QStringLiteral("标签"), historyPage)); toolbar->addWidget(tag_); toolbar->addWidget(search_, 1); toolbar->addWidget(find); toolbar->addWidget(refresh_); historyLayout->addLayout(toolbar);
     model_ = new GitGraphModel(this);
-    history_ = new QTableView(split); history_->setObjectName(QStringLiteral("gitCommits")); tableStyle(history_); history_->setModel(model_);
+    history_ = new QTableView(historyPage); historyLayout->addWidget(history_,1); history_->setObjectName(QStringLiteral("gitCommits")); tableStyle(history_); history_->setModel(model_);
     history_->setItemDelegateForColumn(0, new GraphDelegate(history_)); history_->setAccessibleName(QStringLiteral("Git 提交关系图与历史"));
     history_->setColumnWidth(0,100); history_->setColumnWidth(1,330); history_->setColumnWidth(2,180); history_->setColumnWidth(3,100); history_->setColumnWidth(4,155); history_->setColumnWidth(5,100);
-    auto *detail = new QWidget(split); auto *detailLayout = new QVBoxLayout(detail); detailLayout->setContentsMargins(0,6,0,0);
-    message_ = new QPlainTextEdit(detail); message_->setObjectName(QStringLiteral("gitCommitMessage")); message_->setReadOnly(true); message_->setMaximumHeight(110); message_->setPlaceholderText(QStringLiteral("选择提交查看完整说明"));
-    detailLayout->addWidget(message_);
-    auto *parentRow = new QHBoxLayout;
-    parentRow->addWidget(new QLabel(QStringLiteral("对比基准"), detail));
-    parent_ = new QComboBox(detail); parent_->setAccessibleName(QStringLiteral("对比父提交")); parentRow->addWidget(parent_);
-    detailStatus_ = plainLabel(detail); UiTheme::setRole(detailStatus_, "muted"); parentRow->addWidget(detailStatus_,1); detailLayout->addLayout(parentRow);
-    auto *fileSplit = new QSplitter(detail); fileSplit->setChildrenCollapsible(false);
-    files_ = new QListWidget(fileSplit); files_->setObjectName(QStringLiteral("gitFiles")); files_->setAccessibleName(QStringLiteral("变更文件")); files_->setMinimumWidth(150);
-    diff_ = new QPlainTextEdit(fileSplit); diff_->setObjectName(QStringLiteral("gitDiff")); diff_->setReadOnly(true); diff_->setLineWrapMode(QPlainTextEdit::NoWrap); diff_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-    diff_->setPlaceholderText(QStringLiteral("选择文件查看差异")); new DiffHighlighter(diff_->document());
-    fileSplit->setSizes({250,800}); detailLayout->addWidget(fileSplit,1); split->setSizes({350,350});
+    history_->setToolTip(QStringLiteral("双击提交或按 Enter 查看详情"));
     auto *footer = new QHBoxLayout;
     status_ = plainLabel(historyPage); status_->setObjectName(QStringLiteral("gitStatus")); footer->addWidget(status_,1);
-    more_ = new QPushButton(QStringLiteral("继续加载"),historyPage); more_->setObjectName(QStringLiteral("gitLoadMore")); more_->setEnabled(false); footer->addWidget(more_); historyLayout->addLayout(footer);
+    more_ = new QPushButton(QStringLiteral("继续加载"),historyPage); more_->setObjectName(QStringLiteral("gitLoadMore")); more_->setVisible(false); more_->setEnabled(false); footer->addWidget(more_); historyLayout->addLayout(footer);
     tabs_->addTab(historyPage, QStringLiteral("提交历史"));
     auto *comparisonPage = new QWidget(tabs_); auto *comparisonLayout = new QVBoxLayout(comparisonPage); comparisonLayout->setContentsMargins(0,12,0,0);
     auto *compareToolbar = new QHBoxLayout;
@@ -210,8 +184,8 @@ GitHistoryWindow::GitHistoryWindow(const QString &projectName, const RepositoryT
     differences_ = new QCheckBox(QStringLiteral("只看差异"), comparisonPage); differences_->setChecked(true);
     compareRefresh_ = new QPushButton(QStringLiteral("刷新对比"),comparisonPage); compareRefresh_->setObjectName(QStringLiteral("gitCompareRefresh"));
     compareToolbar->addWidget(remote_); compareToolbar->addWidget(branchSearch_,1); compareToolbar->addWidget(differences_); compareToolbar->addWidget(compareRefresh_); comparisonLayout->addLayout(compareToolbar);
-    auto *meaning = plainLabel(comparisonPage); meaning->setText(QStringLiteral("本地指当前绑定的仓库。同名分支按最新提交编号比较；不一致不表示领先或落后。")); UiTheme::setRole(meaning,"muted"); comparisonLayout->addWidget(meaning);
     branches_ = new QTableWidget(0,4,comparisonPage); branches_->setObjectName(QStringLiteral("gitBranchComparison")); tableStyle(branches_);
+    branches_->setToolTip(QStringLiteral("同名分支按最新提交编号比较；不一致不表示领先或落后。"));
     branches_->setHorizontalHeaderLabels({QStringLiteral("分支"),QStringLiteral("状态"),QStringLiteral("本地提交"),QStringLiteral("远端提交")});
     branches_->horizontalHeader()->setSectionResizeMode(0,QHeaderView::Stretch); branches_->setColumnWidth(1,150); branches_->setColumnWidth(2,200); branches_->setColumnWidth(3,200); comparisonLayout->addWidget(branches_,1);
     compareStatus_ = plainLabel(comparisonPage); compareStatus_->setObjectName(QStringLiteral("gitCompareStatus")); comparisonLayout->addWidget(compareStatus_);
@@ -219,11 +193,13 @@ GitHistoryWindow::GitHistoryWindow(const QString &projectName, const RepositoryT
     for (auto *button : findChildren<QPushButton *>()) button->setAutoDefault(false);
     connect(refresh_,&QPushButton::clicked,this,&GitHistoryWindow::refreshHistory);
     connect(more_,&QPushButton::clicked,this,[this]{ loadPage(true,refs_,head_); });
-    connect(branch_,qOverload<int>(&QComboBox::currentIndexChanged),this,[this]{ loadPage(false,refs_,head_); });
-    connect(history_->selectionModel(),&QItemSelectionModel::currentRowChanged,this,[this]{ selectCommit(); });
-    connect(parent_,qOverload<int>(&QComboBox::currentIndexChanged),this,[this]{ loadFiles(); });
-    connect(files_,&QListWidget::currentRowChanged,this,[this]{ loadDiff(); });
-    connect(detailsToggle,&QCheckBox::toggled,detail,&QWidget::setVisible);
+    connect(branch_,qOverload<int>(&QComboBox::currentIndexChanged),this,[this]{ const QSignalBlocker block(tag_); tag_->setCurrentIndex(0); loadPage(false,refs_,head_); });
+    connect(tag_,qOverload<int>(&QComboBox::currentIndexChanged),this,[this]{ const QSignalBlocker block(branch_); branch_->setCurrentIndex(tag_->currentData().toString().isEmpty() ? 0 : -1); loadPage(false,refs_,head_); });
+    connect(history_,&QTableView::doubleClicked,this,[this]{ openCommit(); });
+    for (const auto key : {Qt::Key_Return, Qt::Key_Enter}) {
+        auto *shortcut = new QShortcut(QKeySequence(key),history_); shortcut->setContext(Qt::WidgetShortcut);
+        connect(shortcut,&QShortcut::activated,this,&GitHistoryWindow::openCommit);
+    }
     connect(find,&QPushButton::clicked,this,&GitHistoryWindow::findNext);
     connect(search_,&QLineEdit::returnPressed,this,&GitHistoryWindow::findNext);
     connect(tabs_,&QTabWidget::currentChanged,this,[this](int index){ if (index == 1 && !compareLoaded_) loadRemotes(); });
@@ -235,17 +211,18 @@ GitHistoryWindow::GitHistoryWindow(const QString &projectName, const RepositoryT
 }
 GitHistoryWindow::~GitHistoryWindow() = default;
 void GitHistoryWindow::done(int result) {
-    historyReader_.cancel(); detailReader_.cancel(); fileReader_.cancel(); diffReader_.cancel(); compareReader_.cancel();
+    historyReader_.cancel(); compareReader_.cancel();
+    if (detail_) detail_->close();
     QDialog::done(result);
 }
 void GitHistoryWindow::historyStatus(const QString &message, bool error) {
-    status_->setText(message + (historyTime_.isValid() ? QStringLiteral("\n上次读取：") + historyTime_.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")) : QString()));
+    status_->setText(message);
     UiTheme::setRole(status_,error ? "error" : "muted");
 }
 void GitHistoryWindow::refreshHistory()
 {
-    historyBusy_ = true; refresh_->setEnabled(false); more_->setEnabled(false); branch_->setEnabled(false); historyStatus(QStringLiteral("正在读取仓库历史…"));
-    const auto failure = [this](const QString &error) { historyBusy_ = false; refresh_->setEnabled(true); branch_->setEnabled(true); more_->setEnabled(hasMore_); historyStatus(error,true); };
+    historyBusy_ = true; refresh_->setEnabled(false); more_->setEnabled(false); branch_->setEnabled(false); tag_->setEnabled(false); historyStatus(QStringLiteral("正在读取仓库历史…"));
+    const auto failure = [this](const QString &error) { historyBusy_ = false; refresh_->setEnabled(true); branch_->setEnabled(true); tag_->setEnabled(true); more_->setEnabled(hasMore_); historyStatus(error,true); };
     historyReader_.run(target_,{QStringLiteral("rev-parse"),QStringLiteral("--git-dir")},[this,failure](Git::Result result){
         if (!result.ok) { failure(QStringLiteral("无法读取该目录的 Git 仓库。\n") + result.error); return; }
         historyReader_.run(target_,{QStringLiteral("for-each-ref"),RefFormat,QStringLiteral("refs/heads"),QStringLiteral("refs/remotes"),QStringLiteral("refs/tags")},[this,failure](Git::Result result){
@@ -261,78 +238,59 @@ void GitHistoryWindow::refreshHistory()
 }
 void GitHistoryWindow::loadPage(bool append, const QList<Git::Reference> &refs, const QString &head)
 {
-    const QString filter = branch_->currentData().toString();
+    const QString filter = tag_->currentData().toString().isEmpty() ? branch_->currentData().toString() : tag_->currentData().toString();
     QStringList tips;
     if (filter.isEmpty()) { for (const auto &ref : refs) if (!tips.contains(ref.id)) tips.append(ref.id); if (!head.isEmpty() && !tips.contains(head)) tips.append(head); }
     else if (filter == QStringLiteral("HEAD")) { if (!head.isEmpty()) tips.append(head); }
     else for (const auto &ref : refs) if (ref.name == filter) tips.append(ref.id);
-    historyBusy_ = true; refresh_->setEnabled(false); branch_->setEnabled(false); more_->setEnabled(false); historyStatus(QStringLiteral("正在读取提交…"));
+    historyBusy_ = true; refresh_->setEnabled(false); branch_->setEnabled(false); tag_->setEnabled(false); more_->setEnabled(false); historyStatus(QStringLiteral("正在读取提交…"));
     const int requested = !append && filter == loadedBranch_ ? qMax(PageSize,int(model_->commits.size())) : PageSize;
     const auto receive = [this,append,refs,head,filter,requested](Git::Result result){
-        historyBusy_ = false; refresh_->setEnabled(true); branch_->setEnabled(true);
+        historyBusy_ = false; refresh_->setEnabled(true); branch_->setEnabled(true); tag_->setEnabled(true);
         QList<Git::Commit> page;
         if (!result.ok || !Git::parseCommits(result.output,&page)) {
             more_->setEnabled(hasMore_); historyStatus(result.ok ? QStringLiteral("提交数据不完整，请重试。") : result.error,true);
-            const QSignalBlocker block(branch_); branch_->setCurrentIndex(qMax(0,branch_->findData(loadedBranch_))); return;
+            restoreFilter(loadedBranch_); return;
         }
-        const QString selected = selected_.id;
+        const int currentRow = history_->currentIndex().row();
+        const QString selected = currentRow >= 0 && currentRow < model_->commits.size() ? model_->commits[currentRow].id : QString();
         const bool next = page.size() > requested; if (next) page.removeLast();
         if (append) page = model_->commits + page;
-        refs_ = refs; head_ = head; loadedBranch_ = filter; hasMore_ = next; historyTime_ = QDateTime::currentDateTimeUtc();
-        { const QSignalBlocker block(branch_); branch_->clear(); branch_->addItem(QStringLiteral("所有分支与标签"),QString()); branch_->addItem(QStringLiteral("当前 HEAD"),QStringLiteral("HEAD"));
-          for (const auto &ref : refs) branch_->addItem(ref.name.mid(5),ref.name);
-          int index = branch_->findData(filter); if (index < 0) { branch_->addItem(QStringLiteral("已移除：") + filter,filter); index = branch_->count()-1; } branch_->setCurrentIndex(index); }
+        refs_ = refs; head_ = head; loadedBranch_ = filter; hasMore_ = next;
+        { const QSignalBlocker branchBlock(branch_), tagBlock(tag_);
+          branch_->clear(); branch_->addItem(QStringLiteral("全部历史"),QString()); branch_->addItem(QStringLiteral("当前 HEAD"),QStringLiteral("HEAD"));
+          tag_->clear(); tag_->addItem(QStringLiteral("选择标签"),QString());
+          for (const auto &ref : refs) {
+              if (ref.name.startsWith(QStringLiteral("refs/tags/"))) tag_->addItem(ref.name.mid(10),ref.name);
+              else branch_->addItem(ref.name.startsWith(QStringLiteral("refs/heads/")) ? ref.name.mid(11) : ref.name.mid(13),ref.name);
+          }
+          restoreFilter(filter); }
         model_->replace(page,refs,head); history_->setColumnWidth(0,qMax(90,model_->lanes*18+32));
-        more_->setEnabled(hasMore_);
-        historyStatus(page.isEmpty() ? (filter.isEmpty() ? QStringLiteral("尚无提交。") : QStringLiteral("此范围没有提交。")) : QStringLiteral("已加载 %1 条提交%2").arg(page.size()).arg(hasMore_ ? QString() : QStringLiteral(" · 已全部加载")));
+        more_->setEnabled(hasMore_); more_->setVisible(hasMore_);
+        historyStatus(page.isEmpty() ? (filter.isEmpty() ? QStringLiteral("读取成功 · 尚无提交") : QStringLiteral("读取成功 · 此范围没有提交")) : QStringLiteral("读取成功"));
         int row = 0; for (int i=0;i<page.size();++i) if (page[i].id == selected) { row=i; break; }
-        if (!page.isEmpty()) history_->setCurrentIndex(model_->index(row,1)); else selectCommit();
+        if (!page.isEmpty()) history_->setCurrentIndex(model_->index(row,1));
     };
     if (tips.isEmpty()) { historyReader_.cancel(); receive({true,{},{},0}); return; }
     historyReader_.run(target_,Git::logArguments(append ? model_->commits.size() : 0,requested+1),receive,16*1024*1024,(tips.join('\n')+QLatin1Char('\n')).toLatin1());
 }
-void GitHistoryWindow::selectCommit()
+void GitHistoryWindow::restoreFilter(const QString &filter)
 {
-    detailReader_.cancel(); fileReader_.cancel(); diffReader_.cancel();
-    selected_ = {}; changes_.clear(); message_->clear(); files_->clear(); diff_->clear(); detailStatus_->clear();
-    const QSignalBlocker block(parent_); parent_->clear();
-    const int row = history_->currentIndex().row(); if (row < 0 || row >= model_->commits.size()) return;
-    selected_ = model_->commits[row];
-    if (selected_.parents.isEmpty()) parent_->addItem(QStringLiteral("空树（首次提交）"),QString());
-    for (int i=0;i<selected_.parents.size();++i) parent_->addItem(QStringLiteral("父提交 %1 · %2").arg(i+1).arg(selected_.parents[i].left(10)),selected_.parents[i]);
-    message_->setPlainText(selected_.id + QStringLiteral("\n") + selected_.subject);
-    detailReader_.run(target_,{QStringLiteral("show"),QStringLiteral("-s"),QStringLiteral("--format=%B"),selected_.id,QStringLiteral("--")},[this](Git::Result result){
-        if (!result.ok) { message_->setPlainText(selected_.id+QLatin1Char('\n')+selected_.subject+QLatin1Char('\n')+result.error); return; }
-        message_->setPlainText(selected_.id + QStringLiteral("\n") + selected_.author + QStringLiteral(" · ") + selected_.date.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")) + QStringLiteral("\n\n") + QString::fromUtf8(result.output));
-    });
-    loadFiles();
+    const QSignalBlocker branchBlock(branch_), tagBlock(tag_);
+    branch_->setCurrentIndex(filter.startsWith(QStringLiteral("refs/tags/")) ? -1 : 0); tag_->setCurrentIndex(0);
+    auto *combo = filter.startsWith(QStringLiteral("refs/tags/")) ? tag_ : branch_;
+    int index = combo->findData(filter);
+    if (index < 0) { combo->addItem(QStringLiteral("已移除：") + filter,filter); index = combo->count()-1; }
+    combo->setCurrentIndex(index);
 }
-void GitHistoryWindow::loadFiles()
+void GitHistoryWindow::openCommit()
 {
-    fileReader_.cancel(); diffReader_.cancel(); changes_.clear(); files_->clear(); diff_->clear();
-    if (selected_.id.isEmpty()) return;
-    detailStatus_->setText(QStringLiteral("正在读取变更文件…"));
-    auto args = Git::fileArguments(selected_.id,parent_->currentData().toString()); args << QStringLiteral("--");
-    fileReader_.run(target_,args,[this](Git::Result result){
-        if (!result.ok || !Git::parseFiles(result.output,&changes_)) { detailStatus_->setText(result.ok ? QStringLiteral("无法解析变更文件。") : result.error); return; }
-        for (const auto &file : changes_) {
-            auto *item = new QListWidgetItem(file.status + QStringLiteral("  ") + (file.oldPath.isEmpty() ? file.path : file.oldPath + QStringLiteral(" → ") + file.path),files_);
-            item->setToolTip(item->text());
-        }
-        detailStatus_->setText(changes_.isEmpty() ? QStringLiteral("相对所选基准没有文件变更。") : QStringLiteral("%1 个变更文件").arg(changes_.size()));
-        if (!changes_.isEmpty()) files_->setCurrentRow(0);
-    });
-}
-void GitHistoryWindow::loadDiff()
-{
-    diffReader_.cancel(); diff_->clear();
-    const int row = files_->currentRow(); if (row < 0 || row >= changes_.size()) return;
-    diff_->setPlainText(QStringLiteral("正在读取差异…"));
-    const auto file = changes_[row];
-    auto args = Git::fileArguments(selected_.id,parent_->currentData().toString(),true); args << QStringLiteral("--");
-    if (!file.oldPath.isEmpty()) args << Git::literalFilePath(file.oldPath);
-    args << Git::literalFilePath(file.path);
-    diffReader_.run(target_,args,[this](Git::Result result){ diff_->setPlainText(result.ok ? QString::fromUtf8(result.output) : result.error); },4*1024*1024);
+    const int row = history_->currentIndex().row();
+    if (row < 0 || row >= model_->commits.size()) return;
+    if (!detail_) detail_ = new GitCommitDialog(target_,this);
+    detail_->setCommit(model_->commits[row]);
+    if (detail_->isMinimized()) detail_->showNormal(); else detail_->show();
+    detail_->raise(); detail_->activateWindow();
 }
 void GitHistoryWindow::loadRemotes()
 {
@@ -344,7 +302,7 @@ void GitHistoryWindow::loadRemotes()
         { const QSignalBlocker block(remote_); remote_->clear(); remote_->addItems(QString::fromUtf8(result.output).split('\n',Qt::SkipEmptyParts));
           const int preferred = remote_->findText(previous.isEmpty() ? QStringLiteral("origin") : previous); if (preferred >= 0) remote_->setCurrentIndex(preferred); }
         compareLoaded_ = true;
-        if (!remote_->count()) { comparison_.clear(); comparedRemote_.clear(); comparisonError_.clear(); compareTime_ = {}; displayBranches(); compareStatus_->setText(QStringLiteral("该仓库未配置远端。")); return; }
+        if (!remote_->count()) { comparison_.clear(); comparedRemote_.clear(); comparisonError_.clear(); hasComparison_ = false; displayBranches(); compareStatus_->setText(QStringLiteral("该仓库未配置远端。")); return; }
         compare();
     },0);
 }
@@ -366,29 +324,35 @@ void GitHistoryWindow::compare()
         compareReader_.run(target_,{QStringLiteral("ls-remote"),QStringLiteral("--heads"),QStringLiteral("--refs"),QStringLiteral("--"),remote},[this,remote,local,fail](Git::Result result){
             QMap<QString,QString> remoteBranches;
             if (!result.ok || !Git::parseRemoteBranches(result.output,&remoteBranches)) { fail(result.ok ? QStringLiteral("远端分支数据不完整，未更新对比结果。") : result.error); return; }
-            comparison_ = Git::compareBranches(local,remoteBranches); comparedRemote_ = remote; compareTime_ = QDateTime::currentDateTimeUtc(); comparisonError_.clear();
+            comparison_ = Git::compareBranches(local,remoteBranches); comparedRemote_ = remote; hasComparison_ = true; comparisonError_.clear();
             compareRefresh_->setEnabled(true); remote_->setEnabled(true); UiTheme::setRole(compareStatus_,"muted"); displayBranches();
         },0);
     },0);
 }
 void GitHistoryWindow::displayBranches()
 {
-    branches_->setRowCount(0); int different = 0;
+    branches_->setRowCount(0);
     for (const auto &branch : comparison_) {
-        if (branch.state != Git::BranchState::Equal) ++different;
         if ((differences_->isChecked() && branch.state == Git::BranchState::Equal) || !branch.name.contains(branchSearch_->text(),Qt::CaseInsensitive)) continue;
         const int row = branches_->rowCount(); branches_->insertRow(row);
         const QStringList texts{branch.name,Git::branchStateText(branch.state),branch.localId.isEmpty() ? QStringLiteral("—") : branch.localId.left(12),branch.remoteId.isEmpty() ? QStringLiteral("—") : branch.remoteId.left(12)};
         for(int col=0;col<4;++col) { auto *item=new QTableWidgetItem(texts[col]); item->setToolTip(col==2 ? branch.localId : col==3 ? branch.remoteId : texts[col]); branches_->setItem(row,col,item); }
         branches_->item(row,1)->setForeground(QColor(branch.state==Git::BranchState::Equal ? UiTheme::Success : branch.state==Git::BranchState::Different ? UiTheme::Warning : UiTheme::Accent));
     }
+    if (!compareRefresh_->isEnabled()) return;
     if (!comparisonError_.isEmpty()) {
-        compareStatus_->setText(comparisonError_ + (compareTime_.isValid() ? QStringLiteral("\n保留 %1 上次结果 · %2").arg(comparedRemote_,compareTime_.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"))) : QString()));
+        compareStatus_->setText(comparisonError_ + (hasComparison_ ? QStringLiteral("\n保留 %1 上次成功的结果").arg(comparedRemote_) : QString()));
         UiTheme::setRole(compareStatus_,"error");
-    } else if (compareTime_.isValid()) compareStatus_->setText(QStringLiteral("%1 · 共 %2 个分支，%3 个有差异 · 显示 %4 个\n读取时间：%5").arg(comparedRemote_).arg(comparison_.size()).arg(different).arg(branches_->rowCount()).arg(compareTime_.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"))));
+    } else if (hasComparison_) {
+        compareStatus_->setText(branches_->rowCount() ? QStringLiteral("读取成功") :
+            !branchSearch_->text().isEmpty() ? QStringLiteral("读取成功 · 没有匹配的分支") :
+            differences_->isChecked() && !comparison_.isEmpty() ? QStringLiteral("读取成功 · 分支一致") : QStringLiteral("读取成功 · 尚无分支"));
+        UiTheme::setRole(compareStatus_,"muted");
+    }
 }
 void GitHistoryWindow::findNext()
 {
+    if (historyBusy_) return;
     const auto query = search_->text().trimmed(); if (query.isEmpty() || model_->commits.isEmpty()) return;
     const int count = model_->commits.size(); const int current = history_->currentIndex().row();
     for (int step=1;step<=count;++step) {

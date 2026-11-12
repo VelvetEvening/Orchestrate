@@ -1,7 +1,7 @@
 #pragma once
 #include "git/gitreader.h"
 #include <QDialog>
-#include <QDateTime>
+#include <QPointer>
 class QTabWidget;
 class QTableView;
 class QTableWidget;
@@ -9,10 +9,9 @@ class QComboBox;
 class QLineEdit;
 class QPushButton;
 class QLabel;
-class QPlainTextEdit;
-class QListWidget;
 class QCheckBox;
 class GitGraphModel;
+class GitCommitDialog;
 
 class GitHistoryWindow final : public QDialog {
     Q_OBJECT
@@ -25,33 +24,29 @@ protected:
 private:
     void refreshHistory();
     void loadPage(bool append, const QList<Git::Reference> &refs, const QString &head);
-    void selectCommit();
-    void loadFiles();
-    void loadDiff();
+    void openCommit();
+    void restoreFilter(const QString &filter);
     void loadRemotes();
     void compare();
     void displayBranches();
     void findNext();
     void historyStatus(const QString &message, bool error = false);
     RepositoryTarget target_;
-    Git::Reader historyReader_, detailReader_, fileReader_, diffReader_, compareReader_;
+    Git::Reader historyReader_, compareReader_;
+    QPointer<GitCommitDialog> detail_;
     GitGraphModel *model_;
     QTabWidget *tabs_;
     QTableView *history_;
     QTableWidget *branches_;
-    QComboBox *branch_, *remote_, *parent_;
+    QComboBox *branch_, *tag_, *remote_;
     QLineEdit *search_, *branchSearch_;
     QPushButton *refresh_, *more_, *compareRefresh_;
-    QLabel *status_, *compareStatus_, *detailStatus_;
-    QPlainTextEdit *message_, *diff_;
-    QListWidget *files_;
+    QLabel *status_, *compareStatus_;
     QCheckBox *differences_;
     QList<Git::Reference> refs_;
     QList<Git::Branch> comparison_;
-    QList<Git::FileChange> changes_;
-    Git::Commit selected_;
     QString head_, loadedBranch_, comparedRemote_, comparisonError_;
-    QDateTime historyTime_, compareTime_;
+    bool hasComparison_ = false;
     bool hasMore_ = false;
     bool historyBusy_ = false;
     bool compareLoaded_ = false;

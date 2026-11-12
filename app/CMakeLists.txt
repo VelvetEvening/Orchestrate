@@ -59,6 +59,7 @@ target_include_directories(OrchestrateText PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/sr
 add_library(OrchestrateGit STATIC
     src/git/gitreader.cpp src/git/gitreader.h src/git/repositorytarget.h
     src/pages/githistorywindow.cpp src/pages/githistorywindow.h
+    src/pages/gitcommitdialog.cpp src/pages/gitcommitdialog.h
     src/pages/repositorybinding.cpp src/pages/repositorybinding.h
 )
 target_link_libraries(OrchestrateGit PUBLIC Qt6::Widgets OrchestrateUi)
