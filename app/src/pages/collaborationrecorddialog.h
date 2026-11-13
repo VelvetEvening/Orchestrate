@@ -6,7 +6,6 @@
 class HeadingTextEdit;
 class QLabel;
 class QLineEdit;
-class QPushButton;
 class QStackedWidget;
 class QTabBar;
 
@@ -26,7 +25,7 @@ private:
     bool dirty() const;
     bool save();
     void showSection();
-    void updateActions();
+    void updateStatus();
     void resetDraft();
     QString bodyValue() const;
     QString summaryValue() const;
@@ -46,6 +45,5 @@ private:
     QStackedWidget *pages_;
     HeadingTextEdit *summary_;
     HeadingTextEdit *body_;
-    QPushButton *save_;
     QLabel *status_;
 };

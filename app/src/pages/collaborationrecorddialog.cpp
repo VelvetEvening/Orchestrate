@@ -8,7 +8,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
-#include <QPushButton>
+#include <QAbstractButton>
 #include <QShortcut>
 #include <QStackedWidget>
 #include <QTabBar>
@@ -33,7 +33,12 @@ CollaborationRecordDialog::CollaborationRecordDialog(AppDatabase *database,
     title_ = addSummaryField(titleLayout, this, QStringLiteral("workRecordTitle"), QStringLiteral("标题"));
     title_->setMaximumWidth(520);
     header->addLayout(titleLayout, 1);
-    header->addStretch(1);
+    status_ = new QLabel(this);
+    status_->setObjectName(QStringLiteral("recordSaveStatus"));
+    status_->setAccessibleName(QStringLiteral("保存状态"));
+    status_->setTextFormat(Qt::PlainText);
+    status_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    header->addWidget(status_, 1);
     sections_ = new QTabBar(this);
     sections_->setObjectName(QStringLiteral("recordSectionTabs"));
     sections_->setAccessibleName(QStringLiteral("协作记录内容"));
@@ -66,27 +71,13 @@ CollaborationRecordDialog::CollaborationRecordDialog(AppDatabase *database,
     pages_->addWidget(body_);
 
     layout->addWidget(pages_, 1);
-    auto *footer = new QHBoxLayout;
-    status_ = new QLabel(this);
-    status_->setObjectName(QStringLiteral("recordSaveStatus"));
-    status_->setTextFormat(Qt::PlainText);
-    status_->setWordWrap(true);
-    footer->addWidget(status_, 1);
-    save_ = new QPushButton(QStringLiteral("保存"), this);
-    save_->setObjectName(QStringLiteral("saveRecord"));
-    save_->setAutoDefault(false);
-    UiTheme::setRole(save_, "primary");
-    save_->setToolTip(QStringLiteral("保存标题、摘要和正文（Ctrl+S）"));
-    footer->addWidget(save_);
-    layout->addLayout(footer);
 
     title_->setText(record_.id > 0 ? summaryText(record_.title, record_.content) : QString());
     summary_->setPlainText(record_.summary);
     body_->setPlainText(record_.content);
     rememberDraft();
     connect(sections_, &QTabBar::currentChanged, this, [this] { showSection(); });
-    connect(save_, &QPushButton::clicked, this, [this] { save(); });
-    const auto changed = [this] { error_.clear(); updateActions(); };
+    const auto changed = [this] { error_.clear(); updateStatus(); };
     connect(title_, &QLineEdit::textChanged, this, changed);
     connect(summary_, &HeadingTextEdit::textChanged, this, [this, changed] {
         draftSummaryText_ = summary_->toPlainText(); changed();
@@ -98,7 +89,7 @@ CollaborationRecordDialog::CollaborationRecordDialog(AppDatabase *database,
     saveShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(saveShortcut, &QShortcut::activated, this, [this] { save(); });
     showSection();
-    updateActions();
+    updateStatus();
     if (record_.id <= 0) title_->setFocus();
 }
 
@@ -134,7 +125,7 @@ void CollaborationRecordDialog::resetDraft()
     if (draftSummaryText_ != savedSummaryText_) summary_->setPlainText(record_.summary);
     if (draftBodyText_ != savedBodyText_) body_->setPlainText(record_.content);
     error_.clear();
-    updateActions();
+    updateStatus();
 }
 
 void CollaborationRecordDialog::showSection()
@@ -143,16 +134,24 @@ void CollaborationRecordDialog::showSection()
     pages_->setCurrentWidget(editor);
 }
 
-void CollaborationRecordDialog::updateActions()
+void CollaborationRecordDialog::updateStatus()
 {
-    const bool valid = !title_->text().trimmed().isEmpty() && !draftBodyText_.trimmed().isEmpty();
-    save_->setEnabled(valid && (record_.id <= 0 || dirty()));
+    const bool missingTitle = title_->text().trimmed().isEmpty();
+    const bool missingBody = draftBodyText_.trimmed().isEmpty();
     UiTheme::setRole(status_, !error_.isEmpty() ? "error" : dirty() ? "warning" : "muted");
-    if (!error_.isEmpty()) status_->setText(error_);
-    else if (!valid) status_->setText(QStringLiteral("请填写标题和正文，摘要可留空。"));
-    else if (dirty()) status_->setText(QStringLiteral("有未保存的修改"));
-    else if (record_.updatedAt.isValid()) status_->setText(QStringLiteral("更新于 %1").arg(record_.updatedAt.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm"))));
-    else status_->clear();
+    if (!error_.isEmpty()) status_->setText(QStringLiteral("保存失败"));
+    else if (missingTitle) status_->setText(QStringLiteral("待填写标题"));
+    else if (missingBody) status_->setText(QStringLiteral("待填写正文"));
+    else if (dirty()) status_->setText(QStringLiteral("未保存 · Ctrl+S"));
+    else status_->setText(QStringLiteral("已保存"));
+
+    QString detail = QStringLiteral("Ctrl+S 保存标题、摘要和正文");
+    if (!error_.isEmpty()) detail = error_;
+    else if (missingTitle || missingBody) detail = QStringLiteral("请填写标题和正文，摘要可留空。");
+    else if (!dirty() && record_.updatedAt.isValid())
+        detail += QStringLiteral("\n更新于 %1").arg(record_.updatedAt.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")));
+    status_->setToolTip(detail);
+    status_->setAccessibleDescription(detail);
 }
 
 bool CollaborationRecordDialog::save()
@@ -170,7 +169,7 @@ bool CollaborationRecordDialog::save()
     QString error;
     if (!database_->saveWorkRecord(&draft, &error)) {
         error_ = QStringLiteral("保存失败：%1").arg(error);
-        updateActions();
+        updateStatus();
         return false;
     }
     record_ = draft;
@@ -178,8 +177,7 @@ bool CollaborationRecordDialog::save()
     error_.clear();
     rememberDraft();
     setWindowTitle(QStringLiteral("编辑记录"));
-    updateActions();
-    status_->setText(QStringLiteral("已保存"));
+    updateStatus();
     UiTheme::setRole(status_, "success");
     emit savedRecord(record_.id);
     return true;
