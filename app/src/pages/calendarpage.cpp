@@ -16,7 +16,6 @@
 #include <QComboBox>
 #include <QDateTimeEdit>
 #include <QDialog>
-#include <QDialogButtonBox>
 #include <QFont>
 #include <QFormLayout>
 #include <QFrame>
@@ -319,22 +318,32 @@ void CalendarPage::showReminderDialog(AppDatabase::Reminder reminder, bool editi
     dialog->setObjectName(QStringLiteral("reminderEditor"));
     dialog->setWindowTitle(editing ? QStringLiteral("编辑提醒") : QStringLiteral("添加提醒"));
     dialog->resize(640,560);
+    dialog->setMinimumSize(560,420);
     auto *layout=new QVBoxLayout(dialog);
     layout->setContentsMargins(22,20,22,20);
+    layout->setSpacing(12);
+    auto *header=new QHBoxLayout;
+    header->setSpacing(16);
+    auto *titleLayout=new QVBoxLayout;
+    titleLayout->setContentsMargins(0,0,0,0);
     auto *form = new QFormLayout;
 
-    auto *titleEdit = new QLineEdit(dialog);
-    titleEdit->setObjectName(QStringLiteral("reminderTitle"));
+    auto *titleEdit = addSummaryField(titleLayout,dialog,QStringLiteral("reminderTitle"),QStringLiteral("标题"));
+    titleEdit->setMaximumWidth(520);
     titleEdit->setText(reminder.title);
     titleEdit->setPlaceholderText(QStringLiteral("例如：提交论文初稿"));
-    form->addRow(QStringLiteral("标题："), titleEdit);
+    header->addLayout(titleLayout,1);
+    header->addWidget(dialog->createSaveStatus(QStringLiteral("reminderSaveStatus")),1);
+    layout->addLayout(header);
 
     auto *contentEdit = new HeadingTextEdit(dialog);
-    bindPersistentTextZoom(contentEdit, database_, QStringLiteral("text_zoom.reminder"));
+    contentEdit->setModeControlsVisible(false);
+    contentEdit->setContentLabel(QStringLiteral("说明"));
+    contentEdit->setTextPointSize(20);
+    bindPersistentTextZoom(contentEdit, database_, QStringLiteral("text_zoom.reminder.v2"));
     contentEdit->setObjectName(QStringLiteral("reminderContent"));
     contentEdit->setPlainText(reminder.content);
     contentEdit->setPlaceholderText(QStringLiteral("可选：补充说明"));
-    form->addRow(QStringLiteral("说明："), contentEdit);
 
     auto *dateTimeEdit = new QDateTimeEdit(dialog);
     dateTimeEdit->setObjectName(QStringLiteral("reminderTime"));
@@ -376,26 +385,15 @@ void CalendarPage::showReminderDialog(AppDatabase::Reminder reminder, bool editi
     form->addRow(QStringLiteral("关联项目："), projectCombo);
 
     layout->addLayout(form);
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
-    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("保存"));
-    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消"));
-    layout->addWidget(buttons);
-    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-    auto setMode = [=](bool preview) {
-        titleEdit->setReadOnly(preview);
-        dateTimeEdit->setReadOnly(preview);
-        repeatCombo->setEnabled(!preview);
-        projectCombo->setEnabled(!preview);
-    };
-    connect(contentEdit, &HeadingTextEdit::previewModeChanged, dialog, setMode);
-    contentEdit->setPreviewMode(editing);
-    setMode(editing);
-
-    auto *status=new QLabel(dialog); status->setWordWrap(true); status->setTextFormat(Qt::PlainText);
-    status->setObjectName(QStringLiteral("reminderSaveStatus")); layout->addWidget(status);
+    layout->addWidget(contentEdit,1);
+    QWidget::setTabOrder(titleEdit,dateTimeEdit);
+    QWidget::setTabOrder(dateTimeEdit,repeatCombo);
+    QWidget::setTabOrder(repeatCombo,projectCombo);
+    QWidget::setTabOrder(projectCombo,contentEdit);
     auto saved=std::make_shared<AppDatabase::Reminder>(reminder);
     auto savedText=std::make_shared<QString>(contentEdit->toPlainText());
     saved->remindAt=dateTimeEdit->dateTime(); saved->repeatMode=repeatCombo->currentData().toString();
+    saved->projectId=projectCombo->currentData().toInt();
     const auto value=[=] {
         auto value=*saved;
         value.title=titleEdit->text().trimmed();
@@ -410,32 +408,36 @@ void CalendarPage::showReminderDialog(AppDatabase::Reminder reminder, bool editi
             || now.repeatMode!=saved->repeatMode || now.projectId!=saved->projectId;
     };
     const auto validate=[=] {
-        buttons->button(QDialogButtonBox::Ok)->setEnabled(!titleEdit->text().trimmed().isEmpty()
-            && (saved->id<=0 || dialog->dirty()));
+        dialog->updateSaveStatus(titleEdit->text().trimmed().isEmpty() ? QStringLiteral("待填写标题") : QString());
     };
     connect(titleEdit,&QLineEdit::textChanged,dialog,validate);
     connect(contentEdit,&HeadingTextEdit::textChanged,dialog,validate);
     connect(dateTimeEdit,&QDateTimeEdit::dateTimeChanged,dialog,validate);
     connect(repeatCombo,&QComboBox::currentIndexChanged,dialog,validate);
     connect(projectCombo,&QComboBox::currentIndexChanged,dialog,validate);
+    dialog->resetDraft=[=] {
+        titleEdit->setText(saved->title);
+        if (contentEdit->toPlainText()!=*savedText) contentEdit->setPlainText(saved->content);
+        dateTimeEdit->setDateTime(saved->remindAt);
+        repeatCombo->setCurrentIndex(repeatCombo->findData(saved->repeatMode));
+        projectCombo->setCurrentIndex(projectCombo->findData(saved->projectId));
+        validate();
+    };
     dialog->saveDraft=[=,this] {
         if (saved->id>0 && !dialog->dirty()) return true;
         auto updated=value();
-        if (updated.title.isEmpty()) { status->setText(QStringLiteral("请填写提醒标题。")); titleEdit->setFocus(); return false; }
+        if (updated.title.isEmpty()) { validate(); titleEdit->setFocus(); return false; }
         updated.completed=false; updated.lastNotifiedAt=QDateTime();
         QString error;
         const bool ok=updated.id>0 ? database_->updateReminder(updated,&error)
             : database_->addReminder(updated,&updated.id,&error);
-        if (!ok) { status->setText(error); UiTheme::setRole(status,"error"); return false; }
+        if (!ok) { dialog->showSaveError(error); return false; }
         *saved=updated; *savedText=contentEdit->toPlainText();
         if (workspace) workspace->rekey(dialog->property("contentKey").toString(),QStringLiteral("reminder/%1").arg(updated.id));
-        dialog->setWindowTitle(QStringLiteral("提醒")); contentEdit->setPreviewMode(true); validate();
-        status->setText(QStringLiteral("已保存")); UiTheme::setRole(status,"success");
+        dialog->setWindowTitle(QStringLiteral("提醒")); dialog->showSavedStatus();
         refreshReminderList(); updateCalendarAppearance();
-        if (!workspace) dialog->accept();
         return true;
     };
-    connect(buttons,&QDialogButtonBox::accepted,dialog,[dialog]{ dialog->saveDraft(); });
     auto *shortcut=new QShortcut(QKeySequence::Save,dialog); shortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(shortcut,&QShortcut::activated,dialog,[dialog]{ dialog->saveDraft(); });
     validate();
@@ -593,48 +595,56 @@ void CalendarPage::diaryDialog(AppDatabase::DiaryEntry entry, bool creating, QWi
     dialog->setObjectName(QStringLiteral("diaryEditor"));
     dialog->setWindowTitle(creating ? QStringLiteral("添加日记") : QStringLiteral("日记"));
     dialog->resize(800,620);
+    dialog->setMinimumSize(560,400);
     auto *layout=new QVBoxLayout(dialog);
     layout->setContentsMargins(22,20,22,20);
-    auto *dateLabel=new QLabel(entry.date.toString(QStringLiteral("yyyy 年 MM 月 dd 日")),dialog);
-    UiTheme::setRole(dateLabel,"muted"); layout->addWidget(dateLabel);
-    auto *title=addSummaryField(layout,dialog,QStringLiteral("diaryTitle"));
+    layout->setSpacing(12);
+    auto *header=new QHBoxLayout;
+    header->setSpacing(16);
+    auto *titleLayout=new QVBoxLayout;
+    titleLayout->setContentsMargins(0,0,0,0);
+    auto *title=addSummaryField(titleLayout,dialog,QStringLiteral("diaryTitle"));
+    title->setMaximumWidth(520);
+    header->addLayout(titleLayout,1);
+    auto *dateLabel=new QLabel(entry.date.toString(Qt::ISODate),dialog);
+    UiTheme::setRole(dateLabel,"muted"); header->addWidget(dateLabel);
+    header->addWidget(dialog->createSaveStatus(QStringLiteral("diarySaveStatus")),1);
+    layout->addLayout(header);
     auto *editor=new HeadingTextEdit(dialog); editor->setObjectName(QStringLiteral("diaryContent"));
-    bindPersistentTextZoom(editor,database_,QStringLiteral("text_zoom.diary")); layout->addWidget(editor,1);
+    editor->setModeControlsVisible(false);
+    editor->setTextPointSize(20);
+    bindPersistentTextZoom(editor,database_,QStringLiteral("text_zoom.diary.v2")); layout->addWidget(editor,1);
     if (!creating) { title->setText(summaryText(entry.title,entry.content)); editor->setPlainText(entry.content); }
-    connect(editor,&HeadingTextEdit::previewModeChanged,title,&QLineEdit::setReadOnly);
-    editor->setPreviewMode(!creating);
-    auto *status=new QLabel(dialog); status->setTextFormat(Qt::PlainText); status->setWordWrap(true);
-    status->setObjectName(QStringLiteral("diarySaveStatus")); layout->addWidget(status);
-    auto *buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel,dialog);
-    auto *save=buttons->button(QDialogButtonBox::Save); save->setText(QStringLiteral("保存"));
-    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("关闭")); layout->addWidget(buttons);
     auto saved=std::make_shared<AppDatabase::DiaryEntry>(entry);
     saved->title=title->text().trimmed();
     auto savedText=std::make_shared<QString>(editor->toPlainText());
     dialog->dirty=[=] { return title->text().trimmed()!=saved->title || editor->toPlainText()!=*savedText; };
-    const auto validate=[=] { save->setEnabled(!title->text().trimmed().isEmpty()
-        && !editor->toPlainText().trimmed().isEmpty() && (saved->id<=0 || dialog->dirty())); };
+    const auto validate=[=] { dialog->updateSaveStatus(title->text().trimmed().isEmpty()
+        ? QStringLiteral("待填写简介") : editor->toPlainText().trimmed().isEmpty() ? QStringLiteral("待填写正文") : QString()); };
     connect(title,&QLineEdit::textChanged,dialog,validate); connect(editor,&HeadingTextEdit::textChanged,dialog,validate);
+    dialog->resetDraft=[=] {
+        title->setText(saved->title);
+        if (editor->toPlainText()!=*savedText) editor->setPlainText(saved->content);
+        validate();
+    };
     dialog->saveDraft=[=,this] {
         if (saved->id>0 && !dialog->dirty()) return true;
         if (title->text().trimmed().isEmpty() || editor->toPlainText().trimmed().isEmpty()) {
-            status->setText(QStringLiteral("请填写简介和正文。")); return false;
+            validate();
+            if (title->text().trimmed().isEmpty()) title->setFocus(); else editor->setFocus();
+            return false;
         }
         const QString content=editor->toPlainText()==*savedText ? saved->content : editor->toPlainText();
         QString error; int id=saved->id;
         const bool ok=id>0 ? database_->updateDiaryEntry(id,title->text().trimmed(),content,&error)
             : database_->addDiaryEntry(saved->date,title->text().trimmed(),content,&error,&id);
-        if (!ok) { status->setText(error); UiTheme::setRole(status,"error"); return false; }
+        if (!ok) { dialog->showSaveError(error); return false; }
         saved->id=id; saved->title=title->text().trimmed(); saved->content=content; *savedText=editor->toPlainText();
         if (workspace) workspace->rekey(dialog->property("contentKey").toString(),QStringLiteral("diary/%1").arg(id));
-        dialog->setWindowTitle(QStringLiteral("日记")); editor->setPreviewMode(true); validate();
-        status->setText(QStringLiteral("已保存")); UiTheme::setRole(status,"success");
+        dialog->setWindowTitle(QStringLiteral("日记")); dialog->showSavedStatus();
         refreshDiaryList(); refreshDiaryCollection(); updateCalendarAppearance();
-        if (!workspace) dialog->accept();
         return true;
     };
-    connect(buttons,&QDialogButtonBox::accepted,dialog,[dialog]{ dialog->saveDraft(); });
-    connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
     auto *shortcut=new QShortcut(QKeySequence::Save,dialog); shortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(shortcut,&QShortcut::activated,dialog,[dialog]{ dialog->saveDraft(); });
     validate();

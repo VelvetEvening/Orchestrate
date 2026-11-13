@@ -114,6 +114,7 @@ QTabBar::tab { color: @muted@; background: transparent; border: 1px solid transp
 QTabBar::tab:hover { background: @hover@; }
 QTabBar::tab:selected { color: @accent@; background: @selection@; border-color: @controlBorder@; font-weight: 600; }
 QTabBar::tab:focus { border-color: @accent@; }
+QTabBar#recordSectionTabs::tab:last { margin-right: 0; }
 QTabBar#clipboardTabs::tab { background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0; margin-right: 14px; padding: 7px 4px; }
 QTabBar#clipboardTabs::tab:hover { background: @hover@; }
 QTabBar#clipboardTabs::tab:selected { background: transparent; color: @accent@; border-bottom-color: @accent@; }

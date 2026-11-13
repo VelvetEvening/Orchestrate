@@ -258,6 +258,10 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
         const auto addWorkspace = [this](QWidget *root, int index) {
             auto *workspace = new ContentWorkspace(root, pageStack_);
             pageStack_->addWidget(workspace);
+            workspace->setActivationGuard([this,workspace] {
+                auto *current = qobject_cast<ContentWorkspace *>(pageStack_->currentWidget());
+                return !current || current == workspace || current->confirmLeaveCurrent();
+            });
             connect(workspace, &ContentWorkspace::activationRequested, this, [this,index] { switchToPage(index, false); });
         };
         auto *calendarPage = new CalendarPage(&database_, trayIcon_, pageStack_);

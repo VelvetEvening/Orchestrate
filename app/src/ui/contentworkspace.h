@@ -9,6 +9,7 @@
 
 class QStackedWidget;
 class ContentWindow;
+class QLabel;
 
 // Opt in when leaving a page must resolve unsaved changes without closing it.
 class ContentLeaveGuard {
@@ -32,6 +33,7 @@ public:
     bool closePrefix(const QString &prefix);
     bool closeAll();
     bool confirmLeaveCurrent();
+    void setActivationGuard(std::function<bool()> guard);
     void back();
     QString currentKey() const;
     QDialog *content(const QString &key) const;
@@ -55,13 +57,22 @@ private:
     QHash<QString, EntryPtr> entries_;
     QList<QString> order_;
     bool destroying_ = false;
+    std::function<bool()> activationGuard_;
 };
 
 // Small editor forms share the same explicit save/discard/cancel boundary.
-class DraftDialog : public QDialog {
+class DraftDialog : public QDialog, public ContentLeaveGuard {
 public:
     using QDialog::QDialog;
     std::function<bool()> dirty;
     std::function<bool()> saveDraft;
+    std::function<void()> resetDraft;
+    QLabel *createSaveStatus(const QString &name);
+    void updateSaveStatus(const QString &missing = QString());
+    void showSaveError(const QString &error);
+    void showSavedStatus(const QString &text = QStringLiteral("已保存"));
+    bool confirmLeave() override;
     void reject() override;
+private:
+    QLabel *saveStatus_ = nullptr;
 };

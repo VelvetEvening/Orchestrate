@@ -86,6 +86,9 @@ bool ContentWorkspace::confirmLeaveCurrent() {
     auto *guard = entry ? dynamic_cast<ContentLeaveGuard *>(entry->page.data()) : nullptr;
     return !guard || guard->confirmLeave();
 }
+void ContentWorkspace::setActivationGuard(std::function<bool()> guard) {
+    activationGuard_ = std::move(guard);
+}
 bool ContentWorkspace::activate(const QString &key, QWidget *source) {
     const auto entry = entries_.value(key); if (!entry) return false;
     if (source && !entry->host) {
@@ -257,6 +260,7 @@ void ContentWorkspace::detach(const EntryPtr &entry) {
 }
 void ContentWorkspace::attach(ContentWindow *host,const QString &selected) {
     if (!host) return;
+    if (activationGuard_ && !activationGuard_()) return;
     if (!confirmLeaveCurrent()) return;
     for (const auto &entry:entries_) if (entry->host==host) {
         host->stack->removeWidget(entry->frame); stack_->addWidget(entry->frame);
@@ -267,7 +271,31 @@ void ContentWorkspace::attach(ContentWindow *host,const QString &selected) {
     window()->setWindowState(window()->windowState() & ~Qt::WindowMinimized);
     window()->show(); window()->raise(); window()->activateWindow(); activate(selected);
 }
-void DraftDialog::reject() {
+QLabel *DraftDialog::createSaveStatus(const QString &name) {
+    saveStatus_ = new QLabel(this);
+    saveStatus_->setObjectName(name);
+    saveStatus_->setAccessibleName(QStringLiteral("保存状态"));
+    saveStatus_->setTextFormat(Qt::PlainText);
+    saveStatus_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    return saveStatus_;
+}
+void DraftDialog::updateSaveStatus(const QString &missing) {
+    const bool modified = dirty && dirty();
+    saveStatus_->setText(!missing.isEmpty() ? missing : modified
+        ? QStringLiteral("未保存 · Ctrl+S") : QStringLiteral("已保存"));
+    UiTheme::setRole(saveStatus_, modified ? "warning" : "muted");
+    const auto detail = missing.isEmpty() ? QStringLiteral("Ctrl+S 保存当前内容") : missing;
+    saveStatus_->setToolTip(detail); saveStatus_->setAccessibleDescription(detail);
+}
+void DraftDialog::showSaveError(const QString &error) {
+    saveStatus_->setText(QStringLiteral("保存失败"));
+    UiTheme::setRole(saveStatus_, "error");
+    saveStatus_->setToolTip(error); saveStatus_->setAccessibleDescription(error);
+}
+void DraftDialog::showSavedStatus(const QString &text) {
+    updateSaveStatus(); saveStatus_->setText(text); UiTheme::setRole(saveStatus_, "success");
+}
+bool DraftDialog::confirmLeave() {
     if (dirty && dirty()) {
         QMessageBox prompt(QMessageBox::Question,QStringLiteral("未保存的修改"),
             QStringLiteral("要保存当前内容的修改吗？"),QMessageBox::Save|QMessageBox::Discard|QMessageBox::Cancel,this);
@@ -276,7 +304,13 @@ void DraftDialog::reject() {
         prompt.button(QMessageBox::Cancel)->setText(QStringLiteral("继续编辑"));
         prompt.setDefaultButton(QMessageBox::Cancel);
         const auto choice=prompt.exec();
-        if (choice==QMessageBox::Cancel || (choice==QMessageBox::Save && (!saveDraft || !saveDraft()))) return;
+        if (choice==QMessageBox::Save) return saveDraft && saveDraft();
+        if (choice!=QMessageBox::Discard) return false;
+        if (resetDraft) resetDraft();
+        return !dirty || !dirty();
     }
-    QDialog::reject();
+    return true;
+}
+void DraftDialog::reject() {
+    if (confirmLeave()) QDialog::reject();
 }

@@ -43,6 +43,9 @@ CollaborationRecordDialog::CollaborationRecordDialog(AppDatabase *database,
     sections_->setObjectName(QStringLiteral("recordSectionTabs"));
     sections_->setAccessibleName(QStringLiteral("协作记录内容"));
     sections_->setExpanding(false);
+    // Two fixed tabs need no extra minimum width reserved for scroll buttons.
+    sections_->setUsesScrollButtons(false);
+    sections_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     sections_->setDrawBase(false);
     sections_->addTab(QStringLiteral("摘要"));
     sections_->addTab(QStringLiteral("正文"));
