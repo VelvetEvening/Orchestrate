@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QProcess>
 #include <QTimer>
+#include <QSet>
 
 class MathPreview final : public QObject {
     Q_OBJECT
@@ -23,6 +24,9 @@ private:
     QTimer debounce_, timeout_;
     QByteArray request_, output_;
     QStringList keys_;
+    QStringList requested_;
+    QSet<QString> failed_;
+    qreal pixels_ = 0;
     MathText::Images images_;
     qint64 imageBytes_ = 0, receivedBytes_ = 0;
     void *job_ = nullptr;

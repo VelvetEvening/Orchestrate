@@ -8,6 +8,8 @@ class QTabBar;
 class QTextEdit;
 class MathPreview;
 class QLabel;
+class MarkdownEdit;
+class QToolButton;
 
 class HeadingTextEdit final : public QWidget
 {
@@ -24,6 +26,8 @@ public:
     void setTextPointSize(qreal size);
     void setModeControlsVisible(bool visible);
     void setContentLabel(const QString &label);
+    void setSourceMode(bool source);
+    bool isSourceMode() const;
 
     static QString getText(QWidget *parent, const QString &title,
                            const QString &initial, bool *accepted, bool previewFirst = false);
@@ -37,13 +41,12 @@ protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
-    void updatePreview();
+    void updatePage();
     void zoomText(qreal steps);
     QTabBar *tabs_;
     QStackedWidget *pages_;
     QPlainTextEdit *source_;
-    QTextEdit *preview_;
-    MathPreview *math_;
+    MarkdownEdit *preview_;
+    QToolButton *sourceMode_;
     QLabel *mathStatus_;
-    bool previewDirty_ = true;
 };

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Orchestrate VERSION 3.4.1 LANGUAGES CXX)
+project(Orchestrate VERSION 3.5.0 LANGUAGES CXX)
 
 configure_file(src/version.h.in generated/version.h @ONLY)
 
@@ -50,6 +50,8 @@ add_library(OrchestrateText STATIC
     src/widgets/headingtext.h
     src/widgets/headingtextedit.cpp
     src/widgets/headingtextedit.h
+    src/widgets/markdowntext.cpp src/widgets/markdowntext.h
+    src/widgets/markdownedit.cpp src/widgets/markdownedit.h
     src/widgets/mathtext.cpp src/widgets/mathtext.h
     src/widgets/mathpreview.cpp src/widgets/mathpreview.h
 )

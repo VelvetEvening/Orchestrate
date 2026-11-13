@@ -77,6 +77,8 @@ QLineEdit#recordSearch:hover, QLineEdit#clipboardSearch:hover { border-color: @b
 QLineEdit#recordSearch:focus, QLineEdit#clipboardSearch:focus { border-color: @focus@; }
 QPlainTextEdit#headingSource, QTextEdit#headingPreview { padding: 12px 14px; }
 QTextEdit#headingPreview { border-color: @border@; }
+QTextEdit#headingPreview:focus { border-color: @accent@; }
+QToolButton#markdownSourceMode:checked { background: @selection@; color: @accent@; border-color: @focus@; }
 QPlainTextEdit#clipboardPreview { background: @indexSurface@; border: none; border-radius: 0; padding: 12px; }
 QComboBox { padding-right: 28px; min-height: 20px; }
 QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center right; width: 26px; border: none; }

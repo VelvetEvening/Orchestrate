@@ -40,15 +40,33 @@ void MathPreview::cancel()
 #endif
     job_ = nullptr;
     output_.clear(); request_.clear(); keys_.clear(); images_.clear();
+    requested_.clear(); failed_.clear();
     imageBytes_ = receivedBytes_ = 0;
 }
 
 void MathPreview::request(const QString &source, qreal pixels)
 {
-    cancel();
-    QJsonArray formulas;
-    for (const auto &span : MathText::spans(source)) {
+    QStringList wanted;
+    const auto spans = MathText::spans(source);
+    for (const auto &span : spans) {
         const auto key = source.mid(span.start, span.length);
+        if (!wanted.contains(key)) wanted.append(key);
+    }
+    pixels = qBound(6.0, pixels, 192.0);
+    if (wanted == requested_ && qFuzzyCompare(pixels, pixels_)) return;
+    const auto previous = qFuzzyCompare(pixels, pixels_) ? images_ : MathText::Images{};
+    const auto failures = qFuzzyCompare(pixels, pixels_) ? failed_ : QSet<QString>{};
+    cancel();
+    pixels_ = pixels;
+    requested_ = wanted;
+    QJsonArray formulas;
+    for (const auto &span : spans) {
+        const auto key = source.mid(span.start, span.length);
+        if (previous.contains(key)) {
+            if (!images_.contains(key)) { images_.insert(key, previous.value(key)); imageBytes_ += previous.value(key).sizeInBytes(); }
+            continue;
+        }
+        if (failures.contains(key)) { failed_.insert(key); continue; }
         if (keys_.contains(key)) continue;
         keys_.append(key);
         formulas.append(QJsonObject{{"code", span.code}, {"display", span.display}});
@@ -61,7 +79,7 @@ void MathPreview::request(const QString &source, qreal pixels)
 void MathPreview::start()
 {
     QString worker = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("OrchestrateMath.exe"));
-    if (!QFileInfo::exists(worker)) { emit ready(); return; }
+    if (!QFileInfo::exists(worker)) { for (const auto &key : keys_) failed_.insert(key); emit ready(); return; }
     process_ = new QProcess(this);
 #ifdef Q_OS_WIN
     process_->setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments *args) {
@@ -130,5 +148,6 @@ void MathPreview::finish()
 #endif
     job_ = nullptr;
     output_.clear(); request_.clear();
+    for (const auto &key : keys_) if (!images_.contains(key)) failed_.insert(key);
     emit ready();
 }
