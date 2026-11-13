@@ -9,7 +9,6 @@ class QTextEdit;
 class MathPreview;
 class QLabel;
 class MarkdownEdit;
-class QToolButton;
 
 class HeadingTextEdit final : public QWidget
 {
@@ -47,6 +46,6 @@ private:
     QStackedWidget *pages_;
     QPlainTextEdit *source_;
     MarkdownEdit *preview_;
-    QToolButton *sourceMode_;
+    bool sourceMode_ = false;
     QLabel *mathStatus_;
 };

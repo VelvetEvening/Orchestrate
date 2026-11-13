@@ -6,15 +6,16 @@
 #include <QFontInfo>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMenu>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QStackedWidget>
 #include <QTabBar>
-#include <QToolButton>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <QtMath>
+#include <memory>
 
 namespace { constexpr int PreviewTab = 0, EditTab = 1; }
 
@@ -34,13 +35,9 @@ HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
     modes->addWidget(tabs_);
     mathStatus_ = new QLabel(this);
     mathStatus_->setObjectName(QStringLiteral("mathPreviewStatus")); mathStatus_->setWordWrap(true);
+    mathStatus_->hide();
     modes->addWidget(mathStatus_, 1);
-    sourceMode_ = new QToolButton(this);
-    sourceMode_->setObjectName(QStringLiteral("markdownSourceMode"));
-    sourceMode_->setText(QStringLiteral("源码")); sourceMode_->setCheckable(true);
-    sourceMode_->setAccessibleName(QStringLiteral("Markdown 源码模式"));
-    sourceMode_->setToolTip(QStringLiteral("切换 Markdown 源码与即时编辑"));
-    modes->addWidget(sourceMode_); layout->addLayout(modes);
+    layout->addLayout(modes);
     pages_ = new QStackedWidget(this);
     pages_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Ignored); pages_->setMinimumHeight(80);
     source_ = new TextLayoutGuard::Edit(pages_);
@@ -54,9 +51,21 @@ HeadingTextEdit::HeadingTextEdit(QWidget *parent) : QWidget(parent)
     }
     pages_->addWidget(source_); pages_->addWidget(preview_); layout->addWidget(pages_, 1);
     setMinimumHeight(170); setContentLabel(QStringLiteral("正文"));
-    connect(preview_, &MarkdownEdit::mathStatusChanged, mathStatus_, &QLabel::setText);
-    connect(preview_, &MarkdownEdit::sourceModeRequested, this, [this] { setSourceMode(true); });
-    connect(sourceMode_, &QToolButton::toggled, this, [this] { updatePage(); });
+    connect(preview_, &MarkdownEdit::mathStatusChanged, this, [this](const QString &status) {
+        mathStatus_->setText(status); mathStatus_->setVisible(!status.isEmpty());
+    });
+    connect(preview_, &MarkdownEdit::sourceModeRequested, this, [this] {
+        setSourceMode(true); source_->setFocus();
+    });
+    source_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(source_, &QWidget::customContextMenuRequested, this, [this](const QPoint &point) {
+        std::unique_ptr<QMenu> menu(source_->createStandardContextMenu());
+        menu->addSeparator();
+        auto *live = menu->addAction(QStringLiteral("返回即时编辑"));
+        if (menu->exec(source_->viewport()->mapToGlobal(point)) == live) {
+            setSourceMode(false); preview_->setFocus();
+        }
+    });
     connect(tabs_, &QTabBar::currentChanged, this, [this] {
         updatePage(); emit previewModeChanged(isPreviewMode());
     });
@@ -76,8 +85,8 @@ void HeadingTextEdit::setPlaceholderText(const QString &text) { source_->setPlac
 void HeadingTextEdit::clear() { setPlainText({}); setPreviewMode(false); }
 void HeadingTextEdit::setPreviewMode(bool preview) { tabs_->setCurrentIndex(preview ? PreviewTab : EditTab); }
 bool HeadingTextEdit::isPreviewMode() const { return tabs_->currentIndex() == PreviewTab; }
-void HeadingTextEdit::setSourceMode(bool source) { sourceMode_->setChecked(source); }
-bool HeadingTextEdit::isSourceMode() const { return sourceMode_->isChecked() && !isPreviewMode(); }
+void HeadingTextEdit::setSourceMode(bool source) { if (sourceMode_ == source) return; sourceMode_ = source; updatePage(); }
+bool HeadingTextEdit::isSourceMode() const { return sourceMode_ && !isPreviewMode(); }
 void HeadingTextEdit::setModeControlsVisible(bool visible) { tabs_->setVisible(visible); setMinimumHeight(visible ? 170 : 80); }
 void HeadingTextEdit::setContentLabel(const QString &label)
 {
@@ -88,7 +97,6 @@ void HeadingTextEdit::setContentLabel(const QString &label)
 
 void HeadingTextEdit::updatePage()
 {
-    sourceMode_->setVisible(!isPreviewMode());
     if (isSourceMode() && pages_->currentWidget() == preview_) {
         preview_->refresh();
         const auto view = preview_->textCursor();

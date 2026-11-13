@@ -403,7 +403,7 @@ void MarkdownEdit::contextMenuEvent(QContextMenuEvent *event)
             menu.addAction(QStringLiteral("在右侧插入列"), this, [this] { tableOperation(2); });
             menu.addAction(QStringLiteral("删除当前列"), this, [this] { tableOperation(3); })->setEnabled(blocks_[currentTable()].rows[0].size() > 1);
         }
-        menu.addSeparator(); menu.addAction(QStringLiteral("编辑 Markdown 源码"), this, &MarkdownEdit::sourceModeRequested);
+        menu.addSeparator(); menu.addAction(QStringLiteral("编辑整篇 Markdown 源码"), this, &MarkdownEdit::sourceModeRequested);
     }
     menu.exec(event->globalPos());
 }

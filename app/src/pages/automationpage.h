@@ -122,8 +122,6 @@ private:
     bool importInFlight_ = false;
 
     QTreeWidget *tree_ = nullptr;
-    QPushButton *renameGroupButton_ = nullptr;
-    QPushButton *deleteGroupButton_ = nullptr;
     QLabel *groupHint_ = nullptr;
 
     QStackedWidget *detailsStack_ = nullptr;

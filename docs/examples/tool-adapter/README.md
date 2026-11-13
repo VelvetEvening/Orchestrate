@@ -11,7 +11,7 @@ python -u adapter.py fail
 
 第一条命令应退出 0，状态为 `success`；第二条应退出 1，状态为 `failure`。失败也是验收的一部分。从其他工作目录通过绝对路径运行脚本，状态仍写在脚本旁的 `state` 目录。
 
-- Windows：先确认 `python --version` 可用，再通过“注册本地工具”选择 `orchestrate-tool.json`。正式工具建议把两条命令的 `executable` 改成实际 Python/虚拟环境解释器的绝对路径，避免桌面进程 PATH 与终端不同。
+- Windows：先确认 `python --version` 可用，再通过“注册工具 → 本地工具”选择 `orchestrate-tool.json`。正式工具建议把两条命令的 `executable` 改成实际 Python/虚拟环境解释器的绝对路径，避免桌面进程 PATH 与终端不同。
 - SSH：将脚本和 `orchestrate-tool.ssh.json` 上传到服务器，修改 `working_directory` 为真实部署路径（如果需要，也修改 `executable`），通过“注册服务器工具”输入 SSH 别名及声明的绝对路径。客户端不会自动上传文件。
 - 只读监测：先在外部执行一次脚本，再导入 `orchestrate-tool.monitor.json`；手动刷新只读取已有文件，不执行脚本。
 

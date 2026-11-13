@@ -243,34 +243,19 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     auto *newGroupButton = new QPushButton(QStringLiteral("新建工具组"), this);
     UiTheme::setRole(newGroupButton, "quiet");
     toolbar->addWidget(newGroupButton);
-    renameGroupButton_ = new QPushButton(QStringLiteral("重命名"), this);
-    renameGroupButton_->setAccessibleName(QStringLiteral("重命名工具组"));
-    renameGroupButton_->setToolTip(QStringLiteral("重命名工具组"));
-    UiTheme::setRole(renameGroupButton_, "quiet");
-    renameGroupButton_->setEnabled(false);
-    toolbar->addWidget(renameGroupButton_);
-    deleteGroupButton_ = new QPushButton(QStringLiteral("删除"), this);
-    deleteGroupButton_->setAccessibleName(QStringLiteral("删除工具组"));
-    deleteGroupButton_->setToolTip(QStringLiteral("删除工具组"));
-    UiTheme::setRole(deleteGroupButton_, "danger");
-    deleteGroupButton_->setEnabled(false);
-    toolbar->addWidget(deleteGroupButton_);
-    auto *registration = new QHBoxLayout;
-    registration->setSpacing(8);
-    auto *importRemoteButton = new QPushButton(QStringLiteral("注册远程工具"), this);
-    importRemoteButton->setObjectName(QStringLiteral("importRemoteTool"));
-    UiTheme::setRole(importRemoteButton, "quiet");
-    importRemoteButton->setToolTip(QStringLiteral("选择 WSL 本地 Linux 环境或 SSH 服务器，注册其中的工具。"));
-    auto *remoteMenu = new QMenu(importRemoteButton);
-    auto *importWslAction = remoteMenu->addAction(QStringLiteral("WSL 工具…"));
+    auto *importButton = new QPushButton(QStringLiteral("注册工具"), this);
+    importButton->setObjectName(QStringLiteral("registerTool"));
+    UiTheme::setRole(importButton, "primary");
+    importButton->setToolTip(QStringLiteral("注册本地、WSL 或 SSH 服务器中的工具。"));
+    auto *registrationMenu = new QMenu(importButton);
+    auto *importLocalAction = registrationMenu->addAction(QStringLiteral("本地工具…"));
+    importLocalAction->setObjectName(QStringLiteral("importLocalAction"));
+    auto *importWslAction = registrationMenu->addAction(QStringLiteral("WSL 工具…"));
     importWslAction->setObjectName(QStringLiteral("importWslAction"));
-    auto *importSshAction = remoteMenu->addAction(QStringLiteral("SSH 服务器工具…"));
+    auto *importSshAction = registrationMenu->addAction(QStringLiteral("SSH 服务器工具…"));
     importSshAction->setObjectName(QStringLiteral("importSshAction"));
-    importRemoteButton->setMenu(remoteMenu);
-    registration->addWidget(importRemoteButton);
-    auto *importButton = new QPushButton(QStringLiteral("注册本地工具"), this);
-    importButton->setObjectName(QStringLiteral("primaryButton"));
-    registration->addWidget(importButton);
+    importButton->setMenu(registrationMenu);
+    toolbar->addWidget(importButton);
 
     auto *splitter = new QSplitter(Qt::Horizontal, this);
     splitter->setChildrenCollapsible(false);
@@ -334,7 +319,6 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     tree_->setToolTip(QStringLiteral("拖入工具组归类；拖动或 Ctrl+↑/↓ 调整同层顺序。"));
     treeLayout->addWidget(tree_, 1);
     treeLayout->addLayout(toolbar);
-    treeLayout->addLayout(registration);
 
     // ---- Right: empty state or tool details ----
     detailsStack_ = new QStackedWidget(splitter);
@@ -491,9 +475,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     layout->addWidget(splitter, 1);
 
     connect(newGroupButton, &QPushButton::clicked, this, &AutomationPage::createGroup);
-    connect(renameGroupButton_, &QPushButton::clicked, this, &AutomationPage::renameGroup);
-    connect(deleteGroupButton_, &QPushButton::clicked, this, &AutomationPage::deleteGroup);
-    connect(importButton, &QPushButton::clicked, this, &AutomationPage::importTool);
+    connect(importLocalAction, &QAction::triggered, this, &AutomationPage::importTool);
     connect(importWslAction, &QAction::triggered, this, &AutomationPage::importWslTool);
     connect(importSshAction, &QAction::triggered, this, &AutomationPage::importRemoteTool);
     connect(tree_, &QTreeWidget::itemSelectionChanged, this, &AutomationPage::handleTreeSelection);
@@ -770,21 +752,15 @@ void AutomationPage::handleTreeSelection()
     QTreeWidgetItem *item = tree_->currentItem();
     if (item == nullptr || !item->isSelected()) {
         selectedGroupId_ = 0;
-        renameGroupButton_->setEnabled(false);
-        deleteGroupButton_->setEnabled(false);
         showEmptyDetails();
         return;
     }
     const int itemType = item->data(0, Qt::UserRole + 1).toInt();
     if (itemType == kGroupItem) {
         selectedGroupId_ = item->data(0, Qt::UserRole).toInt();
-        renameGroupButton_->setEnabled(true);
-        deleteGroupButton_->setEnabled(selectedGroupId_ > 0);
         showEmptyDetails(selectedGroupId_);
     } else if (itemType == kToolItem) {
         selectedGroupId_ = item->parent() ? item->parent()->data(0, Qt::UserRole).toInt() : 0;
-        renameGroupButton_->setEnabled(false);
-        deleteGroupButton_->setEnabled(false);
         const int toolId = item->data(0, Qt::UserRole).toInt();
         if (toolId != selectedToolId_ || detailsStack_->currentIndex() != 1) {
             loadToolDetails(toolId);
@@ -897,7 +873,7 @@ void AutomationPage::showEmptyDetails(int groupId)
     if (groupId < 0) {
         emptyTitle_->setText(QStringLiteral("选择一个工具"));
         emptyMessage_->setText(QStringLiteral("在左侧选择工具后，这里会显示它的当前状态和可运行的命令。\n"
-                                              "还没有工具时，点击右上角“注册本地工具”选择 orchestrate-tool.json。"));
+                                              "还没有工具时，点击左下方“注册工具”选择工具所在环境。"));
         return;
     }
     QTreeWidgetItem *item = tree_->currentItem();
@@ -905,7 +881,7 @@ void AutomationPage::showEmptyDetails(int groupId)
     emptyTitle_->setText(item != nullptr ? item->text(0) : ungroupedName());
     emptyMessage_->setText(count > 0
                                ? QStringLiteral("该组有 %1 个工具，在左侧选择一个工具查看详情。").arg(count)
-                               : QStringLiteral("该组还没有工具。选中它后注册本地工具，新工具会直接放入这个组。"));
+                               : QStringLiteral("该组还没有工具。选中它后点击“注册工具”，新工具会直接放入这个组。"));
 }
 
 void AutomationPage::loadToolDetails(int toolId)
