@@ -130,10 +130,25 @@ void HeadingTextEdit::zoomText(qreal steps)
 void HeadingTextEdit::setTextPointSize(qreal size)
 {
     if (!qIsFinite(size)) return;
-    auto font = source_->font(); size = qBound(6.0, size, 72.0);
-    if (qFuzzyCompare(font.pointSizeF(), size)) return;
-    font.setPointSizeF(size); source_->setFont(font); preview_->setBaseFont(font);
-    emit textPointSizeChanged(size);
+    size = qBound(6.0, size, 72.0);
+    const qreal previous = textPointSize_ > 0 ? textPointSize_ : source_->font().pointSizeF();
+    textPointSize_ = size;
+    applyTextPointSize();
+    if (!qFuzzyCompare(previous, size)) emit textPointSizeChanged(size);
+}
+void HeadingTextEdit::applyTextPointSize()
+{
+    auto font = source_->font();
+    font.setPointSizeF(textPointSize_);
+    source_->setFont(font);
+    preview_->setBaseFont(font);
+}
+void HeadingTextEdit::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    // Qt style repolishing on reparent can restore the inherited UI font.
+    // Restore the chosen content size without persisting a new zoom preference.
+    if (textPointSize_ > 0) applyTextPointSize();
 }
 
 QString HeadingTextEdit::getText(QWidget *parent, const QString &title, const QString &initial, bool *accepted, bool previewFirst)

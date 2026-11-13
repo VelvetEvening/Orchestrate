@@ -38,14 +38,17 @@ signals:
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private:
     void updatePage();
     void zoomText(qreal steps);
+    void applyTextPointSize();
     QTabBar *tabs_;
     QStackedWidget *pages_;
     QPlainTextEdit *source_;
     MarkdownEdit *preview_;
     bool sourceMode_ = false;
+    qreal textPointSize_ = 0;
     QLabel *mathStatus_;
 };

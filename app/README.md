@@ -2,7 +2,7 @@
 
 Orchestrate 是基于 C++17、Qt 6 Widgets 和 SQLite 的 Windows 桌面工作台。产品统一使用 Orchestrate 名称。
 
-当前版本为 **v3.5.0 Qt 原生即时编辑**：编辑记录时其他段落的标题、公式和表格持续排版，并保留源码入口。见 [v3.5.0 发布说明](../docs/releases/v3.5.0.md)及[即时编辑开发说明](../docs/development/native-markdown.md)。Git 历史、提交详情、日记集合、日记、提醒、协作记录和剪贴板编辑继续在主窗口中打开，通过返回切换层级；需要并排查看时可独立打开，再收回主窗口。返回和模块切换保留现场与草稿，关闭或退出时处理未保存修改。
+当前开发版本为 **v3.5.5 协作记录直接编辑**：记录打开即可修改，Ctrl+S 保存后继续编辑；标题与摘要／正文切换位于同一行，正文默认 20pt、摘要 24pt。协作记录在返回、切换模块和关闭时询问如何处理未保存修改。见 [v3.5.5 版本说明](../docs/releases/v3.5.5.md)。原有 Qt 原生即时编辑与源码入口沿用，其他内容页的导航行为见[内容导航说明](../docs/development/content-navigation.md)。
 
 v3.1.0 为记录预览加入离线公式排版：支持 `\(…\)`、`\[…\]`、`$…$` 和 `$$…$$`，覆盖分数、上下标、求和、矩阵与中文注释。公式异步生成，编辑与保存保留原文，预览中复制公式仍得到 LaTeX 文本。该版本数据库为 schema v7。完整变化见 [v3.1.0 发布说明](../docs/releases/v3.1.0.md)，写法见 [公式示例](../docs/math-preview.md)。
 
@@ -59,9 +59,9 @@ $env:PATH = "$qtRoot/bin;D:/CodeTools/Qt/Qt/Tools/mingw1310_64/bin;$env:PATH"
 
 ## Windows 便携包
 
-从仓库根目录运行 `./app/package.ps1 -ReleaseTag v3.5.0`。需要已提交且干净的工作树、Qt/MinGW/CMake/Ninja，以及与 Qt 对应的源码目录（用于收集第三方许可说明）；工具安装路径均支持脚本参数覆盖。
+从仓库根目录运行 `./app/package.ps1 -ReleaseTag v3.5.5`。需要已提交且干净的工作树、Qt/MinGW/CMake/Ninja，以及与 Qt 对应的源码目录（用于收集第三方许可说明）；工具安装路径均支持脚本参数覆盖。
 
-脚本先检查输出目录已被 Git 忽略，再从 `git archive HEAD` 解出源码，在 `dist/work-*` 中全新 Release 构建（不包含本地测试）。发布前先在 `app/build-qt` 执行本地回归；发布验证完成后可删除 `dist/work-*` 临时目录，只保留发布产物。仅安装程序、更新器与内置工具，再收集 Qt、MinGW 运行库、SQLite 插件、Windows Schannel TLS 插件及许可说明。最终生成 `dist/Orchestrate-v3.5.0-windows-x64.zip` 和 `.zip.sha256`，以及本机构建记录 `.build.json`。ZIP 内含源码提交信息和逐文件校验清单，用户完整解压即可运行。已有同名 ZIP 时拒绝覆盖；可通过 `-OutputDir` 指定另一个已忽略目录。
+脚本先检查输出目录已被 Git 忽略，再从 `git archive HEAD` 解出源码，在 `dist/work-*` 中全新 Release 构建（不包含本地测试）。发布前先在 `app/build-qt` 执行本地回归；发布验证完成后可删除 `dist/work-*` 临时目录，只保留发布产物。仅安装程序、更新器与内置工具，再收集 Qt、MinGW 运行库、SQLite 插件、Windows Schannel TLS 插件及许可说明。最终生成 `dist/Orchestrate-v3.5.5-windows-x64.zip` 和 `.zip.sha256`，以及本机构建记录 `.build.json`。ZIP 内含源码提交信息和逐文件校验清单，用户完整解压即可运行。已有同名 ZIP 时拒绝覆盖；可通过 `-OutputDir` 指定另一个已忽略目录。
 
 应用运行时版本和 Windows 文件属性版本统一由 CMake 的 `project(... VERSION ...)` 生成。打包会校验版本、必要运行库和个人数据排除，不启动内置工具，不修改现用数据库或开机启动配置；真正无 Qt 的干净 Windows 系统验收仍应在发布前完成。
 

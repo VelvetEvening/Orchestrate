@@ -81,6 +81,11 @@ QString ContentWorkspace::currentKey() const {
         if (!entry->host && entry->frame == stack_->currentWidget()) return entry->key;
     return {};
 }
+bool ContentWorkspace::confirmLeaveCurrent() {
+    const auto entry = entries_.value(currentKey());
+    auto *guard = entry ? dynamic_cast<ContentLeaveGuard *>(entry->page.data()) : nullptr;
+    return !guard || guard->confirmLeave();
+}
 bool ContentWorkspace::activate(const QString &key, QWidget *source) {
     const auto entry = entries_.value(key); if (!entry) return false;
     if (source && !entry->host) {
@@ -111,7 +116,9 @@ void ContentWorkspace::present(const QString &key, QDialog *page, QWidget *sourc
     auto *row = new QHBoxLayout(header); row->setContentsMargins(16,8,16,8); row->setSpacing(10);
     entry->back = new QPushButton(UiTheme::icon(QStringLiteral("chevron-left")), QStringLiteral("返回"), header);
     entry->back->setObjectName(QStringLiteral("contentBack"));
-    entry->back->setToolTip(QStringLiteral("返回并保留当前内容（Alt+←）"));
+    entry->back->setToolTip(dynamic_cast<ContentLeaveGuard *>(page)
+        ? QStringLiteral("返回；有修改时询问是否保存（Alt+←）")
+        : QStringLiteral("返回并保留当前内容（Alt+←）"));
     entry->title = new QLabel(page->windowTitle(), header);
     entry->title->setTextFormat(Qt::PlainText); entry->title->setWordWrap(true);
     entry->title->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
@@ -156,12 +163,16 @@ void ContentWorkspace::showEntry(const EntryPtr &entry) {
     if (entry->focus && entry->focus->isVisible()) entry->focus->setFocus();
     else entry->page->setFocus();
 }
-void ContentWorkspace::returnFrom(const EntryPtr &entry) {
+void ContentWorkspace::returnFrom(const EntryPtr &entry, bool confirmLeave) {
     if (!entry) return;
     if (entry->page && entry->page->isAncestorOf(QApplication::focusWidget())) entry->focus=QApplication::focusWidget();
     const auto parent = entries_.value(entry->parentKey);
     if (entry->host && (!parent || parent->host != entry->host)) {
         attach(entry->host,entry->key); return;
+    }
+    if (confirmLeave) {
+        auto *guard = dynamic_cast<ContentLeaveGuard *>(entry->page.data());
+        if (guard && !guard->confirmLeave()) return;
     }
     if (parent) showEntry(parent); else stack_->setCurrentWidget(root_);
     if (entry->returnFocus && entry->returnFocus->isVisible()) entry->returnFocus->setFocus();
@@ -232,7 +243,7 @@ void ContentWorkspace::updateHeader(const EntryPtr &entry) {
 void ContentWorkspace::detach(const EntryPtr &entry) {
     auto *host=new ContentWindow(this); host->rootKey=entry->key;
     host->requestClose=[this,host]{ closePage(host->rootKey); };
-    returnFrom(entry);
+    returnFrom(entry, false); // Moving the same editor does not leave its content.
     for (const auto &other:entries_) {
         if (other->host || (other!=entry && !descendant(other,entry->key))) continue;
         stack_->removeWidget(other->frame); host->stack->addWidget(other->frame);
@@ -246,6 +257,7 @@ void ContentWorkspace::detach(const EntryPtr &entry) {
 }
 void ContentWorkspace::attach(ContentWindow *host,const QString &selected) {
     if (!host) return;
+    if (!confirmLeaveCurrent()) return;
     for (const auto &entry:entries_) if (entry->host==host) {
         host->stack->removeWidget(entry->frame); stack_->addWidget(entry->frame);
         entry->host=nullptr; updateHeader(entry);

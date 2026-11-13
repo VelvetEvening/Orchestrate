@@ -10,8 +10,15 @@
 class QStackedWidget;
 class ContentWindow;
 
+// Opt in when leaving a page must resolve unsaved changes without closing it.
+class ContentLeaveGuard {
+public:
+    virtual ~ContentLeaveGuard() = default;
+    virtual bool confirmLeave() = 0;
+};
+
 // One content instance moves between the module and an optional native window.
-// Returning hides it; closing goes through the editor's normal reject/save guard.
+// Returning keeps the instance, after any opt-in leave guard has succeeded.
 class ContentWorkspace final : public QWidget {
     Q_OBJECT
 public:
@@ -24,6 +31,7 @@ public:
     bool closePage(const QString &key);
     bool closePrefix(const QString &prefix);
     bool closeAll();
+    bool confirmLeaveCurrent();
     void back();
     QString currentKey() const;
     QDialog *content(const QString &key) const;
@@ -36,7 +44,7 @@ private:
     using EntryPtr = std::shared_ptr<Entry>;
     EntryPtr entryFor(QWidget *source) const;
     void showEntry(const EntryPtr &entry);
-    void returnFrom(const EntryPtr &entry);
+    void returnFrom(const EntryPtr &entry, bool confirmLeave = true);
     void remove(const EntryPtr &entry);
     void detach(const EntryPtr &entry);
     void attach(ContentWindow *host, const QString &selected);

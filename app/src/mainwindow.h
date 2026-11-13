@@ -40,7 +40,7 @@ private:
     void buildNavigation(QWidget *parent);
     void buildPages();
     void buildTray();
-    void switchToPage(int index);
+    void switchToPage(int index, bool confirmLeave = true);
     void toggleSidebar();
     void quitApplication();
     void installUpdate();

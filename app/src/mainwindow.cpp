@@ -248,7 +248,7 @@ void MainWindow::buildTray()
     }
 }
 
-void MainWindow::switchToPage(int index)
+void MainWindow::switchToPage(int index, bool confirmLeave)
 {
     if (!pageStack_) {
         return;
@@ -258,7 +258,7 @@ void MainWindow::switchToPage(int index)
         const auto addWorkspace = [this](QWidget *root, int index) {
             auto *workspace = new ContentWorkspace(root, pageStack_);
             pageStack_->addWidget(workspace);
-            connect(workspace, &ContentWorkspace::activationRequested, this, [this,index] { switchToPage(index); });
+            connect(workspace, &ContentWorkspace::activationRequested, this, [this,index] { switchToPage(index, false); });
         };
         auto *calendarPage = new CalendarPage(&database_, trayIcon_, pageStack_);
         addWorkspace(calendarPage,0);
@@ -370,6 +370,14 @@ void MainWindow::switchToPage(int index)
         return;
     }
 
+    if (confirmLeave && index != pageStack_->currentIndex()) {
+        auto *workspace = qobject_cast<ContentWorkspace *>(pageStack_->currentWidget());
+        if (workspace && !workspace->confirmLeaveCurrent()) {
+            for (int i = 0; i < navigationButtons_.size(); ++i)
+                navigationButtons_.at(i)->setChecked(i == pageStack_->currentIndex());
+            return;
+        }
+    }
     pageStack_->setCurrentIndex(index);
     if (index == 4) refreshAutoStartSettings();
     for (int i = 0; i < navigationButtons_.size(); ++i) {
@@ -508,10 +516,10 @@ bool MainWindow::savePendingChanges()
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     if (closeToTray_ && trayIcon_ && trayIcon_->isVisible() && !allowQuit_) {
-        hide();
         event->ignore();
-        // Closing to the tray is always silent; scheduled reminder alerts are
-        // independent and remain enabled.
+        auto *workspace = qobject_cast<ContentWorkspace *>(pageStack_->currentWidget());
+        if (workspace && !workspace->confirmLeaveCurrent()) return;
+        hide();
         return;
     }
 
