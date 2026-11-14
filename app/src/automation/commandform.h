@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QFileDialog>
+
 #include "commandparameters.h"
 #include "toolstate.h"
 #include "../data/appdatabase.h"
@@ -14,6 +16,8 @@
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QDoubleSpinBox>
+#include <QProcess>
 #include <QTimeEdit>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -26,9 +30,12 @@ class CommandForm final : public QDialog
 public:
     using StateCallback = std::function<void(bool, const QJsonObject &, const QString &)>;
     using StateReader = std::function<void(QObject *, StateCallback)>;
+    using OptionsCallback = std::function<void(bool, const QList<CommandParameters::Option> &, const QString &)>;
+    using OptionsReader = std::function<void(QObject *, const QJsonObject &, const QHash<QString, QString> &, OptionsCallback)>;
+    using OptionsEditor = std::function<bool(const QString &,QJsonObject *,const QHash<QString,QString> &,QWidget *)>;
 
-    CommandForm(const AppDatabase::ToolCommand &command, StateReader reader, QWidget *parent = nullptr)
-        : QDialog(parent), reader_(std::move(reader))
+    CommandForm(const AppDatabase::ToolCommand &command, StateReader reader, QWidget *parent = nullptr, bool localPaths = true, OptionsReader optionsReader = {}, OptionsEditor optionsEditor = {})
+        : QDialog(parent), reader_(std::move(reader)), optionsReader_(std::move(optionsReader)),optionsEditor_(std::move(optionsEditor))
     {
         setObjectName(QStringLiteral("commandParametersDialog"));
         setWindowTitle(command.name);
@@ -72,6 +79,7 @@ public:
             input.label = input.definition.value(QStringLiteral("label")).toString(input.key);
             input.required = input.definition.value(QStringLiteral("required")).toBool();
             input.dynamic = input.definition.contains(QStringLiteral("options_state_key"));
+            input.source = input.definition.value("options_source").toObject();
             needsState_ |= input.dynamic || input.definition.contains(QStringLiteral("state_key"));
             const auto initial = input.definition.value(QStringLiteral("default"));
             if (input.type == QStringLiteral("readonly")) {
@@ -80,7 +88,13 @@ public:
                 input.widget = label;
                 context->addRow(fieldLabel(input.label), label);
             } else {
-                if (input.type == QStringLiteral("integer")) {
+                if (input.type == QStringLiteral("number")) {
+                    auto *spin = new QDoubleSpinBox(content); spin->setDecimals(6);
+                    spin->setRange(input.definition.value("min").toDouble(0), input.definition.value("max").toDouble(1000000));
+                    spin->setSingleStep(input.definition.value("step").toDouble(1));
+                    const auto unit = input.definition.value("unit").toString(); if (!unit.isEmpty()) spin->setSuffix(" " + unit);
+                    input.widget = spin;
+                } else if (input.type == QStringLiteral("integer")) {
                     auto *spin = new QSpinBox(content);
                     spin->setRange(input.definition.value(QStringLiteral("min")).toInt(0),
                                    input.definition.value(QStringLiteral("max")).toInt(1000000));
@@ -103,7 +117,7 @@ public:
                     input.widget = combo;
                     input.hint = textLabel({}, QStringLiteral("choiceHint_") + input.key);
                     input.hint->setProperty("formHint", true);
-                    if (!input.dynamic) {
+                    if (!input.dynamic && input.source.isEmpty()) {
                         CommandParameters::readOptions(input.definition.value(QStringLiteral("options")),
                             false, &input.options, &input.optionsError);
                         populateChoice(input, CommandParameters::scalarText(initial),
@@ -121,10 +135,38 @@ public:
                 auto *column = new QVBoxLayout(field);
                 column->setContentsMargins(0, 0, 0, 0);
                 column->setSpacing(4);
-                column->addWidget(input.widget);
+                if (input.type == QStringLiteral("file") || input.type == QStringLiteral("directory")) {
+                    auto *pathRow = new QHBoxLayout;
+                    pathRow->addWidget(input.widget, 1);
+                    auto *edit = qobject_cast<QLineEdit *>(input.widget);
+                    if (localPaths) {
+                        auto *browse = new QPushButton(QStringLiteral("选择…"), field);
+                        browse->setAutoDefault(false);
+                        pathRow->addWidget(browse);
+                        connect(browse, &QPushButton::clicked, this, [this, edit, directory = input.type == QStringLiteral("directory")] {
+                            const QString path = directory ? QFileDialog::getExistingDirectory(this, QStringLiteral("选择目录"), edit->text())
+                                : QFileDialog::getOpenFileName(this, QStringLiteral("选择文件"), edit->text());
+                            if (!path.isEmpty()) { edit->setText(path); emit edit->textEdited(path); }
+                        });
+                    } else edit->setPlaceholderText(QStringLiteral("填写目标环境中的路径"));
+                    column->addLayout(pathRow);
+                } else column->addWidget(input.widget);
                 const QString help = input.definition.value(QStringLiteral("description")).toString();
                 if (!help.isEmpty()) column->addWidget(textLabel(help, QStringLiteral("fieldHelp")));
                 if (input.hint) column->addWidget(input.hint);
+                if (!input.source.isEmpty()) {
+                    auto *refresh = new QPushButton(QStringLiteral("刷新选项"), field); refresh->setAutoDefault(false);
+                    auto *actions=new QHBoxLayout;actions->addStretch();column->addLayout(actions);
+                    if(optionsEditor_){
+                        auto *configure=new QPushButton(QStringLiteral("设置下拉"),field);configure->setAutoDefault(false);configure->setObjectName("configure_options_"+input.key);actions->addWidget(configure);
+                        connect(configure,&QPushButton::clicked,this,[this,key=input.key]{
+                            for(auto &field:inputs_)if(field.key==key){auto source=field.source;
+                                if(optionsEditor_(key,&source,values(),this)){field.source=source;field.definition["options_source"]=source;invalidateSources(key,true);}break;}
+                        });
+                    }
+                    actions->addWidget(refresh);
+                    connect(refresh, &QPushButton::clicked, this, [this, key = input.key] { invalidateSources(key, true); });
+                }
                 form->addRow(fieldLabel(input.label + (input.required ? QStringLiteral(" *") : QString())), field);
             }
             inputs_.append(input);
@@ -185,9 +227,11 @@ public:
                     updateChoiceHint(field, {});
                 }
                 error_->hide();
+                invalidateSources(field.key);
             };
             if (auto *edit = qobject_cast<QLineEdit *>(input.widget)) connect(edit, &QLineEdit::textEdited, this, edited);
             else if (auto *spin = qobject_cast<QSpinBox *>(input.widget)) connect(spin, &QSpinBox::valueChanged, this, edited);
+            else if (auto *spin = qobject_cast<QDoubleSpinBox *>(input.widget)) connect(spin, &QDoubleSpinBox::valueChanged, this, edited);
             else if (auto *time = qobject_cast<QTimeEdit *>(input.widget)) connect(time, &QTimeEdit::timeChanged, this, edited);
             else if (auto *check = qobject_cast<QCheckBox *>(input.widget)) connect(check, &QCheckBox::toggled, this, edited);
             else if (auto *combo = qobject_cast<QComboBox *>(input.widget)) connect(combo, &QComboBox::currentIndexChanged, this, edited);
@@ -195,6 +239,9 @@ public:
         updateRunState();
         resize(520, qMin(700, sizeHint().height()));
         if (needsState_) QTimer::singleShot(0, this, [this] { refreshState(); });
+        sourceTimer_ = new QTimer(this); sourceTimer_->setSingleShot(true); sourceTimer_->setInterval(200);
+        connect(sourceTimer_, &QTimer::timeout, this, [this] { refreshSources(); });
+        sourceTimer_->start(0);
     }
 
     QHash<QString, QString> values() const
@@ -204,6 +251,7 @@ public:
             if (input.type == QStringLiteral("readonly")) continue;
             QString value;
             if (auto *spin = qobject_cast<QSpinBox *>(input.widget)) value = QString::number(spin->value());
+            else if (auto *spin = qobject_cast<QDoubleSpinBox *>(input.widget)) value = QString::number(spin->value(), 'g', 15);
             else if (auto *time = qobject_cast<QTimeEdit *>(input.widget)) value = time->time().toString(QStringLiteral("HH:mm"));
             else if (auto *combo = qobject_cast<QComboBox *>(input.widget)) value = combo->currentData().toString();
             else if (auto *check = qobject_cast<QCheckBox *>(input.widget)) value = check->isChecked()
@@ -223,6 +271,10 @@ private:
         QLabel *hint = nullptr;
         QList<CommandParameters::Option> options;
         bool required = false, dynamic = false, edited = false, optionsLoaded = false, stateDefaultApplied = false;
+        QJsonObject source;
+        QPointer<QObject> sourceRequest;
+        bool sourceReady = false, sourceLoading = false;
+        quint64 generation = 0;
     };
 
     QLabel *textLabel(const QString &text, const QString &name)
@@ -247,6 +299,8 @@ private:
             bool ok = false;
             const int number = text.toInt(&ok);
             spin->setValue(ok ? number : spin->minimum());
+        } else if (auto *spin = qobject_cast<QDoubleSpinBox *>(input.widget)) {
+            bool ok = false; const double number = text.toDouble(&ok); spin->setValue(ok ? number : spin->minimum());
         } else if (auto *time = qobject_cast<QTimeEdit *>(input.widget)) {
             QTime parsed = QTime::fromString(text, QStringLiteral("HH:mm"));
             if (!parsed.isValid()) parsed = QTime::fromString(text, QStringLiteral("H:mm"));
@@ -272,7 +326,7 @@ private:
         auto *combo = qobject_cast<QComboBox *>(input.widget);
         const QSignalBlocker blocker(combo);
         combo->clear();
-        if (input.dynamic && !input.required && !input.options.isEmpty())
+        if ((input.dynamic || !input.source.isEmpty()) && !input.required && !input.options.isEmpty())
             combo->addItem(QStringLiteral("不选择"), QString());
         for (const auto &option : input.options) {
             combo->addItem(option.label, option.value);
@@ -314,6 +368,7 @@ private:
 
     void applyState(bool success, const QJsonObject &state, const QString &error)
     {
+        const auto oldValues = values();
         loading_ = false;
         refresh_->setEnabled(true);
         const bool expired = success && ToolState::expired(state);
@@ -372,24 +427,38 @@ private:
             : QStringLiteral("已读取工具状态。"));
         refresh_->setText(invalidOptions ? QStringLiteral("重试") : QStringLiteral("刷新状态"));
         updateRunState();
+        const auto newValues = values();
+        for (auto it = newValues.begin(); it != newValues.end(); ++it) if (oldValues.value(it.key()) != it.value()) invalidateSources(it.key());
+        if (sourceTimer_) sourceTimer_->start(0);
     }
 
     void updateRunState()
     {
         bool ready = !needsState_ || (stateReady_ && !loading_);
         for (const auto &input : inputs_) if (input.type == QStringLiteral("choice"))
-            ready &= input.optionsError.isEmpty() && (!input.required || !input.options.isEmpty());
+            ready &= input.optionsError.isEmpty() && (!input.required || !input.options.isEmpty())
+                && (input.source.isEmpty() || (input.sourceReady && !input.sourceLoading));
         run_->setEnabled(ready);
     }
 
     void validateAndAccept()
     {
+        updateRunState(); if (!run_->isEnabled()) return;
         if (needsState_ && (!stateReady_ || loading_)) return;
         if (needsState_ && ToolState::expired(snapshot_)) {
             applyState(false, {}, QStringLiteral("状态已过期，请刷新后再运行。"));
             return;
         }
         const auto current = values();
+        QHash<QString,int> groupCounts;QHash<QString,QStringList> groupLabels;QSet<QString> requiredGroups;
+        for (const auto &input : inputs_) {
+            const auto group=input.definition.value("exclusive_group").toString();if(group.isEmpty())continue;
+            groupLabels[group]<<input.label;groupCounts[group]+=current.value(input.key).isEmpty()?0:1;
+            if(input.definition.value("exclusive_required").toBool())requiredGroups.insert(group);
+        }
+        for(auto it=groupLabels.begin();it!=groupLabels.end();++it)if(groupCounts.value(it.key())>1||(requiredGroups.contains(it.key())&&groupCounts.value(it.key())!=1)) {
+            error_->setText(QStringLiteral("%1：%2。").arg(requiredGroups.contains(it.key())?QStringLiteral("请选择并填写其中一项"):QStringLiteral("只能填写其中一项"),it.value().join(QStringLiteral("、"))));error_->show();return;
+        }
         for (auto &input : inputs_) {
             QString problem;
             if (input.type == QStringLiteral("readonly")) continue;
@@ -413,7 +482,69 @@ private:
         accept();
     }
 
+    void invalidateSources(const QString &key, bool includeSelf = false)
+    {
+        QSet<QString> changed {key};
+        bool more = true;
+        while (more) { more = false; for (const auto &input : inputs_) {
+            if (changed.contains(input.key)) continue;
+            for (const auto &dependency : CommandParameters::sourceDependencies(input.source)) if (changed.contains(dependency)) {
+                changed.insert(input.key); more = true; break;
+            }
+        } }
+        for (auto &input : inputs_) {
+            if (input.source.isEmpty() || !changed.contains(input.key) || (input.key == key && !includeSelf)) continue;
+            ++input.generation; input.sourceLoading = false; input.sourceReady = false; input.optionsError.clear();
+            if (input.sourceRequest) {
+                for (auto *process : input.sourceRequest->findChildren<QProcess *>()) process->kill();
+                input.sourceRequest->deleteLater(); input.sourceRequest = nullptr;
+            }
+            auto *combo = qobject_cast<QComboBox *>(input.widget); const QSignalBlocker blocker(combo);
+            if (includeSelf && input.key == key) input.selection = combo->currentData().toString();
+            else input.selection.clear();
+            input.options.clear(); combo->clear(); combo->setEnabled(false);
+            updateChoiceHint(input, QStringLiteral("等待选择上级参数或读取选项…"));
+        }
+        if (sourceTimer_) sourceTimer_->start(); updateRunState();
+    }
+
+    void refreshSources()
+    {
+        if (needsState_ && (!stateReady_ || loading_)) return;
+        const auto current = values();
+        for (qsizetype i = 0; i < inputs_.size(); ++i) {
+            auto &input = inputs_[i];
+            if (input.source.isEmpty() || input.sourceReady || input.sourceLoading || !input.optionsError.isEmpty()) continue;
+            const auto dependencies = CommandParameters::sourceDependencies(input.source);
+            bool ready = true; for (const auto &key : dependencies) ready &= !current.value(key).isEmpty();
+            if (!ready) { updateChoiceHint(input, QStringLiteral("请先填写：%1").arg(dependencies.join(QStringLiteral("、")))); continue; }
+            input.sourceLoading = true; input.widget->setEnabled(false);
+            updateChoiceHint(input, QStringLiteral("正在读取选项…"));
+            const quint64 generation = ++input.generation;
+            auto *context = new QObject(this); input.sourceRequest = context;
+            const QPointer<CommandForm> guard(this);
+            auto callback = [guard, context = QPointer<QObject>(context), i, generation](bool ok, const QList<CommandParameters::Option> &options, const QString &error) {
+                if (context) context->deleteLater();
+                if (!guard || !context || guard->inputs_[i].generation != generation) return;
+                auto &field = guard->inputs_[i]; field.sourceRequest = nullptr; field.sourceLoading = false; field.sourceReady = ok;
+                field.options = options; field.optionsError = ok ? QString() : error.isEmpty() ? QStringLiteral("读取失败，请重试。") : error;
+                if (ok) {
+                    const QString desired = field.optionsLoaded ? field.selection : CommandParameters::scalarText(field.definition.value("default"));
+                    populateChoice(field, desired);
+                    guard->invalidateSources(field.key);
+                } else updateChoiceHint(field, error.isEmpty() ? QStringLiteral("读取失败，点击刷新选项重试。") : error);
+                guard->updateRunState(); guard->sourceTimer_->start(0);
+            };
+            if (optionsReader_) optionsReader_(context, input.source, current, callback);
+            else callback(false, {}, QStringLiteral("选项查询通道不可用。"));
+        }
+        updateRunState();
+    }
+
     StateReader reader_;
+    OptionsReader optionsReader_;
+    OptionsEditor optionsEditor_;
+    QTimer *sourceTimer_ = nullptr;
     QList<Input> inputs_;
     QJsonObject snapshot_;
     QLabel *stateStatus_ = nullptr;

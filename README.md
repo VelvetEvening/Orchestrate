@@ -2,12 +2,16 @@
 
 Windows 桌面工作台：时序记录、项目记录、自动化工具和剪贴板。使用 C++17、Qt Widgets 和 SQLite，数据随程序便携保存。
 
+v3.6.0 通过目录或 JSON 配置接入本地 Windows、WSL 和 SSH 工具，支持命令发现、参数编辑和动态下拉联动，详见[版本说明](docs/releases/v3.6.0.md)和[可配置工具说明](docs/development/configurable-tools.md)。
+
 ## 文档入口
 
 - [客户端构建、运行与数据说明](app/README.md)
-- **[工具接入与适配指南](docs/automation-tool-contract-v1.md)**：给准备接入的工具作者和开发代理，包含字段表、路径、参数、状态、SSH、验收及排错。
+- **[工具接入与适配指南](docs/automation-tool-contract-v1.md)**：统一 v1 最小 JSON 模板、字段、动态下拉、运行环境和验收。
+- [每个工具的 README 清单](docs/automation-tool-contract-v1.md#13-每个工具-readme-应写什么)：入口、依赖、参数、查询关联、完整值和输出示例，以及现有 v1 声明写法。
 - [可运行的最小适配样例](docs/examples/tool-adapter/README.md)：本地、SSH 和只读监测三种声明。
 - [项目术语](CONTEXT.md)
+- [v3.6.0 可配置工具与命令](docs/releases/v3.6.0.md)
 - [v3.5.6 统一内容编辑](docs/releases/v3.5.6.md)
 - [v3.5.5 协作记录直接编辑](docs/releases/v3.5.5.md)
 - [v3.5.0 Qt 原生即时编辑开发说明](docs/development/native-markdown.md)

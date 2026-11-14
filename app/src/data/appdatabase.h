@@ -3,6 +3,7 @@
 #include <QDate>
 #include <QDateTime>
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -113,6 +114,9 @@ public:
                 && wslDistribution == other.wslDistribution && wslUser == other.wslUser;
         }
         QString workingDirectory;
+        QJsonObject environment;
+        // A user-owned snapshot survives bundled manifest synchronization.
+        bool customized = false;
         // Legacy preferences retained for database compatibility; no longer scheduled.
         bool refreshEnabled = false;
         QString refreshMode = QStringLiteral("interval");
@@ -135,6 +139,7 @@ public:
         QJsonArray parameters;
         bool interactive = false;
         bool highRisk = false;
+        bool enabled = true;
     };
 
     AppDatabase() = default;

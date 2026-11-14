@@ -6,6 +6,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QPointer>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <cstdio>
 #ifdef Q_OS_WIN
 #include <fcntl.h>
@@ -57,6 +60,39 @@ inline int runHelper(const QStringList &arguments, bool allowDirectoryOpen = tru
                 if (bytes.size() > maxBytes) error = QStringLiteral("文件超过 1 MiB 上限。");
                 else if (file.error() != QFileDevice::NoError) error = file.errorString();
             }
+        }
+    } else if (operation == QStringLiteral("describe-tool")) {
+        const QDir directory(path);
+        if (!directory.exists()) error = QStringLiteral("工具目录不存在或无法访问。");
+        else {
+            QJsonArray files; QJsonArray documents; QJsonObject defaults; QString manifest;
+            for (const auto &candidate : {QStringLiteral(".venv/Scripts/python.exe"), QStringLiteral("venv/Scripts/python.exe")})
+                if (QFileInfo(directory.filePath(candidate)).isFile()) files.append(candidate);
+            const auto entries = directory.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks, QDir::Name);
+            for (const auto &entry : entries.mid(0, 300)) {
+                if (entry.isDir()) {
+                    if (!entry.fileName().startsWith('.') && QFileInfo(QDir(entry.filePath()).filePath("__main__.py")).isFile()) files.append(entry.fileName()+"/__main__.py");
+                    continue;
+                }
+                files.append(entry.fileName());
+                const auto name = entry.fileName();
+                if (name == "orchestrate-tool.json") {
+                    QFile input(entry.filePath());
+                    if (!input.open(QIODevice::ReadOnly)) { error = input.errorString(); break; }
+                    if (entry.size() > maxBytes) { error = QStringLiteral("接入声明超过 1 MiB。"); break; }
+                    manifest = QString::fromUtf8(input.read(maxBytes + 1));
+                } else if (name.compare("settings.json",Qt::CaseInsensitive)==0 && entry.size() <= 65536) {
+                    QFile input(entry.filePath()); if (input.open(QIODevice::ReadOnly)) {
+                        const auto object = QJsonDocument::fromJson(input.read(65536)).object();
+                        for (auto it=object.begin();it!=object.end();++it) if (it.value().isDouble()||it.value().isBool()) defaults[it.key()]=it.value();
+                    }
+                } else if ((name.startsWith("README",Qt::CaseInsensitive) || name.endsWith(".cmd",Qt::CaseInsensitive)
+                    || name.endsWith(".bat",Qt::CaseInsensitive) || name=="pyproject.toml" || name=="package.json") && entry.size()<=128*1024) {
+                    QFile input(entry.filePath()); if(input.open(QIODevice::ReadOnly)) documents.append(QJsonObject{{"name",name},{"text",QString::fromUtf8(input.read(128*1024))}});
+                }
+            }
+            bytes=QJsonDocument(QJsonObject{{"files",files},{"documents",documents},{"defaults",defaults},{"directory",QFileInfo(path).canonicalFilePath()},{"manifest",manifest}}).toJson(QJsonDocument::Compact);
+            if (bytes.size()>maxBytes) error=QStringLiteral("目录说明超过读取上限，请手动填写启动入口。");
         }
     } else return 2;
     QFile output;

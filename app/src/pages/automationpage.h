@@ -40,6 +40,7 @@ protected:
 
 private:
     friend class AutomationContractTest;
+    friend class ConfigurableToolsTest;
     struct ParsedManifest {
         AppDatabase::AutomationTool tool;
         QList<AppDatabase::ToolCommand> commands;
@@ -71,6 +72,13 @@ private:
     void createGroup();
     void renameGroup();
     void deleteGroup();
+    void editTool(int toolId = 0);
+    void editCommand(int commandId = 0);
+    void showCommandContextMenu(const QPoint &position);
+    bool saveUserCommands(int toolId, const QList<AppDatabase::ToolCommand> &commands);
+    bool canEditTool(int toolId);
+    bool confirmManifestUpdate(const AppDatabase::AutomationTool &current, const ParsedManifest &manifest);
+    void discoverCommands(int toolId = 0);
     void importTool();
     void importRemoteTool();
     void importWslTool();
@@ -134,6 +142,7 @@ private:
     QPushButton *deleteToolButton_ = nullptr;
 
     QLabel *stateBadge_ = nullptr;
+    QWidget *stateSection_ = nullptr;
     QLabel *stateSummary_ = nullptr;
     QLabel *stateItemsTitle_ = nullptr;
     QWidget *stateItemsBox_ = nullptr;

@@ -6,10 +6,25 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QStringList>
+#include <functional>
 
 namespace CommandParameters {
 inline const QStringList types {QStringLiteral("string"), QStringLiteral("integer"),
-    QStringLiteral("time"), QStringLiteral("choice"), QStringLiteral("boolean"), QStringLiteral("readonly")};
+    QStringLiteral("time"), QStringLiteral("choice"), QStringLiteral("boolean"), QStringLiteral("readonly"),
+    QStringLiteral("file"), QStringLiteral("directory"), QStringLiteral("number")};
+
+inline QStringList sourceDependencies(const QJsonObject &source)
+{
+    QStringList texts;
+    if(source.value("kind")=="file")texts<<source.value("path").toString();
+    if(source.value("kind")=="command")for (const auto &arg : source.value("arguments").toArray()) texts << arg.toString();
+    static const QRegularExpression reference(QStringLiteral("\\{([A-Za-z0-9_.-]+)\\}"));
+    QStringList keys;
+    for (const auto &text : texts) { auto matches = reference.globalMatch(text); while (matches.hasNext()) {
+        const auto key = matches.next().captured(1); if (!keys.contains(key)) keys << key;
+    } }
+    return keys;
+}
 
 inline QString type(const QJsonObject &definition)
 {
@@ -102,7 +117,7 @@ inline bool readOptions(const QJsonValue &source, bool dynamic, QList<Option> *o
 }
 
 inline bool validate(const QString &commandName, const QJsonArray &parameters,
-                     const QStringList &arguments, QString *error)
+                     const QStringList &arguments, QString *error, bool checkDependencies = true)
 {
     static const QRegularExpression validKey(QStringLiteral("^[A-Za-z0-9_.-]+$"));
     QSet<QString> keys;
@@ -121,9 +136,21 @@ inline bool validate(const QString &commandName, const QJsonArray &parameters,
             if (problem.isEmpty() && definition.contains(field) && !validStatePath(definition.value(field)))
                 problem = QStringLiteral("%1 必须是非空的点分对象路径").arg(field);
         }
-        const bool dynamic = definition.contains(QStringLiteral("options_state_key"));
+        const bool external = definition.contains(QStringLiteral("options_source"));
+        const bool dynamic = definition.contains(QStringLiteral("options_state_key")) || external;
         if (problem.isEmpty() && dynamic && parameterType != QStringLiteral("choice"))
-            problem = QStringLiteral("options_state_key 仅用于 choice 参数");
+                problem = QStringLiteral("动态选项仅用于 choice 参数");
+        if (problem.isEmpty() && external) {
+            const auto source = definition.value("options_source").toObject();
+            const QString kind = source.value("kind").toString(), format = source.value("format").toString("json");
+            if (!definition.value("options_source").isObject() || (kind != "file" && kind != "command")) problem = QStringLiteral("选项来源须为文件或查询命令");
+            else if (definition.contains("options_state_key")) problem = QStringLiteral("选项来源与状态选项不能同时配置");
+            else if (kind == "file" && (source.value("path").toString().trimmed().isEmpty() || source.value("path").toString().contains(QChar::Null))) problem = QStringLiteral("请填写有效的选项文件路径");
+            else if (kind == "command" && (source.value("executable").toString().trimmed().isEmpty() || source.value("executable").toString().contains(QChar::Null) || !source.value("arguments").isArray())) problem = QStringLiteral("查询命令须提供有效程序和参数数组");
+            else if (format != "auto" && format != "json" && format != "lines" && format != "delimited") problem = QStringLiteral("不支持的选项输出格式");
+            else if (format == "delimited" && (source.value("delimiter").toString().isEmpty() || source.value("value_column").toInt(1) < 1 || source.value("label_column").toInt(1) < 1)) problem = QStringLiteral("请配置分隔符与从 1 开始的列号");
+            for (const auto &arg : source.value("arguments").toArray()) if (!arg.isString() || arg.toString().contains(QChar::Null)) problem = QStringLiteral("查询参数须为不含 NUL 的字符串");
+        }
         if (problem.isEmpty() && parameterType == QStringLiteral("choice")) {
             if (dynamic && definition.contains(QStringLiteral("options")))
                 problem = QStringLiteral("options 与 options_state_key 不能同时提供");
@@ -146,6 +173,25 @@ inline bool validate(const QString &commandName, const QJsonArray &parameters,
         }
         keys.insert(key);
     }
+    if (!checkDependencies) return true;
+    QHash<QString, QStringList> dependencies;
+    for (const auto &value : parameters) {
+        const auto definition = value.toObject();
+        const auto key = definition.value("key").toString();
+        dependencies[key] = sourceDependencies(definition.value("options_source").toObject());
+        for (const auto &dependency : dependencies[key]) if (!keys.contains(dependency)) {
+            if (error) *error = QStringLiteral("参数“%1”的选项引用了不存在的参数“%2”。").arg(key, dependency); return false;
+        }
+    }
+    QSet<QString> visited, visiting;
+    std::function<bool(const QString &)> visit = [&](const QString &key) {
+        if (visiting.contains(key)) return false;
+        if (visited.contains(key)) return true;
+        visiting.insert(key);
+        for (const auto &dependency : dependencies[key]) if (!visit(dependency)) return false;
+        visiting.remove(key); visited.insert(key); return true;
+    };
+    for (const auto &key : keys) if (!visit(key)) { if (error) *error = QStringLiteral("运行参数之间不能形成循环依赖。"); return false; }
     return true;
 }
 }

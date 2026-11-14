@@ -17,7 +17,7 @@
 
 namespace {
 
-constexpr int CurrentSchemaVersion = 8;
+constexpr int CurrentSchemaVersion = 9;
 
 QString nowIso()
 {
@@ -236,6 +236,18 @@ bool AppDatabase::open(QString *errorMessage)
                 migrated = false;
                 break;
             }
+        }
+    }
+    if (migrated && version < 9) {
+        const QStringList statements {
+            QStringLiteral("ALTER TABLE automation_tools ADD COLUMN customized INTEGER NOT NULL DEFAULT 0 CHECK(customized IN (0,1))"),
+            QStringLiteral("ALTER TABLE automation_tools ADD COLUMN environment TEXT NOT NULL DEFAULT '{}'"),
+            QStringLiteral("ALTER TABLE tool_commands ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1))"),
+            QStringLiteral("ALTER TABLE tool_commands ADD COLUMN position INTEGER NOT NULL DEFAULT 0")
+        };
+        for (const auto &statement : statements) {
+            QSqlQuery migration(database);
+            if (!migration.exec(statement)) { setError(errorMessage, migration); migrated = false; break; }
         }
     }
     if (!migrated || !setVersion.exec(QStringLiteral("PRAGMA user_version = %1").arg(CurrentSchemaVersion))) {
@@ -1284,13 +1296,13 @@ QList<AppDatabase::AutomationTool> AppDatabase::automationTools(int groupId, QSt
     if (groupId > 0) {
         query.prepare(QStringLiteral(
             "SELECT id, external_id, COALESCE(group_id, 0), name, description, target_type, registration_path, state_path, "
-            "ssh_host, working_directory, refresh_enabled, refresh_mode, refresh_interval_seconds, daily_refresh_time, builtin, wsl_distribution, wsl_user, ssh_user "
+            "ssh_host, working_directory, refresh_enabled, refresh_mode, refresh_interval_seconds, daily_refresh_time, builtin, wsl_distribution, wsl_user, ssh_user, customized, environment "
             "FROM automation_tools WHERE group_id = ? ORDER BY name"));
         query.addBindValue(groupId);
     } else {
         query.prepare(QStringLiteral(
             "SELECT id, external_id, COALESCE(group_id, 0), name, description, target_type, registration_path, state_path, "
-            "ssh_host, working_directory, refresh_enabled, refresh_mode, refresh_interval_seconds, daily_refresh_time, builtin, wsl_distribution, wsl_user, ssh_user "
+            "ssh_host, working_directory, refresh_enabled, refresh_mode, refresh_interval_seconds, daily_refresh_time, builtin, wsl_distribution, wsl_user, ssh_user, customized, environment "
             "FROM automation_tools ORDER BY name"));
     }
     if (!query.exec()) {
@@ -1323,6 +1335,8 @@ QList<AppDatabase::AutomationTool> AppDatabase::automationTools(int groupId, QSt
         tool.wslDistribution = query.value(15).toString();
         tool.wslUser = query.value(16).toString();
         tool.sshUser = query.value(17).toString();
+        tool.customized = query.value(18).toBool();
+        tool.environment = QJsonDocument::fromJson(query.value(19).toString().toUtf8()).object();
         result.append(tool);
     }
     QSet<int> groups;
@@ -1342,8 +1356,8 @@ bool AppDatabase::addAutomationTool(const AutomationTool &tool,
     QSqlQuery query(QSqlDatabase::database(connectionName_));
     query.prepare(QStringLiteral(
         "INSERT INTO automation_tools(external_id, group_id, name, description, target_type, registration_path, state_path, "
-        "ssh_host, working_directory, refresh_enabled, refresh_mode, refresh_interval_seconds, daily_refresh_time, builtin, wsl_distribution, wsl_user, ssh_user) "
-        "VALUES (?, NULLIF(?, 0), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        "ssh_host, working_directory, refresh_enabled, refresh_mode, refresh_interval_seconds, daily_refresh_time, builtin, wsl_distribution, wsl_user, ssh_user, customized, environment) "
+        "VALUES (?, NULLIF(?, 0), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
     query.addBindValue(text(tool.externalId));
     query.addBindValue(tool.groupId);
     query.addBindValue(text(tool.name));
@@ -1361,6 +1375,8 @@ bool AppDatabase::addAutomationTool(const AutomationTool &tool,
     query.addBindValue(text(tool.wslDistribution));
     query.addBindValue(text(tool.wslUser));
     query.addBindValue(text(tool.sshUser));
+    query.addBindValue(tool.customized ? 1 : 0);
+    query.addBindValue(QString::fromUtf8(QJsonDocument(tool.environment).toJson(QJsonDocument::Compact)));
     if (!query.exec()) {
         setError(errorMessage, query);
         return false;
@@ -1382,7 +1398,7 @@ bool AppDatabase::updateAutomationTool(const AutomationTool &tool, QString *erro
     query.prepare(QStringLiteral(
         "UPDATE automation_tools SET external_id = ?, name = ?, description = ?, target_type = ?, "
         "registration_path = ?, state_path = ?, ssh_host = ?, working_directory = ?, "
-        "builtin = MAX(builtin, ?), wsl_distribution = ?, wsl_user = ?, ssh_user = ? WHERE id = ?"));
+        "builtin = MAX(builtin, ?), wsl_distribution = ?, wsl_user = ?, ssh_user = ?, customized = ?, environment = ? WHERE id = ?"));
     query.addBindValue(text(tool.externalId));
     query.addBindValue(text(tool.name));
     query.addBindValue(text(tool.description));
@@ -1395,6 +1411,8 @@ bool AppDatabase::updateAutomationTool(const AutomationTool &tool, QString *erro
     query.addBindValue(text(tool.wslDistribution));
     query.addBindValue(text(tool.wslUser));
     query.addBindValue(text(tool.sshUser));
+    query.addBindValue(tool.customized ? 1 : 0);
+    query.addBindValue(QString::fromUtf8(QJsonDocument(tool.environment).toJson(QJsonDocument::Compact)));
     query.addBindValue(tool.id);
     if (!query.exec()) {
         setError(errorMessage, query);
@@ -1470,8 +1488,8 @@ QList<AppDatabase::ToolCommand> AppDatabase::toolCommands(int toolId, QString *e
     }
     QSqlQuery query(QSqlDatabase::database(connectionName_));
     query.prepare(QStringLiteral(
-        "SELECT id, tool_id, name, description, executable, arguments, parameters, interactive, high_risk, arguments_json "
-        "FROM tool_commands WHERE tool_id = ? ORDER BY id"));
+        "SELECT id, tool_id, name, description, executable, arguments, parameters, interactive, high_risk, arguments_json, enabled "
+        "FROM tool_commands WHERE tool_id = ? ORDER BY position, id"));
     query.addBindValue(toolId);
     if (!query.exec()) {
         setError(errorMessage, query);
@@ -1495,6 +1513,7 @@ QList<AppDatabase::ToolCommand> AppDatabase::toolCommands(int toolId, QString *e
         command.parameters = QJsonDocument::fromJson(query.value(6).toString().toUtf8()).array();
         command.interactive = query.value(7).toInt() != 0;
         command.highRisk = query.value(8).toInt() != 0;
+        command.enabled = query.value(10).toBool();
         result.append(command);
     }
     return result;
@@ -1508,7 +1527,8 @@ bool AppDatabase::addToolCommand(const ToolCommand &command, int *commandId, QSt
     QSqlQuery query(QSqlDatabase::database(connectionName_));
     query.prepare(QStringLiteral(
         "INSERT INTO tool_commands(tool_id, name, description, executable, arguments, parameters, "
-        "interactive, high_risk, arguments_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+        "interactive, high_risk, arguments_json, enabled, id, position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?,0), "
+        "(SELECT COALESCE(MAX(position),-1)+1 FROM tool_commands WHERE tool_id = ?))"));
     query.addBindValue(command.toolId);
     query.addBindValue(text(command.name));
     query.addBindValue(text(command.description));
@@ -1520,6 +1540,9 @@ bool AppDatabase::addToolCommand(const ToolCommand &command, int *commandId, QSt
     query.addBindValue(command.interactive ? 1 : 0);
     query.addBindValue(command.highRisk ? 1 : 0);
     query.addBindValue(QString::fromUtf8(QJsonDocument(QJsonArray::fromStringList(command.arguments)).toJson(QJsonDocument::Compact)));
+    query.addBindValue(command.enabled ? 1 : 0);
+    query.addBindValue(command.id);
+    query.addBindValue(command.toolId);
     if (!query.exec()) {
         setError(errorMessage, query);
         return false;
