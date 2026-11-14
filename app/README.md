@@ -2,9 +2,11 @@
 
 Orchestrate 是基于 C++17、Qt 6 Widgets 和 SQLite 的 Windows 桌面工作台。产品统一使用 Orchestrate 名称。
 
-当前版本为 **v3.6.1 剪贴板阅读与编辑导航**：剪贴板列表、预览及编辑正文为 18pt，顶部标签相连叠压、选中置顶；各记录编辑页面首行按 ↑ 到文首、末行按 ↓ 到文末。见[开发与验证说明](../docs/development/clipboard-readability.md)。
+当前版本为 **v3.6.2 项目记录仅标题保存**：项目中的协作记录只需填写标题即可保存，摘要和正文均可留空，已有记录也可清空摘要与正文后保存。标题去掉首尾空白后不能为空，Ctrl+S 保存和离开页面时的保存提示沿用。见[v3.6.2 版本说明](../docs/releases/v3.6.2.md)。
 
-上一正式版本为 **v3.6.0 可配置工具与命令**：“接入工具”同窗选择“工具目录”或“JSON 配置文件”及本地 Windows、WSL 或 SSH。目录模式优先读取声明，无声明时发现命令；JSON 模式读取指定文件，统一使用 v1 协议。默认加入全部命令，按需展开挑选或编辑。命令支持启停、删除、排序和运行前参数联动；应用内显示输出与退出码，交互任务可打开外部终端。见 [v3.6.0 版本说明](../docs/releases/v3.6.0.md)和[可配置工具开发说明](../docs/development/configurable-tools.md)。
+v3.6.1 剪贴板阅读与编辑导航：剪贴板列表、预览及编辑正文为 18pt，顶部标签相连叠压、选中置顶；各记录编辑页面首行按 ↑ 到文首、末行按 ↓ 到文末。见[开发与验证说明](../docs/development/clipboard-readability.md)。
+
+**v3.6.0 可配置工具与命令**：“接入工具”同窗选择“工具目录”或“JSON 配置文件”及本地 Windows、WSL 或 SSH。目录模式优先读取声明，无声明时发现命令；JSON 模式读取指定文件，统一使用 v1 协议。默认加入全部命令，按需展开挑选或编辑。命令支持启停、删除、排序和运行前参数联动；应用内显示输出与退出码，交互任务可打开外部终端。见 [v3.6.0 版本说明](../docs/releases/v3.6.0.md)和[可配置工具开发说明](../docs/development/configurable-tools.md)。
 
 v3.1.0 为记录预览加入离线公式排版：支持 `\(…\)`、`\[…\]`、`$…$` 和 `$$…$$`，覆盖分数、上下标、求和、矩阵与中文注释。公式异步生成，编辑与保存保留原文，预览中复制公式仍得到 LaTeX 文本。该版本数据库为 schema v7。完整变化见 [v3.1.0 发布说明](../docs/releases/v3.1.0.md)，写法见 [公式示例](../docs/math-preview.md)。
 
@@ -65,9 +67,9 @@ $env:PATH = "$qtRoot/bin;D:/CodeTools/Qt/Qt/Tools/mingw1310_64/bin;$env:PATH"
 
 ## Windows 便携包
 
-从仓库根目录运行 `./app/package.ps1 -ReleaseTag v3.6.1`。需要已提交且干净的工作树、Qt/MinGW/CMake/Ninja，以及与 Qt 对应的源码目录（用于收集第三方许可说明）；工具安装路径均支持脚本参数覆盖。
+从仓库根目录运行 `./app/package.ps1 -ReleaseTag v3.6.2`。需要已提交且干净的工作树、Qt/MinGW/CMake/Ninja，以及与 Qt 对应的源码目录（用于收集第三方许可说明）；工具安装路径均支持脚本参数覆盖。
 
-脚本先检查输出目录已被 Git 忽略，再从 `git archive HEAD` 解出源码，在 `dist/work-*` 中全新 Release 构建（不包含本地测试）。发布前先在 `app/build-qt` 执行本地回归；发布验证完成后可删除 `dist/work-*` 临时目录，只保留发布产物。仅安装程序、更新器与内置工具，再收集 Qt、MinGW 运行库、SQLite 插件、Windows Schannel TLS 插件及许可说明。最终生成 `dist/Orchestrate-v3.6.1-windows-x64.zip` 和 `.zip.sha256`，以及本机构建记录 `.build.json`。ZIP 内含源码提交信息和逐文件校验清单，用户完整解压即可运行。已有同名 ZIP 时拒绝覆盖；可通过 `-OutputDir` 指定另一个已忽略目录。
+脚本先检查输出目录已被 Git 忽略，再从 `git archive HEAD` 解出源码，在 `dist/work-*` 中全新 Release 构建（不包含本地测试）。发布前先在 `app/build-qt` 执行本地回归；发布验证完成后可删除 `dist/work-*` 临时目录，只保留发布产物。仅安装程序、更新器与内置工具，再收集 Qt、MinGW 运行库、SQLite 插件、Windows Schannel TLS 插件及许可说明。最终生成 `dist/Orchestrate-v3.6.2-windows-x64.zip` 和 `.zip.sha256`，以及本机构建记录 `.build.json`。ZIP 内含源码提交信息和逐文件校验清单，用户完整解压即可运行。已有同名 ZIP 时拒绝覆盖；可通过 `-OutputDir` 指定另一个已忽略目录。
 
 应用运行时版本和 Windows 文件属性版本统一由 CMake 的 `project(... VERSION ...)` 生成。打包会校验版本、必要运行库和个人数据排除，不启动内置工具，不修改现用数据库或开机启动配置；真正无 Qt 的干净 Windows 系统验收仍应在发布前完成。
 

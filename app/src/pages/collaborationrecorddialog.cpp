@@ -140,17 +140,15 @@ void CollaborationRecordDialog::showSection()
 void CollaborationRecordDialog::updateStatus()
 {
     const bool missingTitle = title_->text().trimmed().isEmpty();
-    const bool missingBody = draftBodyText_.trimmed().isEmpty();
     UiTheme::setRole(status_, !error_.isEmpty() ? "error" : dirty() ? "warning" : "muted");
     if (!error_.isEmpty()) status_->setText(QStringLiteral("保存失败"));
     else if (missingTitle) status_->setText(QStringLiteral("待填写标题"));
-    else if (missingBody) status_->setText(QStringLiteral("待填写正文"));
     else if (dirty()) status_->setText(QStringLiteral("未保存 · Ctrl+S"));
     else status_->setText(QStringLiteral("已保存"));
 
     QString detail = QStringLiteral("Ctrl+S 保存标题、摘要和正文");
     if (!error_.isEmpty()) detail = error_;
-    else if (missingTitle || missingBody) detail = QStringLiteral("请填写标题和正文，摘要可留空。");
+    else if (missingTitle) detail = QStringLiteral("请填写标题，摘要和正文可留空。");
     else if (!dirty() && record_.updatedAt.isValid())
         detail += QStringLiteral("\n更新于 %1").arg(record_.updatedAt.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")));
     status_->setToolTip(detail);
@@ -159,9 +157,8 @@ void CollaborationRecordDialog::updateStatus()
 
 bool CollaborationRecordDialog::save()
 {
-    if (title_->text().trimmed().isEmpty() || draftBodyText_.trimmed().isEmpty()) {
-        if (title_->text().trimmed().isEmpty()) title_->setFocus();
-        else { sections_->setCurrentIndex(1); body_->setFocus(); }
+    if (title_->text().trimmed().isEmpty()) {
+        title_->setFocus();
         return false;
     }
     if (!dirty() && record_.id > 0) return true;
