@@ -1,5 +1,6 @@
 #pragma once
 
+#include "textnavigation.h"
 #include <QPlainTextEdit>
 #include <QTextBlock>
 #include <QTextDocument>
@@ -78,6 +79,13 @@ class Edit : public QPlainTextEdit {
 public:
     explicit Edit(QWidget *parent = nullptr) : QPlainTextEdit(parent) { configure(this); }
 protected:
+    void keyPressEvent(QKeyEvent *event) override {
+        auto cursor = textCursor();
+        if (!isReadOnly() && TextNavigation::moveToDocumentEdge(event, &cursor)) {
+            setTextCursor(cursor); ensureCursorVisible(); return;
+        }
+        QPlainTextEdit::keyPressEvent(event);
+    }
     void insertFromMimeData(const QMimeData *data) override {
         setProperty("preparingTextLayout", true);
         prepareInsertion(this, textCursor(), data->text());

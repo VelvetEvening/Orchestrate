@@ -80,6 +80,7 @@ QTextEdit#headingPreview { border-color: @border@; }
 QTextEdit#headingPreview:focus { border-color: @accent@; }
 QToolButton#markdownSourceMode:checked { background: @selection@; color: @accent@; border-color: @focus@; }
 QPlainTextEdit#clipboardPreview { background: @indexSurface@; border: none; border-radius: 0; padding: 12px; }
+QTreeWidget#clipboardItems, QPlainTextEdit#clipboardPreview, QPlainTextEdit#clipboardItemBody { font-size: 18pt; }
 QComboBox { padding-right: 28px; min-height: 20px; }
 QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center right; width: 26px; border: none; }
 QComboBox::down-arrow { image: url(:/ui/icons/chevron-down.svg); width: 12px; height: 12px; }
@@ -108,6 +109,7 @@ QListWidget::item:focus, QTreeWidget::item:focus { border-color: @focus@; }
 QListWidget#projectList, QTreeWidget#workRecordList, QTreeWidget#toolTree,
 QListWidget#reminderList, QListWidget#diaryList, QTreeWidget#clipboardItems { border: none; background: transparent; padding: 0; }
 QTreeWidget#toolTree::item { padding: 8px 5px; }
+QTreeWidget#clipboardItems::item { min-height: 30px; padding: 8px 12px; }
 QTreeWidget::branch { background: transparent; }
 QHeaderView::section { background: @background@; color: @muted@; border: none; border-bottom: 1px solid @border@; padding: 7px; }
 QTabBar::tab { color: @muted@; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 7px 12px; margin-right: 4px; min-width: 36px; min-height: 20px; }
@@ -115,10 +117,14 @@ QTabBar::tab:hover { background: @hover@; }
 QTabBar::tab:selected { color: @accent@; background: @selection@; border-color: @controlBorder@; font-weight: 600; }
 QTabBar::tab:focus { border-color: @accent@; }
 QTabBar#recordSectionTabs::tab:last { margin-right: 0; }
-QTabBar#clipboardTabs::tab { background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0; margin-right: 14px; padding: 7px 4px; }
-QTabBar#clipboardTabs::tab:hover { background: @hover@; }
-QTabBar#clipboardTabs::tab:selected { background: transparent; color: @accent@; border-bottom-color: @accent@; }
-QTabBar#clipboardTabs::tab:focus { border-bottom-color: @focus@; }
+QTabBar#clipboardTabs { font-size: 11pt; }
+QTabBar#clipboardTabs::tab { background: @background@; color: @text@; border: 1px solid @controlBorder@; border-radius: 6px; margin-top: 4px; margin-right: -8px; padding: 6px 20px; min-height: 22px; max-width: 220px; }
+QTabBar#clipboardTabs::tab:last { margin-right: 0; }
+QTabBar#clipboardTabs::tab:hover { background: @hover@; border-color: @focus@; }
+QTabBar#clipboardTabs::tab:selected { background: @selection@; color: @accent@; border-color: @focus@; margin-top: 0; padding-top: 8px; padding-bottom: 8px; }
+QTabBar#clipboardTabs::tab:focus { border-color: @accent@; }
+QTabBar#clipboardTabs::scroller { width: 64px; }
+QTabBar#clipboardTabs QToolButton { padding: 0; }
 QTabWidget::pane { border: 1px solid @border@; border-radius: 6px; background: @surface@; }
 QFrame#summaryField { background: @surface@; border: none; }
 QLabel#summaryCaption { color: @muted@; padding: 6px 12px 6px 0; }

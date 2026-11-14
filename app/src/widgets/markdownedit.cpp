@@ -253,6 +253,10 @@ void MarkdownEdit::keyPressEvent(QKeyEvent *event)
             : (event->modifiers().testFlag(Qt::ControlModifier) ? QTextCursor::NextWord : QTextCursor::NextCharacter), QTextCursor::KeepAnchor);
         replaceSource(cursor.selectionStart(), cursor.selectionEnd() - cursor.selectionStart(), {}); return;
     }
+    auto cursor = textCursor();
+    if (TextNavigation::moveToDocumentEdge(event, &cursor)) {
+        setTextCursor(cursor); ensureCursorVisible(); return;
+    }
     QTextEdit::keyPressEvent(event);
 }
 

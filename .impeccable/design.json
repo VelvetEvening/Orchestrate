@@ -462,9 +462,9 @@
       "name": "剪贴板标签页",
       "kind": "nav",
       "refersTo": "clipboard-tab",
-      "description": "剪贴板专用透明页签；选中用 2px 雾蓝底线，焦点用 focus 底线。保留原生选择、拖放和键盘行为，文档示例只预览外观。",
+      "description": "剪贴板叠压页签：11pt、灰白底、细边框和 6px 圆角。相邻重叠 8px，未选中下沉 4px，活动页签显示在最上层。保留原生选择、拖动和滚动，文档示例只预览外观。",
       "html": "<div class=\"ds-clip-tabs\" role=\"tablist\" aria-label=\"剪贴板标签页\"><button class=\"ds-clip-tab\" role=\"tab\" aria-selected=\"true\">历史</button><button class=\"ds-clip-tab\" role=\"tab\" aria-selected=\"false\">常用</button></div>",
-      "css": ".ds-clip-tab{font-family:\"Microsoft YaHei UI\",sans-serif;font-size:10pt;color:#66737f;background:transparent;border:none;border-bottom:2px solid transparent;border-radius:0;padding:7px 4px;margin-right:14px;min-width:36px;min-height:20px}.ds-clip-tab:hover{background:#eef2f5}.ds-clip-tab[aria-selected=\"true\"]{color:#41638f;border-bottom-color:#41638f;font-weight:600}.ds-clip-tab:focus-visible{outline:none;border-bottom-color:#7895bc}"
+      "css": ".ds-clip-tabs{display:flex;align-items:flex-end}.ds-clip-tab{position:relative;z-index:0;flex-shrink:0;font-family:\"Microsoft YaHei UI\",sans-serif;font-size:11pt;color:#34404c;background:#f7f9fa;border:1px solid #c6d0dd;border-radius:6px;padding:6px 20px;margin-top:4px;margin-right:-8px;min-width:36px;min-height:22px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-clip-tab:last-child{margin-right:0}.ds-clip-tab:hover{background:#eef2f5;border-color:#7895bc}.ds-clip-tab[aria-selected=\"true\"]{z-index:1;color:#41638f;background:#e4edf3;border-color:#7895bc;font-weight:600;margin-top:0;padding-top:8px;padding-bottom:8px}.ds-clip-tab:focus-visible{outline:none;border-color:#41638f}"
     },
     {
       "name": "选中日期",

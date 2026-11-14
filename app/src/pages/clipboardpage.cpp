@@ -53,6 +53,7 @@ public:
     explicit ClipboardTabs(QWidget *parent) : QTabBar(parent) { setAcceptDrops(true); }
     SiblingOrderTree *tree = nullptr;
 protected:
+    QSize minimumTabSizeHint(int index) const override { return tabSizeHint(index); }
     void dragEnterEvent(QDragEnterEvent *event) override { updateDrop(event); }
     void dragMoveEvent(QDragMoveEvent *event) override { updateDrop(event); }
     void dragLeaveEvent(QDragLeaveEvent *event) override { dropIndex_=-1; update(); event->accept(); }
@@ -361,7 +362,7 @@ void ClipboardPage::refreshItems()
             item->setData(0,TabRole,currentTab); item->setData(0,FolderIdRole,folder.id);
             item->setData(0,SiblingOrderScopeRole,QStringLiteral("folders.%1").arg(currentTab));
             item->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
-            item->setSizeHint(0,QSize(0,40)); item->setToolTip(0,folder.name);
+            item->setToolTip(0,folder.name);
             item->setExpanded(!search.isEmpty() || savedExpanded.contains("*") || savedExpanded.contains(QString::number(folder.id)));
             folderNodes.insert(folder.id,item);
             if (previousFolder==folder.id) items_->setCurrentItem(item);
@@ -373,7 +374,7 @@ void ClipboardPage::refreshItems()
             item->setText(0,caption); item->setData(0,Qt::UserRole,entry.id);
             item->setData(0,TabRole,entry.tabId); item->setData(0,FolderIdRole,entry.folderId);
             item->setData(0,SiblingOrderScopeRole,QStringLiteral("items.%1.%2").arg(entry.tabId).arg(entry.folderId));
-            item->setSizeHint(0,QSize(0,40)); item->setToolTip(0,caption);
+            item->setToolTip(0,caption);
             if (selected.contains(entry.id)) { items_->setCurrentItem(item,0,QItemSelectionModel::NoUpdate); item->setSelected(true); }
         }
         items_->verticalScrollBar()->setValue(scroll);

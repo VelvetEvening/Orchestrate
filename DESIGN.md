@@ -29,6 +29,11 @@ typography:
   body:
     fontFamily: "Microsoft YaHei UI"
     fontSize: "10pt"
+  clipboard-content:
+    fontFamily: "Microsoft YaHei UI"
+    fontSize: "18pt"
+  clipboard-tab:
+    fontSize: "11pt"
   page-title:
     fontSize: "16px"
     fontWeight: 600
@@ -172,12 +177,13 @@ components:
     textColor: "{colors.accent}"
     typography: "{typography.button-primary}"
   clipboard-tab:
-    backgroundColor: "transparent"
-    textColor: "{colors.muted}"
-    rounded: "{rounded.none}"
-    padding: "7px 4px"
+    backgroundColor: "{colors.background}"
+    textColor: "{colors.text}"
+    rounded: "{rounded.control}"
+    typography: "{typography.clipboard-tab}"
+    padding: "6px 20px"
   clipboard-tab-selected:
-    backgroundColor: "transparent"
+    backgroundColor: "{colors.selection}"
     textColor: "{colors.accent}"
     typography: "{typography.button-primary}"
   calendar-selected:
@@ -263,7 +269,7 @@ v3.5.5 协作记录采用独立内容字号：正文 20pt、摘要 24pt，Ctrl�
 
 ## Shapes
 
-主工作面、分节、内衬和运行区使用 `none`；列表项与标签使用 `item`，运行状态徽标使用 `status`，按钮与输入框使用 `control`，导航使用 `navigation`，选中或今天的日历日期块使用 `card`。既有卡片样式仍供未接入主窗口的 PlaceholderPage 与 UpdateWidget 独立使用，主窗口更新分节由工作面角色覆盖。边框通常为 1px，焦点通过边框换色呈现；剪贴板页签以底线表达状态。原生单选指示器采用圆形，复选指示器为小圆角方形。
+主工作面、分节、内衬和运行区使用 `none`；列表项与标签使用 `item`，运行状态徽标使用 `status`，按钮与输入框使用 `control`，导航使用 `navigation`，选中或今天的日历日期块使用 `card`。既有卡片样式仍供未接入主窗口的 PlaceholderPage 与 UpdateWidget 独立使用，主窗口更新分节由工作面角色覆盖。边框通常为 1px，焦点通过边框换色呈现；剪贴板页签以细边框和雾蓝选中面表达状态。原生单选指示器采用圆形，复选指示器为小圆角方形。
 
 17 个主题 SVG 沿用线性轮廓，常规图标以 24×24 画布、1.6 描边和圆端点绘制；导航显示为 19×19，全局顶部分栏开关使用 `panel-left.svg`，显示为 18×18。项目状态图标显示为 18×18：雾蓝圆环加圆点表示进行中，绿色圆环加勾表示已完结。复选、单选及上下箭头按控件分别缩放，不强制单一图标尺寸。应用图标与既有更新标记保留；本次未添加展示性栅格素材。
 
@@ -279,13 +285,15 @@ v3.5.5 协作记录采用独立内容字号：正文 20pt、摘要 24pt，Ctrl�
 
 ### Inputs / Fields
 
-常规输入框和编辑器共用白底、控件边框与 `control` 圆角；焦点改为强调色边框。单行输入、下拉与数值框悬停时改变边框。项目记录和剪贴板搜索使用 `input-search` 的灰白底与默认透明边框，悬停出现内容边框，焦点使用 `focus`。只读单行框使用 `background` 与弱边框；禁用态弱化文字。正文编辑与预览内边距为上下 12、左右 14，预览使用更轻的内容边框。剪贴板预览是无外框、无圆角的灰白内衬，文字内边距为 12。表单错误通过邻近状态文字反馈，不虚构未实现的输入框错误描边。
+多行内容编辑在第一个视觉行按 ↑ 到全文开头，在最后一个视觉行按 ↓ 到全文末尾；Shift+↑/↓ 选择到对应边界。自动换行和其余组合键沿用原生行为，不增加空行。
+
+常规输入框和编辑器共用白底、控件边框与 `control` 圆角；焦点改为强调色边框。单行输入、下拉与数值框悬停时改变边框。项目记录和剪贴板搜索使用 `input-search` 的灰白底与默认透明边框，悬停出现内容边框，焦点使用 `focus`。只读单行框使用 `background` 与弱边框；禁用态弱化文字。正文编辑与预览内边距为上下 12、左右 14，预览使用更轻的内容边框。剪贴板列表、预览及编辑正文使用 18pt，较原 10pt 放大 1.8 倍；列表取消固定 40px 行高，由 Qt 按字体和内边距计算，内容最小高度 30px、上下各 8px 内边距。剪贴板预览是无外框、无圆角的灰白内衬，文字内边距为 12。表单错误通过邻近状态文字反馈，不虚构未实现的输入框错误描边。
 
 ### Navigation / Tabs
 
 导航默认透明底，悬停与选中使用各自浅底；选中文字加粗，焦点边框保持可见。五个入口都使用 SVG 图标。分栏开关位于全局顶部，侧栏直接呈现导航，不重复显示应用名或“工作台”分组标签；模块名称仅显示在展开的导航入口中。摘要 / 正文页签使用浅雾蓝选中面与控件边框，保留原生键盘操作；编辑页不再显示预览 / 编辑切换。
 
-剪贴板标签页使用独立的 `clipboard-tab`：透明底、直角、2px 底线，选中底线为 `accent`，焦点底线为 `focus`；标签右侧间距为 14。其底部左侧为主要“新建”、轻量“编辑”和危险“删除”，右下角为轻量“设置”；不再放置常驻“复制并收起”按钮，双击条目、Enter 与原右键菜单保留该操作。“设置”打开原生菜单：可勾选的“监听剪贴板”、分隔线、“历史设置…”。菜单沿用全局白面、控件边框和浅雾蓝选中状态；监听开关即时保存，失败回退勾选状态并显示错误，历史设置进入原有保留上限对话框。主窗口键盘焦点依次经过分栏开关、当前选中的导航与正文；导航保留 Qt 排他按钮组的 Tab 与方向键行为，底部设置菜单支持键盘打开与选择。
+剪贴板标签页使用独立的 `clipboard-tab`：11pt 文字、灰白底、1px 控件边框和 6px 圆角。相邻页签叠压 8px，未选中页签顶部下沉 4px、上下 6px／左右 20px 内边距；选中页签顶部齐平、上下 8px 内边距，由 Qt 最后绘制而显示在最上层。选中采用雾蓝底、强调色文字和焦点色边框，键盘焦点使用更深的强调色边框。长标签限制宽度并省略，标签过多时保留 Qt 原生滚动按钮。其底部左侧为主要“新建”、轻量“编辑”和危险“删除”，右下角为轻量“设置”；不再放置常驻“复制并收起”按钮，双击条目、Enter 与原右键菜单保留该操作。“设置”打开原生菜单：可勾选的“监听剪贴板”、分隔线、“历史设置…”。菜单沿用全局白面、控件边框和浅雾蓝选中状态；监听开关即时保存，失败回退勾选状态并显示错误，历史设置进入原有保留上限对话框。主窗口键盘焦点依次经过分栏开关、当前选中的导航与正文；导航保留 Qt 排他按钮组的 Tab 与方向键行为，底部设置菜单支持键盘打开与选择。
 
 ### Work Surfaces / Lists
 

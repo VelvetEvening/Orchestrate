@@ -2,10 +2,11 @@
 
 Windows 桌面工作台：时序记录、项目记录、自动化工具和剪贴板。使用 C++17、Qt Widgets 和 SQLite，数据随程序便携保存。
 
-v3.6.0 通过目录或 JSON 配置接入本地 Windows、WSL 和 SSH 工具，支持命令发现、参数编辑和动态下拉联动，详见[版本说明](docs/releases/v3.6.0.md)和[可配置工具说明](docs/development/configurable-tools.md)。
+v3.6.1 放大剪贴板内容字体，采用相连叠压的标签页，并补齐编辑页的 ↑ 到文首／↓ 到文末，详见[版本说明](docs/releases/v3.6.1.md)。
 
 ## 文档入口
 
+- [v3.6.1 剪贴板阅读与编辑导航](docs/releases/v3.6.1.md)
 - [客户端构建、运行与数据说明](app/README.md)
 - **[工具接入与适配指南](docs/automation-tool-contract-v1.md)**：统一 v1 最小 JSON 模板、字段、动态下拉、运行环境和验收。
 - [每个工具的 README 清单](docs/automation-tool-contract-v1.md#13-每个工具-readme-应写什么)：入口、依赖、参数、查询关联、完整值和输出示例，以及现有 v1 声明写法。
