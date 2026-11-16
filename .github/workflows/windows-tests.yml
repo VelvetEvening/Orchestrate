@@ -1,0 +1,69 @@
+name: Windows tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+      - name: Install Qt and MinGW
+        uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4.5.0
+        with:
+          version: '6.11.2'
+          host: windows
+          arch: win64_mingw
+          # Qt SVG belongs to the base package, not the optional module list.
+          archives: qtbase qtsvg
+          tools: tools_mingw1310
+          setup-python: false
+          # aqt 3.3.0 cannot read Qt 6.11's per-architecture Windows repositories.
+          # Pin the merged upstream fix: miurahr/aqtinstall#1000.
+          aqtsource: git+https://github.com/miurahr/aqtinstall.git@8c3695d4a4e1ceabf6a74dc6c79681656dc6b74b
+          cache: true
+      - name: Configure
+        run: |
+          $compiler = Join-Path $env:IQTA_TOOLS 'mingw1310_64/bin/g++.exe'
+          if (-not (Test-Path -LiteralPath $compiler)) { throw "Missing MinGW compiler: $compiler" }
+          cmake -S app -B app/build-qt -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON `
+            "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR" "-DCMAKE_CXX_COMPILER=$compiler" `
+            "-DPython3_EXECUTABLE=$(Get-Command python | Select-Object -ExpandProperty Source)"
+          if ($LASTEXITCODE -ne 0) { throw 'CMake configuration failed.' }
+      - name: Build
+        run: |
+          cmake --build app/build-qt --parallel 3
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
+      - name: Test
+        env:
+          ORCHESTRATE_TEST_STRESS: '1'
+        run: |
+          ctest --test-dir app/build-qt --output-on-failure --no-tests=error
+          if ($LASTEXITCODE -ne 0) { throw 'CTest failed.' }
+      - name: Upload test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-test-diagnostics
+          path: |
+            app/build-qt/Testing/Temporary/
+            app/build-qt/tests/**/results.txt
+          if-no-files-found: ignore

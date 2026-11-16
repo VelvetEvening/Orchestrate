@@ -1,0 +1,7 @@
+# Upstream examples and unused backends/alphabet packs are kept locally only.
+/src/samples/
+/src/platform/cairo/
+/src/platform/gdi_win/
+/src/platform/skia/
+/res/greek/
+/res/cyrillic/

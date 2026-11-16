@@ -1,0 +1,184 @@
+cmake_minimum_required(VERSION 3.21)
+
+project(Orchestrate VERSION 4.0.0 LANGUAGES CXX)
+
+configure_file(src/version.h.in generated/version.h @ONLY)
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+find_package(Qt6 6.11.2 REQUIRED COMPONENTS Widgets Sql Network)
+
+function(orchestrate_enable_warnings target)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4)
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${target} PRIVATE -Wall -Wextra)
+    endif()
+endfunction()
+
+add_library(OrchestrateUi STATIC src/ui/theme.cpp src/ui/theme.h
+    src/ui/contentworkspace.cpp src/ui/contentworkspace.h
+    resources/ui/uitheme.qrc resources/resources.qrc)
+target_link_libraries(OrchestrateUi PUBLIC Qt6::Widgets)
+target_include_directories(OrchestrateUi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if(WIN32)
+    target_link_libraries(OrchestrateUi PRIVATE dwmapi)
+endif()
+
+add_subdirectory(third_party)
+add_executable(OrchestrateMath WIN32 src/math/mathworker.cpp)
+target_link_libraries(OrchestrateMath PRIVATE OrchestrateMicroTeX Qt6::Gui)
+install(TARGETS OrchestrateMath RUNTIME DESTINATION bin)
+
+add_library(OrchestrateUpdate STATIC
+    src/update/updatechecker.cpp src/update/updatechecker.h
+    src/update/releaseinfo.cpp src/update/releaseinfo.h
+    src/update/updatewidget.cpp src/update/updatewidget.h
+    src/platform/instancelock.cpp src/platform/instancelock.h
+)
+target_link_libraries(OrchestrateUpdate PUBLIC Qt6::Widgets Qt6::Network OrchestrateUi)
+target_include_directories(OrchestrateUpdate PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_library(OrchestrateAutoStart STATIC src/platform/autostart.cpp src/platform/autostart.h)
+target_link_libraries(OrchestrateAutoStart PUBLIC Qt6::Widgets)
+target_include_directories(OrchestrateAutoStart PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_library(OrchestrateShortcut STATIC src/platform/globalshortcut.cpp src/platform/globalshortcut.h)
+target_link_libraries(OrchestrateShortcut PUBLIC Qt6::Widgets)
+target_include_directories(OrchestrateShortcut PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if (WIN32)
+    target_link_libraries(OrchestrateShortcut PRIVATE user32 kernel32)
+endif()
+
+add_library(OrchestrateText STATIC
+    src/widgets/headingtext.cpp
+    src/widgets/headingtext.h
+    src/widgets/headingtextedit.cpp
+    src/widgets/headingtextedit.h
+    src/widgets/markdowntext.cpp src/widgets/markdowntext.h
+    src/widgets/markdownedit.cpp src/widgets/markdownedit.h
+    src/widgets/mathtext.cpp src/widgets/mathtext.h
+    src/widgets/mathpreview.cpp src/widgets/mathpreview.h
+)
+add_dependencies(OrchestrateText OrchestrateMath)
+target_link_libraries(OrchestrateText PUBLIC Qt6::Widgets OrchestrateUi)
+target_include_directories(OrchestrateText PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_library(OrchestrateGit STATIC
+    src/git/gitreader.cpp src/git/gitreader.h src/git/repositorytarget.h
+    src/pages/githistorywindow.cpp src/pages/githistorywindow.h
+    src/pages/gitcommitdialog.cpp src/pages/gitcommitdialog.h
+    src/pages/repositorybinding.cpp src/pages/repositorybinding.h
+)
+target_link_libraries(OrchestrateGit PUBLIC Qt6::Widgets OrchestrateUi)
+target_include_directories(OrchestrateGit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_library(OrchestrateClipboard STATIC
+    src/clipboard/clipboardcontent.cpp src/clipboard/clipboardcontent.h
+    src/clipboard/clipboardmonitor.cpp src/clipboard/clipboardmonitor.h
+    src/pages/clipboardpage.cpp src/pages/clipboardpage.h
+)
+target_link_libraries(OrchestrateClipboard PUBLIC Qt6::Widgets Qt6::Sql OrchestrateUi)
+target_include_directories(OrchestrateClipboard PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_library(OrchestrateData STATIC
+    src/data/appdatabase.cpp src/data/appdatabase.h
+    src/data/repositorybase.cpp src/data/repositorybase.h src/data/repositoryhelpers.h
+    src/data/diaryrepository.cpp src/data/diaryrepository.h
+    src/data/projectrepository.cpp src/data/projectrepository.h
+    src/data/toolrepository.cpp src/data/toolrepository.h
+    src/data/clipboardrepository.cpp src/data/clipboardrepository.h)
+target_link_libraries(OrchestrateData PUBLIC Qt6::Core Qt6::Sql)
+target_include_directories(OrchestrateData PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_library(OrchestrateAutomation STATIC
+    src/automation/manifestparser.cpp src/automation/manifestparser.h)
+target_link_libraries(OrchestrateAutomation PUBLIC OrchestrateData Qt6::Core)
+target_include_directories(OrchestrateAutomation PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+# Compile the application implementation once for the executable and UI tests.
+add_library(OrchestrateApplication STATIC
+    src/mainwindow.cpp
+    src/mainwindow.h
+    src/pages/calendarpage.cpp
+    src/pages/calendarpage.h
+    src/pages/projectspage.cpp
+    src/pages/projectspage.h
+    src/pages/collaborationrecorddialog.cpp
+    src/pages/collaborationrecorddialog.h
+    src/pages/automationpage.cpp
+    src/pages/automationpage.h
+    src/automation/manifestimport.cpp src/automation/manifestimport.h
+)
+target_link_libraries(OrchestrateApplication PUBLIC
+    OrchestrateData OrchestrateAutomation OrchestrateText OrchestrateShortcut OrchestrateAutoStart
+    OrchestrateUpdate OrchestrateClipboard OrchestrateGit)
+target_include_directories(OrchestrateApplication PUBLIC
+    ${CMAKE_CURRENT_BINARY_DIR}/generated ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if(WIN32)
+    target_link_libraries(OrchestrateApplication PRIVATE dwmapi)
+endif()
+
+qt_add_executable(Orchestrate WIN32 src/main.cpp)
+
+if (WIN32)
+    target_sources(Orchestrate PRIVATE resources/app.rc)
+    # MinGW's resource compiler does not track included headers in Ninja.
+    # Rebuild Explorer's version resource whenever the CMake version changes.
+    set_property(SOURCE resources/app.rc APPEND PROPERTY OBJECT_DEPENDS
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/version.h")
+    # 标题栏配色通过 DWM 设置
+    target_link_libraries(Orchestrate PRIVATE dwmapi)
+endif()
+
+target_link_libraries(Orchestrate PRIVATE OrchestrateApplication)
+
+target_include_directories(Orchestrate PRIVATE
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/pages
+)
+
+if (WIN32)
+    set_target_properties(Orchestrate PROPERTIES
+        WIN32_EXECUTABLE TRUE
+        OUTPUT_NAME "Orchestrate"
+        VERSION "${PROJECT_VERSION}"
+    )
+endif()
+
+# 内置工具随程序一起放在 <程序目录>/tools/，Orchestrate 启动时自动同步。
+# 只复制脚本和声明，工具运行时写在 tools/<工具>/state/ 里的状态不会被覆盖。
+add_custom_target(SyncBuiltinTools
+    COMMAND ${CMAKE_COMMAND}
+            "-DTOOL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/tools"
+            "-DTOOL_DESTINATION=$<TARGET_FILE_DIR:Orchestrate>/tools"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/SyncBuiltinTools.cmake"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/updater" "$<TARGET_FILE_DIR:Orchestrate>/updater"
+    COMMENT "Syncing built-in tools and updater without runtime state"
+    VERBATIM
+)
+add_dependencies(Orchestrate SyncBuiltinTools)
+
+install(TARGETS Orchestrate
+    RUNTIME DESTINATION bin
+)
+install(DIRECTORY tools/
+    DESTINATION bin/tools
+    PATTERN "state" EXCLUDE
+)
+install(DIRECTORY updater/ DESTINATION bin/updater)
+
+include(CTest)
+foreach(authored_target OrchestrateUi OrchestrateMath OrchestrateUpdate
+        OrchestrateAutoStart OrchestrateShortcut OrchestrateText OrchestrateGit
+        OrchestrateClipboard OrchestrateData OrchestrateAutomation OrchestrateApplication Orchestrate)
+    orchestrate_enable_warnings(${authored_target})
+endforeach()
+if (BUILD_TESTING)
+    add_subdirectory(tests)
+endif()

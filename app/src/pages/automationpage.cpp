@@ -1,0 +1,1993 @@
+#include "ui/theme.h"
+#include "widgets/workspacesplitter.h"
+#include "automationpage.h"
+#include "automation/commandarguments.h"
+#include "automation/commandform.h"
+#include "automation/toolstate.h"
+#include "automation/toolstatereader.h"
+#include "automation/wslprocess.h"
+#include "automation/sshconnection.h"
+#include "automation/commandlaunch.h"
+#include "automation/tooleditor.h"
+#include "automation/toolconfiguration.h"
+#include "automation/optionssource.h"
+#include "automation/discoverydialog.h"
+#include "automation/manifestimport.h"
+#include "widgets/treeaccessibility.h"
+#include "widgets/textlayoutguard.h"
+
+#include <QComboBox>
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QDialog>
+#include <QDir>
+#include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QFontDatabase>
+#include <QFormLayout>
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QHeaderView>
+#include <QInputDialog>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonParseError>
+#include <QLabel>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QListWidgetItem>
+#include <QMenu>
+#include <QMessageBox>
+#include <QPainter>
+#include <QPlainTextEdit>
+#include <QProcess>
+#include <QPushButton>
+#include <QRegularExpression>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QSignalBlocker>
+#include <QShowEvent>
+#include <QTextCursor>
+#include <QSizePolicy>
+#include <QSplitter>
+#include <QStackedWidget>
+#include <QStringDecoder>
+#include <QStyle>
+#include <QTimer>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
+#include "widgets/siblingorderview.h"
+#include <QVBoxLayout>
+
+#include <limits>
+#include <memory>
+
+namespace {
+
+constexpr int kGroupItem = 1;
+constexpr int kToolItem = 2;
+const QString kUngroupedNameKey = QStringLiteral("automation.ungrouped_name");
+const QString kBuiltinGroupKey = QStringLiteral("automation.builtin_group_id");
+const QString kBuiltinGroupName = QStringLiteral("系统工具");
+
+QFrame *makeSurface(QWidget *parent, const char *surface = "section")
+{
+    auto *card = new QFrame(parent);
+    UiTheme::setSurface(card, surface);
+    return card;
+}
+
+QLabel *makeCardTitle(const QString &text, QWidget *parent)
+{
+    auto *label = new QLabel(text, parent);
+    label->setObjectName(QStringLiteral("cardTitle"));
+    return label;
+}
+
+QLabel *makeMuted(const QString &text, QWidget *parent)
+{
+    auto *label = new QLabel(text, parent);
+    label->setObjectName(QStringLiteral("muted"));
+    label->setWordWrap(true);
+    return label;
+}
+
+QLabel *makeTag(const QString &text, const QString &objectName, QWidget *parent)
+{
+    auto *label = new QLabel(text, parent);
+    label->setObjectName(objectName);
+    label->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    return label;
+}
+
+QString jsonString(const QJsonObject &object, const QString &key, const QString &fallback = QString())
+{
+    const QJsonValue value = object.value(key);
+    return value.isString() ? value.toString() : fallback;
+}
+
+QString shellQuote(const QString &value)
+{
+    QString quoted = value;
+    quoted.replace(QStringLiteral("'"), QStringLiteral("'\"'\"'"));
+    return QStringLiteral("'") + quoted + QStringLiteral("'");
+}
+
+QString displayArgument(const QString &value)
+{
+    return value.contains(QLatin1Char(' ')) ? QStringLiteral("\"%1\"").arg(value) : value;
+}
+
+QString resultLabel(const QString &result, const QString &toolId = QString())
+{
+    if (result == QStringLiteral("success")) return QStringLiteral("成功");
+    if (result == QStringLiteral("already")) {
+        return toolId == QStringLiteral("daily-check-in") ? QStringLiteral("今天已签到") : QStringLiteral("已处理");
+    }
+    if (result == QStringLiteral("failure")) return QStringLiteral("失败");
+    if (result == QStringLiteral("skipped")) return QStringLiteral("跳过");
+    if (result == QStringLiteral("disabled")) return QStringLiteral("已停用");
+    if (result == QStringLiteral("running")) return QStringLiteral("运行中");
+    if (result == QStringLiteral("partial_success")) return QStringLiteral("部分成功");
+    if (result == QStringLiteral("none")) return QStringLiteral("暂无状态");
+    if (result == QStringLiteral("expired")) return QStringLiteral("已过期");
+    return result.isEmpty() || result == QStringLiteral("unknown") ? QStringLiteral("未知") : result;
+}
+
+QColor resultColor(const QString &result) { return UiTheme::statusColor(result); }
+QString badgeStyle(const QString &result) { return UiTheme::statusStyle(result); }
+
+QIcon statusDot(const QColor &color)
+{
+    QPixmap pixmap(32, 32);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    painter.drawEllipse(QRectF(8, 8, 16, 16));
+    return QIcon(pixmap);
+}
+
+void applyToolStatus(QTreeWidgetItem *item, const QJsonObject *state, const QString *error)
+{
+    QString text = QStringLiteral("未读取");
+    QColor color(QString::fromLatin1(UiTheme::Muted));
+    if (error != nullptr) {
+        text = QStringLiteral("读取失败");
+        color = QColor(QString::fromLatin1(UiTheme::Danger));
+    } else if (state != nullptr) {
+        const QString result = ToolState::displayResult(*state);
+        text = resultLabel(result, jsonString(*state, QStringLiteral("tool_id")));
+        color = resultColor(result);
+    }
+    item->setIcon(0, statusDot(color));
+    item->setText(1, text);
+    item->setForeground(1, color);
+}
+
+class CommandDescriptionLabel : public QLabel {
+public:
+    CommandDescriptionLabel(const QString &description, QWidget *parent) : QLabel(description.simplified(), parent)
+    {
+        setObjectName(QStringLiteral("muted"));
+        setTextFormat(Qt::PlainText);
+        setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+        setAccessibleName(description);
+    }
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        style()->drawItemText(&painter, contentsRect(), Qt::AlignLeft | Qt::AlignVCenter,
+            palette(), isEnabled(), fontMetrics().elidedText(text().simplified(), Qt::ElideRight,
+                contentsRect().width()), QPalette::WindowText);
+    }
+};
+
+QWidget *makeCommandRow(const AppDatabase::ToolCommand &command, QStyle *, QWidget *parent)
+{
+    auto *row = new QWidget(parent);
+    row->setAttribute(Qt::WA_TransparentForMouseEvents);
+    auto *layout = new QHBoxLayout(row);
+    layout->setContentsMargins(14, 9, 14, 9);
+    layout->setSpacing(12);
+
+    auto *icon = new QLabel(row);
+    icon->setPixmap(UiTheme::icon(QStringLiteral("play")).pixmap(18, 18));
+    icon->setFixedSize(22, 22);
+    icon->setAlignment(Qt::AlignCenter);
+    layout->addWidget(icon, 0, Qt::AlignTop);
+
+    auto *content = new QVBoxLayout;
+    content->setSpacing(4);
+    auto *heading = new QHBoxLayout;
+    heading->setSpacing(12);
+    content->addLayout(heading);
+    layout->addLayout(content, 1);
+
+    auto *title = new QLabel(command.name, row);
+    title->setObjectName(QStringLiteral("commandName"));
+    title->setTextFormat(Qt::PlainText);
+    heading->addWidget(title);
+    if (!command.parameters.isEmpty()) {
+        heading->addWidget(makeTag(QStringLiteral("需填参数"), QStringLiteral("tag"), row));
+    }
+    if (command.highRisk) {
+        heading->addWidget(makeTag(QStringLiteral("高风险"), QStringLiteral("tagDanger"), row));
+    }
+    if (command.interactive) {
+        heading->addWidget(makeTag(QStringLiteral("终端"), QStringLiteral("tagMuted"), row));
+    }
+    if (!command.enabled) heading->addWidget(makeTag(QStringLiteral("已停用"), QStringLiteral("tagMuted"), row));
+    heading->addStretch(1);
+    if (!command.description.trimmed().isEmpty())
+        content->addWidget(new CommandDescriptionLabel(command.description, row));
+    return row;
+}
+
+} // namespace
+
+AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
+    : QWidget(parent)
+    , database_(database)
+{
+
+
+    UiTheme::setSurface(this, "content");
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+
+    auto *toolbar = new QHBoxLayout;
+    toolbar->setSpacing(8);
+    auto *newGroupButton = new QPushButton(QStringLiteral("新建工具组"), this);
+    UiTheme::setRole(newGroupButton, "quiet");
+    toolbar->addWidget(newGroupButton);
+    auto *importButton = new QPushButton(QStringLiteral("接入工具"), this);
+    importButton->setObjectName(QStringLiteral("registerTool"));
+    UiTheme::setRole(importButton, "primary");
+    importButton->setToolTip(QStringLiteral("从本地、WSL 或 SSH 目录读取工具配置与命令。"));
+    connect(importButton, &QPushButton::clicked, this, [this] { discoverCommands(); });
+    toolbar->addWidget(importButton);
+
+    auto *splitter = new WorkspaceSplitter(Qt::Horizontal, this);
+
+    // ---- Left: groups and tools ----
+    auto *treeCard = makeSurface(splitter, "index");
+    treeCard->setObjectName(QStringLiteral("workspaceIndex"));
+    auto *treeLayout = new QVBoxLayout(treeCard);
+    treeLayout->setContentsMargins(16, 22, 16, 24);
+    treeLayout->setSpacing(8);
+    auto *treeTitle = makeCardTitle(QStringLiteral("工具组"), treeCard);
+    treeTitle->setContentsMargins(4, 0, 0, 0);
+    treeLayout->addWidget(treeTitle);
+    groupHint_ = makeMuted(QStringLiteral("右键可重命名或移除。"), treeCard);
+    groupHint_->setContentsMargins(4, 0, 0, 4);
+    groupHint_->hide();
+    auto *orderedTree = new SiblingOrderTree(treeCard);
+    tree_ = orderedTree;
+    orderedTree->saveOrder = [this](QTreeWidgetItem *item, const QList<int> &ids) {
+        QString error;
+        const bool saved = item->parent()
+            ? database_->reorderTools(item->parent()->data(0, Qt::UserRole).toInt(), ids, &error)
+            : database_->reorderToolGroups(ids, &error);
+        if (!saved) showError(error);
+        return saved;
+    };
+    orderedTree->isContainer = [](QTreeWidgetItem *item) { return !item->parent(); };
+    orderedTree->canTransfer = [](const QList<QTreeWidgetItem *> &items, QTreeWidgetItem *group) {
+        return items.size() == 1 && items.first()->parent() && group && !group->parent()
+            && items.first()->parent() != group;
+    };
+    orderedTree->saveTransfer = [this](const QList<QTreeWidgetItem *> &items, QTreeWidgetItem *group) {
+        const int toolId = items.first()->data(0,Qt::UserRole).toInt();
+        QString error;
+        if (!database_->setToolGroup(toolId,group->data(0,Qt::UserRole).toInt(),&error)) {
+            showError(error); return false;
+        }
+        loadAll(toolId);
+        if (tree_->currentItem()) tree_->scrollToItem(tree_->currentItem());
+        return true;
+    };
+    synchronizeTreeAccessibility(tree_);
+    tree_->setObjectName(QStringLiteral("toolTree"));
+    tree_->setColumnCount(2);
+    tree_->setHeaderHidden(true);
+    tree_->header()->setStretchLastSection(false);
+    tree_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    tree_->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    tree_->setRootIsDecorated(false);
+    tree_->setIndentation(18);
+    tree_->setIconSize(QSize(16, 16));
+    tree_->setMinimumWidth(240);
+    tree_->setUniformRowHeights(true);
+    tree_->setSelectionMode(QAbstractItemView::SingleSelection);
+    tree_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    tree_->setContextMenuPolicy(Qt::CustomContextMenu);
+    tree_->setMouseTracking(true);
+    tree_->setAccessibleDescription(QStringLiteral("拖动工具组或工具排序，拖入其他工具组归类；Ctrl+上或下箭头调序。"));
+    tree_->setToolTip(QStringLiteral("拖入工具组归类；拖动或 Ctrl+↑/↓ 调整同层顺序。"));
+    treeLayout->addWidget(tree_, 1);
+    treeLayout->addLayout(toolbar);
+
+    // ---- Right: empty state or tool details ----
+    detailsStack_ = new QStackedWidget(splitter);
+
+    auto *emptyPage = makeSurface(detailsStack_, "content");
+    auto *emptyLayout = new QVBoxLayout(emptyPage);
+    emptyLayout->setContentsMargins(36, 36, 36, 36);
+    emptyLayout->setSpacing(10);
+    emptyLayout->addStretch(1);
+    emptyTitle_ = new QLabel(emptyPage);
+    emptyTitle_->setObjectName(QStringLiteral("emptyStateTitle"));
+    emptyTitle_->setTextFormat(Qt::PlainText);
+    emptyTitle_->setWordWrap(true);
+    emptyTitle_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    emptyTitle_->setAlignment(Qt::AlignCenter);
+    emptyLayout->addWidget(emptyTitle_);
+    emptyMessage_ = makeMuted(QString(), emptyPage);
+    emptyMessage_->setObjectName(QStringLiteral("emptyStateMessage"));
+    emptyMessage_->setAlignment(Qt::AlignCenter);
+    emptyMessage_->setWordWrap(true);
+    emptyLayout->addWidget(emptyMessage_);
+    emptyLayout->addStretch(2);
+    detailsStack_->addWidget(emptyPage);
+
+    auto *detailsScroll = new QScrollArea(detailsStack_);
+    detailsScroll->setObjectName(QStringLiteral("detailsScroll"));
+    detailsScroll->setFrameShape(QFrame::NoFrame);
+    detailsScroll->setWidgetResizable(true);
+    detailsScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    detailsScroll->viewport()->setAutoFillBackground(false);
+    auto *column = new QWidget(detailsScroll);
+    column->setObjectName(QStringLiteral("detailsColumn"));
+    column->setAutoFillBackground(false);
+    auto *columnLayout = new QVBoxLayout(column);
+    UiTheme::setSurface(column, "content");
+    columnLayout->setContentsMargins(0, 0, 0, 0);
+    columnLayout->setSpacing(0);
+
+    // Header: identity and registration actions.
+    auto *headerCard = makeSurface(column);
+    auto *headerLayout = new QVBoxLayout(headerCard);
+    headerLayout->setContentsMargins(24, 22, 24, 22);
+    headerLayout->setSpacing(6);
+    auto *headerRow = new QHBoxLayout;
+    headerRow->setSpacing(8);
+    toolName_ = new QLabel(headerCard);
+    toolName_->setObjectName(QStringLiteral("toolName"));
+    toolName_->setWordWrap(true);
+    toolName_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    headerRow->addWidget(toolName_, 1);
+    toolSource_ = makeTag(QString(), QStringLiteral("tagMuted"), headerCard);
+    toolSource_->setToolTip(QStringLiteral("在左侧右键工具，选择“查看工具信息”查看连接与位置。"));
+    toolSource_->hide();
+    headerRow->addWidget(toolSource_);
+    reloadManifestButton_ = new QPushButton(QStringLiteral("重新读取声明"), headerCard);
+    UiTheme::setRole(reloadManifestButton_, "quiet");
+    reloadManifestButton_->setToolTip(QStringLiteral("重新读取接入声明，更新命令和工具信息；保留分组。"));
+    headerRow->addWidget(reloadManifestButton_);
+    deleteToolButton_ = new QPushButton(QStringLiteral("移除注册"), headerCard);
+    deleteToolButton_->setObjectName(QStringLiteral("dangerButton"));
+    headerRow->addWidget(deleteToolButton_);
+    headerLayout->addLayout(headerRow);
+    columnLayout->addWidget(headerCard);
+
+    // Current state.
+    auto *stateCard = makeSurface(column);
+    stateSection_ = stateCard;
+    auto *stateLayout = new QVBoxLayout(stateCard);
+    stateLayout->setContentsMargins(24, 22, 24, 24);
+    stateLayout->setSpacing(8);
+    auto *stateHeader = new QHBoxLayout;
+    stateHeader->addWidget(makeCardTitle(QStringLiteral("当前状态"), stateCard));
+    stateHeader->addStretch(1);
+    auto *refreshButton = new QPushButton(UiTheme::icon(QStringLiteral("refresh")),
+                                          QString(), stateCard);
+    refreshButton->setObjectName(QStringLiteral("refreshStateButton"));
+    refreshButton->setIconSize(QSize(22,22));
+    refreshButton->setFixedSize(36,36);
+    refreshButton->setAccessibleName(QStringLiteral("刷新状态"));
+    refreshButton->setCursor(Qt::PointingHandCursor);
+    UiTheme::setRole(refreshButton, "quiet");
+    refreshButton->setToolTip(QStringLiteral("刷新状态：重新读取当前状态 JSON，不会运行工具命令。"));
+    stateHeader->addWidget(refreshButton);
+    stateLayout->addLayout(stateHeader);
+    auto *badgeRow = new QHBoxLayout;
+    stateBadge_ = new QLabel(stateCard);
+    badgeRow->addWidget(stateBadge_);
+    badgeRow->addStretch(1);
+    stateLayout->addLayout(badgeRow);
+    stateSummary_ = new QLabel(stateCard);
+    stateSummary_->setObjectName(QStringLiteral("stateSummary"));
+    stateSummary_->setWordWrap(true);
+    stateSummary_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    stateLayout->addWidget(stateSummary_);
+    stateItemsTitle_ = makeMuted(QStringLiteral("状态明细"), stateCard);
+    stateItemsTitle_->setContentsMargins(0, 6, 0, 0);
+    stateLayout->addWidget(stateItemsTitle_);
+    stateItemsBox_ = new QWidget(stateCard);
+    stateItemsLayout_ = new QVBoxLayout(stateItemsBox_);
+    stateItemsLayout_->setContentsMargins(0, 0, 0, 0);
+    stateItemsLayout_->setSpacing(6);
+    stateLayout->addWidget(stateItemsBox_);
+    columnLayout->addWidget(stateCard);
+
+    // Commands and the output of the latest run.
+    auto *commandCard = makeSurface(column, "content");
+    auto *commandLayout = new QVBoxLayout(commandCard);
+    commandLayout->setContentsMargins(24, 22, 24, 24);
+    commandLayout->setSpacing(10);
+    auto *commandHeader = new QHBoxLayout;
+    commandHeader->addWidget(makeCardTitle(QStringLiteral("工具命令"), commandCard));
+    commandHeader->addStretch(1);
+    auto *addCommand = new QPushButton(QStringLiteral("添加命令"), commandCard);
+    addCommand->setObjectName(QStringLiteral("addToolCommand"));
+    UiTheme::setRole(addCommand, "quiet");
+    commandHeader->addWidget(addCommand);
+    connect(addCommand, &QPushButton::clicked, this, [this] { editCommand(); });
+    commandHint_ = new QLabel(commandCard);
+    commandHint_->setObjectName(QStringLiteral("sourceText"));
+    commandHeader->addWidget(commandHint_);
+    commandHint_->hide();
+    commandLayout->addLayout(commandHeader);
+    auto *orderedCommands = new SiblingOrderList(commandCard);
+    commandList_ = orderedCommands;
+    orderedCommands->saveOrder = [this](QListWidgetItem *item, const QList<int> &ids) {
+        const int toolId = selectedToolId_, selected = item->data(Qt::UserRole).toInt();
+        const auto commands = database_->toolCommands(toolId);
+        QHash<int, AppDatabase::ToolCommand> byId;
+        for (const auto &command : commands) byId.insert(command.id, command);
+        if (ids.size() != commands.size() || QSet<int>(ids.begin(), ids.end()).size() != commands.size()) return false;
+        QList<AppDatabase::ToolCommand> ordered;
+        for (int id : ids) { if (!byId.contains(id)) return false; ordered.append(byId.value(id)); }
+        if (!saveUserCommands(toolId, ordered)) return false;
+        // Taking a QListWidget item destroys its row widget. Rebuild after the
+        // shared ordering widget has completed its move, retaining selection.
+        QTimer::singleShot(0, this, [this, toolId, selected] {
+            if (selectedToolId_ != toolId) return;
+            loadToolDetails(toolId);
+            for (int i = 0; i < commandList_->count(); ++i)
+                if (commandList_->item(i)->data(Qt::UserRole).toInt() == selected) commandList_->setCurrentRow(i);
+        });
+        return true;
+    };
+    commandList_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(commandList_, &QListWidget::customContextMenuRequested, this, &AutomationPage::showCommandContextMenu);
+    commandList_->setAccessibleDescription(QStringLiteral("双击运行；右键编辑、停用或删除；拖动或 Ctrl+上/下箭头排序。"));
+    commandList_->setObjectName(QStringLiteral("commandList"));
+    commandList_->setSpacing(0);
+    commandList_->setSelectionMode(QAbstractItemView::SingleSelection);
+    commandList_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    commandList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    commandList_->setMouseTracking(true);
+    commandLayout->addWidget(commandList_);
+
+    runPanel_ = new QFrame(commandCard);
+    runPanel_->setObjectName(QStringLiteral("runPanel"));
+    auto *runLayout = new QVBoxLayout(runPanel_);
+    runLayout->setContentsMargins(14, 10, 14, 10);
+    runLayout->setSpacing(6);
+    auto *runHeader = new QHBoxLayout;
+    runTitle_ = new QLabel(runPanel_);
+    runTitle_->setObjectName(QStringLiteral("runTitle"));
+    runTitle_->setWordWrap(true);
+    runHeader->addWidget(runTitle_, 1);
+    runStatus_ = new QLabel(runPanel_);
+    runHeader->addWidget(runStatus_);
+    runLayout->addLayout(runHeader);
+    runOutput_ = new QPlainTextEdit(runPanel_);
+    runOutput_->setObjectName(QStringLiteral("runOutput"));
+    runOutput_->setReadOnly(true);
+    runOutput_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    runOutput_->setMinimumHeight(90);
+    runOutput_->setMaximumHeight(200);
+    runOutput_->setLineWrapMode(QPlainTextEdit::WidgetWidth);
+    TextLayoutGuard::configure(runOutput_);
+    runOutput_->setUndoRedoEnabled(false);
+    runLayout->addWidget(runOutput_);
+    runPanel_->hide();
+    commandLayout->addWidget(runPanel_);
+    columnLayout->addWidget(commandCard);
+
+    columnLayout->addStretch(1);
+
+    detailsScroll->setWidget(column);
+    detailsStack_->addWidget(detailsScroll);
+
+    splitter->addWidget(treeCard);
+    splitter->addWidget(detailsStack_);
+    splitter->setStretchFactor(0, 1);
+    splitter->setStretchFactor(1, 3);
+    splitter->setSizes({300, 900});
+    layout->addWidget(splitter, 1);
+
+    connect(newGroupButton, &QPushButton::clicked, this, &AutomationPage::createGroup);
+    connect(tree_, &QTreeWidget::itemSelectionChanged, this, &AutomationPage::handleTreeSelection);
+    connect(tree_, &QTreeWidget::customContextMenuRequested, this, &AutomationPage::showTreeContextMenu);
+    connect(refreshButton, &QPushButton::clicked, this, &AutomationPage::refreshState);
+    connect(reloadManifestButton_, &QPushButton::clicked, this, &AutomationPage::reloadManifest);
+    connect(deleteToolButton_, &QPushButton::clicked, this, &AutomationPage::deleteTool);
+    connect(commandList_, &QListWidget::itemActivated, this, &AutomationPage::runCommand);
+    // Only wake when a cached status expires; never poll tool state files.
+    stateExpiryTimer_ = new QTimer(this);
+    stateExpiryTimer_->setSingleShot(true);
+    stateExpiryTimer_->setTimerType(Qt::PreciseTimer);
+    connect(stateExpiryTimer_, &QTimer::timeout, this, &AutomationPage::updateCachedStateExpiry);
+
+    syncBuiltinTools();
+    loadAll();
+    refreshAllStates();
+}
+
+QString AutomationPage::ungroupedName() const
+{
+    const QString name = database_ != nullptr ? database_->setting(kUngroupedNameKey).trimmed() : QString();
+    return name.isEmpty() ? QStringLiteral("未分组") : name;
+}
+
+bool AutomationPage::hasRunningCommands() const
+{
+    for (const auto &process : runningProcesses_) {
+        if (process && process->state() != QProcess::NotRunning) return true;
+    }
+    return false;
+}
+
+int AutomationPage::builtinToolGroupId()
+{
+    // The group is created once, on first start. If the user later deletes it,
+    // new built-in tools go to the ungrouped section instead of recreating it.
+    QString error;
+    const QList<AppDatabase::ToolGroup> groups = database_->toolGroups(&error);
+    const QString stored = database_->setting(kBuiltinGroupKey);
+    if (!stored.isEmpty()) {
+        for (const AppDatabase::ToolGroup &group : groups) {
+            if (group.id == stored.toInt()) {
+                return group.id;
+            }
+        }
+        return 0;
+    }
+    int groupId = 0;
+    for (const AppDatabase::ToolGroup &group : groups) {
+        if (group.name == kBuiltinGroupName) {
+            groupId = group.id;
+        }
+    }
+    if (groupId == 0 && !database_->addToolGroup(kBuiltinGroupName, &groupId, &error)) {
+        return 0;
+    }
+    database_->setSetting(kBuiltinGroupKey, QString::number(groupId), &error);
+    return groupId;
+}
+
+void AutomationPage::syncBuiltinTools()
+{
+    // Built-in tools ship in <program dir>/tools/<tool>/orchestrate-tool.json. Their
+    // records are rewritten on every start so paths follow the program folder when
+    // it is copied to another machine; group and refresh settings are kept.
+    if (database_ == nullptr) {
+        return;
+    }
+    const QDir toolsDirectory(QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("tools")));
+    const QStringList folders = toolsDirectory.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+    if (folders.isEmpty()) {
+        return;
+    }
+
+    QString error;
+    const QList<AppDatabase::AutomationTool> tools = database_->automationTools(0, &error);
+    QStringList problems;
+    for (const QString &folder : folders) {
+        error.clear();
+        const QString manifestPath = QDir(toolsDirectory.filePath(folder)).filePath(QStringLiteral("orchestrate-tool.json"));
+        if (!QFileInfo::exists(manifestPath)) {
+            continue;
+        }
+        QByteArray data;
+        ParsedManifest manifest;
+        if (!readManifest(manifestPath, &data, &error)
+            || !parseManifest(data, manifestPath, QString(), &manifest, &error)) {
+            problems.append(QStringLiteral("%1：%2").arg(folder, error));
+            continue;
+        }
+        manifest.tool.builtin = true;
+
+        // A local tool registered by hand before it was bundled becomes the built-in one.
+        const AppDatabase::AutomationTool *existing = nullptr;
+        for (const AppDatabase::AutomationTool &candidate : tools) {
+            if ((candidate.builtin || (candidate.targetType == QStringLiteral("windows-local") && candidate.sshHost.isEmpty()
+                && candidate.wslDistribution.isEmpty())) && candidate.externalId == manifest.tool.externalId
+                && (existing == nullptr || candidate.builtin)) {
+                existing = &candidate;
+            }
+        }
+
+        bool saved = false;
+        if (existing != nullptr) {
+            manifest.tool.id = existing->id;
+            if (existing->customized) {
+                // Rebase app-owned paths when a portable installation moves,
+                // keeping the user's snapshot and command IDs intact.
+                auto customized = *existing;
+                auto commands = database_->toolCommands(existing->id, &error);
+                const QString oldRoot = QFileInfo(existing->registrationPath).absolutePath();
+                const QString newRoot = QFileInfo(manifestPath).absolutePath();
+                const auto relocate = [&](QString value) {
+                    const QString normalized = QDir::fromNativeSeparators(value);
+                    if (normalized.compare(oldRoot, Qt::CaseInsensitive) == 0) return newRoot;
+                    if (normalized.startsWith(oldRoot + '/', Qt::CaseInsensitive)) return newRoot + normalized.mid(oldRoot.size());
+                    return value;
+                };
+                customized.registrationPath = manifestPath; customized.builtin = true;
+                if (customized.targetType == "windows-local") {
+                    customized.workingDirectory = relocate(customized.workingDirectory);
+                    customized.statePath = relocate(customized.statePath);
+                    for (auto &command : commands) {
+                        command.executable = relocate(command.executable);
+                        for (auto &argument : command.arguments) argument = relocate(argument);
+                    }
+                }
+                saved = error.isEmpty() && database_->saveAutomationTool(customized, commands, nullptr, &error);
+            } else
+            saved = database_->saveAutomationTool(manifest.tool, manifest.commands, nullptr, &error);
+            // When taking over an ungrouped hand-registered copy, put it where a fresh
+            // install would; after that the user's grouping is left alone.
+            if (saved && !existing->builtin && existing->groupId == 0) {
+                saved = database_->setToolGroup(existing->id, builtinToolGroupId(), &error);
+            }
+        } else {
+            AppDatabase::AutomationTool tool = manifest.tool;
+            tool.groupId = builtinToolGroupId();
+            int toolId = 0;
+            saved = database_->saveAutomationTool(tool, manifest.commands, &toolId, &error);
+        }
+        if (!saved) {
+            problems.append(QStringLiteral("%1：%2").arg(folder, error));
+        }
+    }
+    if (!problems.isEmpty()) {
+        showError(QStringLiteral("内置工具加载失败：\n%1").arg(problems.join(QLatin1Char('\n'))));
+    }
+}
+
+AutomationPage::~AutomationPage()
+{
+    // QProcess can emit finished while being destroyed. Disconnect callbacks
+    // before C++ members (state caches and run records) have been destroyed.
+    for (auto *process : findChildren<QProcess *>()) {
+        process->blockSignals(true);
+        if (process->state() != QProcess::NotRunning) {
+            process->kill();
+            process->waitForFinished(1000);
+        }
+        delete process;
+    }
+}
+
+bool AutomationPage::findTool(int toolId, AppDatabase::AutomationTool *tool) const
+{
+    if (database_ == nullptr || toolId <= 0) {
+        return false;
+    }
+    QString error;
+    const QList<AppDatabase::AutomationTool> tools = database_->automationTools(0, &error);
+    for (const AppDatabase::AutomationTool &candidate : tools) {
+        if (candidate.id == toolId) {
+            if (tool != nullptr) {
+                *tool = candidate;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+void AutomationPage::loadAll(int preferredToolId)
+{
+    // Keep the current selection and collapsed groups across rebuilds.
+    int selectType = 0;
+    int selectId = 0;
+    if (preferredToolId > 0) {
+        selectType = kToolItem;
+        selectId = preferredToolId;
+    } else if (QTreeWidgetItem *current = tree_->currentItem()) {
+        selectType = current->data(0, Qt::UserRole + 1).toInt();
+        selectId = current->data(0, Qt::UserRole).toInt();
+    }
+    QSet<int> collapsedGroups;
+    for (int i = 0; i < tree_->topLevelItemCount(); ++i) {
+        if (!tree_->topLevelItem(i)->isExpanded()) {
+            collapsedGroups.insert(tree_->topLevelItem(i)->data(0, Qt::UserRole).toInt());
+        }
+    }
+    const bool preferredShownBefore = preferredToolId > 0 && preferredToolId == selectedToolId_
+        && detailsStack_->currentIndex() == 1;
+
+    {
+        const QSignalBlocker blocker(tree_);
+        tree_->clear();
+    }
+
+    if (database_ == nullptr) {
+        showError(QStringLiteral("数据库未连接。"));
+        return;
+    }
+
+    QString error;
+    const QList<AppDatabase::ToolGroup> groups = database_->toolGroups(&error, true);
+    if (!error.isEmpty()) {
+        showError(error);
+        return;
+    }
+    const QList<AppDatabase::AutomationTool> tools = database_->automationTools(0, &error);
+    if (!error.isEmpty()) {
+        showError(error);
+        return;
+    }
+
+    QHash<int, QTreeWidgetItem *> groupItems;
+    const auto addGroupItem = [this, &groupItems](int id, const QString &name, const QString &tooltip) {
+        auto *item = new QTreeWidgetItem(tree_);
+        item->setText(0, name);
+        item->setData(0, Qt::UserRole, id);
+        item->setData(0, Qt::UserRole + 1, kGroupItem);
+        item->setData(0, SiblingOrderScopeRole, QStringLiteral("tool-groups"));
+        item->setIcon(0, UiTheme::icon(QStringLiteral("folder")));
+        item->setToolTip(0, tooltip);
+        QFont font = item->font(0);
+        font.setWeight(QFont::DemiBold);
+        item->setFont(0, font);
+        item->setForeground(1, QColor(QString::fromLatin1(UiTheme::Muted)));
+        item->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
+        groupItems.insert(id, item);
+    };
+    for (const AppDatabase::ToolGroup &group : groups) {
+        const QString name = group.id == 0 ? ungroupedName() : group.name;
+        addGroupItem(group.id, name, QStringLiteral("工具组：%1；拖动调整组间顺序").arg(name));
+    }
+
+    QHash<int, int> toolCounts;
+    for (const AppDatabase::AutomationTool &tool : tools) {
+        QTreeWidgetItem *parent = groupItems.value(tool.groupId, groupItems.value(0));
+        auto *item = new QTreeWidgetItem(parent);
+        item->setText(0, tool.name);
+        item->setData(0, Qt::UserRole, tool.id);
+        item->setData(0, Qt::UserRole + 1, kToolItem);
+        item->setData(0, SiblingOrderScopeRole, QStringLiteral("tools.%1").arg(tool.groupId));
+        item->setToolTip(0, tool.description.isEmpty() ? QString()
+            : QStringLiteral("<qt>%1</qt>").arg(tool.description.toHtmlEscaped().replace(
+                QLatin1Char('\n'), QStringLiteral("<br>"))));
+        item->setData(0, Qt::AccessibleDescriptionRole, tool.description);
+        item->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
+        applyToolStatus(item,
+                        stateCache_.contains(tool.id) ? &stateCache_[tool.id] : nullptr,
+                        stateErrors_.contains(tool.id) ? &stateErrors_[tool.id] : nullptr);
+        if (tool.statePath.isEmpty()) { item->setText(1, {}); item->setIcon(0,statusDot(resultColor("none"))); }
+        toolCounts[parent->data(0, Qt::UserRole).toInt()] += 1;
+    }
+    for (auto it = groupItems.cbegin(); it != groupItems.cend(); ++it) {
+        const int count = toolCounts.value(it.key());
+        it.value()->setText(1, count > 0 ? QString::number(count) : QString());
+        it.value()->setExpanded(!collapsedGroups.contains(it.key()));
+    }
+
+    QTreeWidgetItem *target = nullptr;
+    if (selectType == kGroupItem) {
+        target = groupItems.value(selectId);
+    } else if (selectType == kToolItem) {
+        for (auto it = groupItems.cbegin(); it != groupItems.cend() && target == nullptr; ++it) {
+            for (int i = 0; i < it.value()->childCount(); ++i) {
+                if (it.value()->child(i)->data(0, Qt::UserRole).toInt() == selectId) {
+                    target = it.value()->child(i);
+                    it.value()->setExpanded(true);
+                    break;
+                }
+            }
+        }
+    }
+    if (target != nullptr) {
+        tree_->setCurrentItem(target);
+    }
+    handleTreeSelection();
+    // An explicitly requested tool may have new commands even if it stayed selected,
+    // in which case the selection handler skipped reloading its details.
+    if (preferredShownBefore && selectedToolId_ == preferredToolId) {
+        loadToolDetails(preferredToolId);
+    }
+}
+
+void AutomationPage::handleTreeSelection()
+{
+    QTreeWidgetItem *item = tree_->currentItem();
+    if (item == nullptr || !item->isSelected()) {
+        selectedGroupId_ = 0;
+        showEmptyDetails();
+        return;
+    }
+    const int itemType = item->data(0, Qt::UserRole + 1).toInt();
+    if (itemType == kGroupItem) {
+        selectedGroupId_ = item->data(0, Qt::UserRole).toInt();
+        showEmptyDetails(selectedGroupId_);
+    } else if (itemType == kToolItem) {
+        selectedGroupId_ = item->parent() ? item->parent()->data(0, Qt::UserRole).toInt() : 0;
+        const int toolId = item->data(0, Qt::UserRole).toInt();
+        if (toolId != selectedToolId_ || detailsStack_->currentIndex() != 1) {
+            loadToolDetails(toolId);
+        }
+    }
+}
+
+void AutomationPage::showTreeContextMenu(const QPoint &position)
+{
+    QTreeWidgetItem *item = tree_->itemAt(position);
+    QMenu menu(this);
+    if (item == nullptr) {
+        menu.addAction(QStringLiteral("新建工具组"), this, &AutomationPage::createGroup);
+        menu.exec(tree_->viewport()->mapToGlobal(position));
+        return;
+    }
+
+    tree_->setCurrentItem(item);
+    const int itemType = item->data(0, Qt::UserRole + 1).toInt();
+    const int id = item->data(0, Qt::UserRole).toInt();
+    if (itemType == kGroupItem) {
+        menu.addAction(QStringLiteral("重命名工具组"), this, &AutomationPage::renameGroup);
+        QAction *deleteAction = menu.addAction(QStringLiteral("删除工具组"), this, &AutomationPage::deleteGroup);
+        deleteAction->setEnabled(id > 0);
+        menu.addSeparator();
+        menu.addAction(QStringLiteral("新建工具组"), this, &AutomationPage::createGroup);
+    } else {
+        menu.addAction(QStringLiteral("查看工具信息"), this, [this, id] { showToolInformation(id); });
+        menu.addSeparator();
+        AppDatabase::AutomationTool tool;
+        if (!findTool(id, &tool)) return;
+        menu.addAction(QStringLiteral("工具设置…"), this, [this, id] { editTool(id); });
+        menu.addAction(QStringLiteral("发现更多命令…"), this, [this, id] { discoverCommands(id); });
+        if (!tool.statePath.isEmpty()) menu.addAction(QStringLiteral("刷新状态"), this, &AutomationPage::refreshState);
+        if (!tool.registrationPath.isEmpty()) menu.addAction(tool.builtin ? QStringLiteral("恢复内置默认配置…")
+            : QStringLiteral("重新读取声明…"), this, &AutomationPage::reloadManifest);
+        if (!tool.builtin) {
+            menu.addSeparator();
+            menu.addAction(QStringLiteral("移除注册"), this, &AutomationPage::deleteTool);
+        }
+    }
+    menu.exec(tree_->viewport()->mapToGlobal(position));
+}
+
+void AutomationPage::showToolInformation(int toolId)
+{
+    AppDatabase::AutomationTool tool;
+    if (!findTool(toolId, &tool)) return;
+
+    QDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("toolInformationDialog"));
+    dialog.setWindowTitle(QStringLiteral("工具信息"));
+    dialog.setMinimumWidth(520);
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(24, 20, 24, 20);
+    layout->setSpacing(16);
+    layout->addWidget(makeCardTitle(tool.name, &dialog));
+    auto *form = new QFormLayout;
+    form->setHorizontalSpacing(16);
+    form->setVerticalSpacing(12);
+    const auto addField = [&](const QString &name, const QString &value) {
+        auto *label = new QLabel(value, &dialog);
+        label->setTextFormat(Qt::PlainText);
+        label->setWordWrap(true);
+        label->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+        form->addRow(name, label);
+    };
+    const bool wsl = tool.targetType == QStringLiteral("wsl");
+    const bool ssh = tool.targetType == QStringLiteral("ssh");
+    addField(QStringLiteral("类型"), wsl ? QStringLiteral("WSL") : ssh ? QStringLiteral("SSH")
+        : tool.builtin ? QStringLiteral("内置工具") : QStringLiteral("本地工具"));
+    if (wsl) {
+        addField(QStringLiteral("发行版"), tool.wslDistribution);
+        addField(QStringLiteral("用户"), tool.wslUser);
+    } else if (ssh) {
+        addField(QStringLiteral("主机"), tool.sshHost);
+        addField(QStringLiteral("用户"), tool.sshUser.isEmpty()
+            ? QStringLiteral("SSH 配置默认用户") : tool.sshUser);
+    }
+    const auto displayPath = [&](const QString &path) {
+        return wsl || ssh ? path : QDir::toNativeSeparators(path);
+    };
+    addField(QStringLiteral("接入声明"), displayPath(tool.registrationPath));
+    addField(QStringLiteral("工作目录"), displayPath(tool.workingDirectory));
+    addField(QStringLiteral("状态文件"), displayPath(tool.statePath));
+    layout->addLayout(form);
+    auto *close = new QPushButton(QStringLiteral("关闭"), &dialog);
+    close->setDefault(true);
+    connect(close, &QPushButton::clicked, &dialog, &QDialog::accept);
+    layout->addWidget(close, 0, Qt::AlignRight);
+    dialog.exec();
+}
+
+void AutomationPage::updateToolIcon(int toolId)
+{
+    for (int i = 0; i < tree_->topLevelItemCount(); ++i) {
+        QTreeWidgetItem *group = tree_->topLevelItem(i);
+        for (int j = 0; j < group->childCount(); ++j) {
+            QTreeWidgetItem *item = group->child(j);
+            if (item->data(0, Qt::UserRole).toInt() == toolId) {
+                AppDatabase::AutomationTool tool;
+                if (findTool(toolId, &tool) && tool.statePath.isEmpty()) {
+                    const auto record = runRecords_.value(toolId);
+                    const QString result = record.running ? "running" : record.failed ? "failure" : "none";
+                    item->setIcon(0, statusDot(resultColor(result)));
+                    item->setText(1, record.running ? QStringLiteral("运行中") : QString());
+                    return;
+                }
+                applyToolStatus(item,
+                                stateCache_.contains(toolId) ? &stateCache_[toolId] : nullptr,
+                                stateErrors_.contains(toolId) ? &stateErrors_[toolId] : nullptr);
+                return;
+            }
+        }
+    }
+}
+
+void AutomationPage::showEmptyDetails(int groupId)
+{
+    selectedToolId_ = 0;
+    detailsStack_->setCurrentIndex(0);
+    if (groupId < 0) {
+        emptyTitle_->setText(QStringLiteral("选择一个工具"));
+        emptyMessage_->setText(QStringLiteral("在左侧选择工具后，这里会显示它的当前状态和可运行的命令。\n"
+                                              "还没有工具时，点击左下方“接入工具”选择工具所在环境。"));
+        return;
+    }
+    QTreeWidgetItem *item = tree_->currentItem();
+    const int count = item != nullptr ? item->childCount() : 0;
+    emptyTitle_->setText(item != nullptr ? item->text(0) : ungroupedName());
+    emptyMessage_->setText(count > 0
+                               ? QStringLiteral("该组有 %1 个工具，在左侧选择一个工具查看详情。").arg(count)
+                               : QStringLiteral("该组还没有工具。选中它后点击“接入工具”，新工具会直接放入这个组。"));
+}
+
+void AutomationPage::loadToolDetails(int toolId)
+{
+    AppDatabase::AutomationTool tool;
+    if (!findTool(toolId, &tool)) {
+        showEmptyDetails();
+        return;
+    }
+    selectedToolId_ = tool.id;
+    detailsStack_->setCurrentIndex(1);
+
+    toolName_->setText(tool.name);
+    toolName_->setToolTip(tool.description.isEmpty() ? QString()
+        : QStringLiteral("<qt>%1</qt>").arg(tool.description.toHtmlEscaped().replace(
+            QLatin1Char('\n'), QStringLiteral("<br>"))));
+    toolName_->setAccessibleDescription(tool.description);
+    toolSource_->setText(tool.targetType == QStringLiteral("wsl") ? QStringLiteral("WSL")
+                                                               : QStringLiteral("SSH"));
+    toolSource_->setVisible(tool.targetType == QStringLiteral("wsl") || tool.targetType == QStringLiteral("ssh"));
+    deleteToolButton_->setVisible(!tool.builtin);
+    reloadManifestButton_->setVisible(!tool.registrationPath.isEmpty());
+    reloadManifestButton_->setText(tool.builtin ? QStringLiteral("恢复默认…") : QStringLiteral("重新读取声明…"));
+    stateSection_->setVisible(!tool.statePath.isEmpty());
+
+    commandList_->clear();
+    QString error;
+    const QList<AppDatabase::ToolCommand> commands = database_->toolCommands(tool.id, &error);
+    if (!error.isEmpty()) {
+        showError(error);
+    }
+    for (const AppDatabase::ToolCommand &command : commands) {
+        auto *item = new QListWidgetItem(commandList_);
+        item->setData(Qt::UserRole, command.id);
+        item->setData(SiblingOrderScopeRole, QStringLiteral("commands.%1").arg(tool.id));
+        item->setData(Qt::AccessibleTextRole, command.name);
+        item->setData(Qt::AccessibleDescriptionRole, command.description);
+        QStringList parts {command.executable};
+        for (const QString &argument : command.arguments) {
+            parts << displayArgument(argument);
+        }
+        QStringList hints;
+        if (!command.description.isEmpty()) hints << command.description;
+        hints << (command.enabled ? QStringLiteral("双击运行；右键编辑或停用") : QStringLiteral("已停用；右键可启用")) << parts.join(QLatin1Char(' '));
+        item->setToolTip(QStringLiteral("<qt>%1</qt>").arg(hints.join(QStringLiteral("\n\n"))
+            .toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br>"))));
+        QWidget *row = makeCommandRow(command, style(), commandList_);
+        row->ensurePolished();
+        item->setSizeHint(QSize(0, row->sizeHint().height()));
+        commandList_->setItemWidget(item, row);
+    }
+    if (commands.isEmpty()) {
+        auto *item = new QListWidgetItem(QStringLiteral("尚无命令，点击“添加命令”开始配置。"), commandList_);
+        item->setFlags(Qt::NoItemFlags);
+        item->setSizeHint(QSize(0, 44));
+    }
+    int listHeight = 0;
+    for (int i = 0; i < commandList_->count(); ++i) {
+        listHeight += commandList_->sizeHintForRow(i) + 2 * commandList_->spacing();
+    }
+    commandList_->setFixedHeight(listHeight + 2 * commandList_->frameWidth());
+    commandHint_->setText(commands.isEmpty() ? QString() : QStringLiteral("双击命令即可运行"));
+    renderRunRecord();
+
+    if (tool.statePath.isEmpty()) {
+        stateCache_.remove(tool.id); stateErrors_.remove(tool.id); updateToolIcon(tool.id);
+        return;
+    } else if (stateCache_.contains(tool.id)) {
+        renderState(stateCache_.value(tool.id));
+    } else if (stateErrors_.contains(tool.id)) {
+        renderStateMessage(QStringLiteral("读取失败"), QStringLiteral("failure"), stateErrors_.value(tool.id));
+    } else {
+        renderStateMessage(QStringLiteral("读取中"), QStringLiteral("loading"), QStringLiteral("正在读取当前状态…"));
+    }
+    refreshStateForTool(tool.id, true);
+}
+
+bool AutomationPage::canEditTool(int toolId)
+{
+    if (manifestReadsInFlight_.contains(toolId)) { showError(QStringLiteral("正在读取工具声明，请等待完成后再修改配置。")); return false; }
+    if (!runningProcesses_.value(toolId).isNull()) {
+        showError(QStringLiteral("此工具的命令正在运行，结束后才能修改配置或移除工具。")); return false;
+    }
+    return true;
+}
+
+void AutomationPage::discoverCommands(int toolId)
+{
+    AppDatabase::AutomationTool tool;
+    if (toolId && (!findTool(toolId,&tool) || !canEditTool(toolId))) return;
+    if (!toolId) { tool.targetType="windows-local"; tool.groupId=qMax(0,selectedGroupId_); }
+    const auto parse = [this](const QByteArray &bytes,const QString &path,const AppDatabase::AutomationTool &source,
+        AppDatabase::AutomationTool *tool,QList<AppDatabase::ToolCommand> *commands,QString *error) {
+        ParsedManifest manifest;
+        if (!parseManifest(bytes,path,source.sshHost,&manifest,error,source.wslDistribution,source.wslUser,source.sshUser)) return false;
+        manifest.tool.id=source.id; manifest.tool.groupId=source.groupId; manifest.tool.builtin=source.builtin;
+        if (!source.id && !source.groupId && !manifest.group.isEmpty())
+            for (const auto &group:database_->toolGroups()) if (group.name==manifest.group) { manifest.tool.groupId=group.id; break; }
+        *tool=manifest.tool;*commands=manifest.commands;return true;
+    };
+    DiscoveryDialog dialog(tool,this,parse);
+    while (dialog.exec()==QDialog::Accepted) {
+        const auto discovered=dialog.configuredTool();
+        auto configured=toolId?tool:discovered;QString error;int savedId=toolId;bool append=toolId>0;
+        if (toolId && !canEditTool(toolId)) continue;
+        if (!toolId) {
+            const auto existingTools=database_->automationTools(0,&error);
+            if (!error.isEmpty()) { showError(error);continue; }
+            for (const auto &existing:existingTools) {
+                if (!existing.sameExecutionTarget(configured)) continue;
+                if (!configured.registrationPath.isEmpty() && existing.externalId==configured.externalId) {
+                    ParsedManifest update;update.tool=configured;update.commands=dialog.selected();
+                    if (!confirmManifestUpdate(existing,update)) return;
+                    savedId=existing.id;configured.id=savedId;configured.builtin=existing.builtin;break;
+                }
+                if (configured.registrationPath.isEmpty() && QString::compare(QDir::cleanPath(existing.workingDirectory),QDir::cleanPath(configured.workingDirectory),configured.targetType=="windows-local"?Qt::CaseInsensitive:Qt::CaseSensitive)==0) {
+                    // A second directory import adds missing commands to the existing
+                    // tool, preserving its customized metadata and commands.
+                    configured=existing;savedId=existing.id;append=true;break;
+                }
+            }
+        }
+        auto commands=(savedId && append)
+            ? database_->toolCommands(savedId,&error) : QList<AppDatabase::ToolCommand>();
+        if (!error.isEmpty()) { showError(error);continue; }
+        for (auto candidate:dialog.selected()) {
+            bool duplicate=false;
+            for (auto &existing:commands) {
+                if (existing.executable!=candidate.executable || existing.arguments!=candidate.arguments) continue;
+                duplicate=true;
+                if (existing.description.trimmed().isEmpty()) existing.description=candidate.description;
+                OptionsDiscovery::mergeUnchangedParameters(&existing,candidate);
+                break;
+            }
+            if (!duplicate) { candidate.id=0;commands.append(candidate); }
+        }
+        if (savedId && !canEditTool(savedId)) continue;
+        for (auto it=discovered.environment.begin();it!=discovered.environment.end();++it)
+            if (!configured.environment.contains(it.key())) configured.environment[it.key()]=it.value();
+        if (configured.externalId.isEmpty()) configured.externalId="manual-"+QUuid::createUuid().toString(QUuid::Id128);
+        configured.customized=true;configured.id=savedId;
+        if (!database_->saveAutomationTool(configured,commands,&savedId,&error)) { showError(error);continue; }
+        stateCache_.remove(savedId);stateErrors_.remove(savedId);loadAll(savedId);return;
+    }
+}
+
+bool AutomationPage::saveUserCommands(int toolId, const QList<AppDatabase::ToolCommand> &commands)
+{
+    AppDatabase::AutomationTool tool;
+    if (!findTool(toolId, &tool) || !canEditTool(toolId)) return false;
+    tool.customized = true;
+    QString error;
+    if (!database_->saveAutomationTool(tool, commands, nullptr, &error)) { showError(error); return false; }
+    return true;
+}
+
+void AutomationPage::editTool(int toolId)
+{
+    AppDatabase::AutomationTool tool;
+    if (toolId && (!findTool(toolId, &tool) || !canEditTool(toolId))) return;
+    if (!toolId) { tool.groupId = qMax(0, selectedGroupId_); tool.targetType = "windows-local"; }
+    QString readError;
+    const auto commands = toolId ? database_->toolCommands(toolId, &readError) : QList<AppDatabase::ToolCommand>();
+    if (!readError.isEmpty()) { showError(readError); return; }
+    while (ToolEditor::editTool(&tool, this)) {
+        bool needsState = false;
+        for (const auto &command : commands) for (const auto &value : command.parameters) {
+            const auto definition = value.toObject(); needsState |= definition.contains("state_key") || definition.contains("options_state_key");
+        }
+        if (tool.statePath.isEmpty() && needsState) { showError(QStringLiteral("已有命令参数依赖状态文件，请先修改这些参数。")); continue; }
+        QString error; int savedId = toolId;
+        if (!database_->saveAutomationTool(tool, commands, &savedId, &error)) { showError(error); continue; }
+        stateCache_.remove(savedId); stateErrors_.remove(savedId); updateCachedStateExpiry(); loadAll(savedId); return;
+    }
+}
+
+void AutomationPage::editCommand(int commandId)
+{
+    AppDatabase::AutomationTool tool;
+    const int toolId = selectedToolId_;
+    if (!findTool(toolId, &tool) || !canEditTool(toolId)) return;
+    QString readError; auto commands = database_->toolCommands(toolId, &readError);
+    if (!readError.isEmpty()) { showError(readError); return; }
+    AppDatabase::ToolCommand command; int index = -1;
+    for (int i = 0; i < commands.size(); ++i) if (commands[i].id == commandId) { command = commands[i]; index = i; }
+    if (commandId && index < 0) return;
+    while (ToolEditor::editCommand(&command, tool, this,database_->toolCommands(tool.id))) {
+        auto proposed = commands;
+        if (index >= 0) proposed[index] = command; else proposed.append(command);
+        if (!saveUserCommands(toolId, proposed)) continue;
+        loadToolDetails(toolId); return;
+    }
+}
+
+void AutomationPage::showCommandContextMenu(const QPoint &position)
+{
+    auto *item = commandList_->itemAt(position);
+    if (!item || item->data(Qt::UserRole).toInt() <= 0) return;
+    const int toolId = selectedToolId_, id = item->data(Qt::UserRole).toInt();
+    commandList_->setCurrentItem(item);
+    QString readError; auto commands = database_->toolCommands(toolId, &readError);
+    if (!readError.isEmpty()) { showError(readError); return; }
+    int index = -1; for (int i = 0; i < commands.size(); ++i) if (commands[i].id == id) index = i;
+    if (index < 0) return;
+    QMenu menu(this);
+    menu.addAction(QStringLiteral("编辑命令…"), this, [this, id] { editCommand(id); });
+    auto *enabled = menu.addAction(commands[index].enabled ? QStringLiteral("停用命令") : QStringLiteral("启用命令"));
+    menu.addSeparator(); auto *remove = menu.addAction(QStringLiteral("删除命令…"));
+    auto *chosen = menu.exec(commandList_->viewport()->mapToGlobal(position));
+    if (chosen == enabled) commands[index].enabled = !commands[index].enabled;
+    else if (chosen == remove) {
+        if (QMessageBox::question(this, QStringLiteral("删除命令"), QStringLiteral("删除“%1”的命令配置？工具文件不会被删除。").arg(commands[index].name),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes) return;
+        commands.removeAt(index);
+    } else return;
+    if (saveUserCommands(toolId, commands)) loadToolDetails(toolId);
+}
+
+bool AutomationPage::confirmManifestUpdate(const AppDatabase::AutomationTool &current, const ParsedManifest &manifest)
+{
+    if (!canEditTool(current.id)) return false;
+    QDialog dialog(this); dialog.setObjectName("manifestUpdatePreview");
+    dialog.setWindowTitle(current.builtin ? QStringLiteral("恢复默认配置") : QStringLiteral("核对声明更新"));
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->addWidget(ToolEditor::hint(QStringLiteral("核对当前配置与声明内容。应用后会替换工具信息和全部命令，包含停用与排序；分组保留。")));
+    auto *split = new QSplitter(&dialog);
+    const QStringList contents {ToolConfiguration::description(current, database_->toolCommands(current.id)), ToolConfiguration::description(manifest.tool, manifest.commands)};
+    int i = 0; for (const auto &title : {QStringLiteral("当前配置"), QStringLiteral("声明配置")}) {
+        auto *column = new QWidget(split); auto *rows = new QVBoxLayout(column); rows->addWidget(new QLabel(title));
+        auto *text = new QPlainTextEdit(contents[i++]); text->setReadOnly(true); rows->addWidget(text); split->addWidget(column);
+    }
+    layout->addWidget(split, 1);
+    auto *buttons = new QDialogButtonBox(&dialog); auto *cancel = buttons->addButton(QStringLiteral("保留当前配置"), QDialogButtonBox::RejectRole);
+    auto *apply = buttons->addButton(QStringLiteral("替换为声明配置"), QDialogButtonBox::AcceptRole); cancel->setDefault(true); apply->setAutoDefault(false);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept); connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    layout->addWidget(buttons); dialog.resize(940, 620);
+    return dialog.exec() == QDialog::Accepted;
+}
+
+void AutomationPage::createGroup()
+{
+    bool accepted = false;
+    const QString name = QInputDialog::getText(this, QStringLiteral("新建工具组"), QStringLiteral("组名称："),
+                                                QLineEdit::Normal, QString(), &accepted).trimmed();
+    if (!accepted || name.isEmpty() || database_ == nullptr) {
+        return;
+    }
+    if (name == ungroupedName()) {
+        showError(QStringLiteral("“%1”已用作未分组工具的名称。").arg(name));
+        return;
+    }
+    QString error;
+    int groupId = 0;
+    if (!database_->addToolGroup(name, &groupId, &error)) {
+        showError(error);
+        return;
+    }
+    loadAll();
+    for (int i = 0; i < tree_->topLevelItemCount(); ++i) {
+        if (tree_->topLevelItem(i)->data(0, Qt::UserRole).toInt() == groupId) {
+            tree_->setCurrentItem(tree_->topLevelItem(i));
+            break;
+        }
+    }
+}
+
+void AutomationPage::renameGroup()
+{
+    QTreeWidgetItem *item = tree_->currentItem();
+    if (database_ == nullptr || item == nullptr || item->data(0, Qt::UserRole + 1).toInt() != kGroupItem) {
+        return;
+    }
+    const int groupId = item->data(0, Qt::UserRole).toInt();
+    bool accepted = false;
+    const QString name = QInputDialog::getText(this, QStringLiteral("重命名工具组"), QStringLiteral("组名称："),
+                                                QLineEdit::Normal, item->text(0), &accepted).trimmed();
+    if (!accepted || name.isEmpty() || name == item->text(0)) {
+        return;
+    }
+
+    QString error;
+    for (const AppDatabase::ToolGroup &group : database_->toolGroups(&error)) {
+        if (group.id != groupId && group.name == name) {
+            showError(QStringLiteral("已经存在名为“%1”的工具组。").arg(name));
+            return;
+        }
+    }
+    if (groupId > 0 && name == ungroupedName()) {
+        showError(QStringLiteral("“%1”已用作未分组工具的名称。").arg(name));
+        return;
+    }
+
+    // The ungrouped bucket is not a stored group; its display name is a local setting.
+    const bool saved = groupId > 0 ? database_->renameToolGroup(groupId, name, &error)
+                                   : database_->setSetting(kUngroupedNameKey, name, &error);
+    if (!saved) {
+        showError(error);
+        return;
+    }
+    loadAll();
+}
+
+void AutomationPage::deleteGroup()
+{
+    if (selectedGroupId_ <= 0 || database_ == nullptr) {
+        return;
+    }
+    if (QMessageBox::question(this, QStringLiteral("删除工具组"),
+                              QStringLiteral("删除工具组不会删除工具，组内工具会移到“%1”。确定继续吗？")
+                                  .arg(ungroupedName()),
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No)
+        != QMessageBox::Yes) {
+        return;
+    }
+    QString error;
+    if (!database_->deleteToolGroup(selectedGroupId_, &error)) {
+        showError(error);
+        return;
+    }
+    tree_->setCurrentItem(nullptr);
+    loadAll();
+}
+
+void AutomationPage::importTool()
+{
+    if (database_ == nullptr || importInFlight_) return;
+    importInFlight_ = true;
+    const int requestedGroup = selectedGroupId_;
+    if (!ManifestImport::readLocal(this,
+            [this, requestedGroup](bool ok, const ManifestImport::Source &source, const QString &error) {
+                importInFlight_ = false;
+                if (!ok) { showError(QStringLiteral("无法读取接入声明：%1").arg(error)); return; }
+                registerToolManifest(source.data, source.path, {}, {}, {}, {}, requestedGroup);
+            })) {
+        importInFlight_ = false;
+    }
+}
+
+void AutomationPage::importRemoteTool()
+{
+    if (database_ == nullptr) return;
+    ManifestImport::Source source;
+    if (ManifestImport::readSsh(this, *database_, &source))
+        registerToolManifest(source.data, source.path, source.sshHost, {}, {}, source.sshUser);
+}
+
+void AutomationPage::importWslTool()
+{
+    if (database_ == nullptr) return;
+    ManifestImport::Source source;
+    if (ManifestImport::readWsl(this, *database_, &source))
+        registerToolManifest(source.data, source.path, {}, source.wslDistribution, source.wslUser);
+}
+
+bool AutomationPage::readManifest(const QString &sourcePath,
+                                  QByteArray *data,
+                                  QString *errorMessage) const
+{
+    return ManifestParser::read(sourcePath, data, errorMessage);
+}
+
+bool AutomationPage::parseManifest(const QByteArray &manifestData,
+                                   const QString &sourcePath,
+                                   const QString &sshHost,
+                                   ParsedManifest *manifest,
+                                   QString *errorMessage,
+                                   const QString &wslDistribution,
+                                   const QString &wslUser,
+                                   const QString &sshUser) const
+{
+    return ManifestParser::parse(manifestData, sourcePath, sshHost, manifest, errorMessage,
+                                 wslDistribution, wslUser, sshUser);
+}
+
+void AutomationPage::registerToolManifest(const QByteArray &manifestData,
+                                           const QString &sourcePath,
+                                           const QString &sshHost,
+                                           const QString &wslDistribution,
+                                           const QString &wslUser,
+                                           const QString &sshUser, int requestedGroupId)
+{
+    if (database_ == nullptr) {
+        return;
+    }
+
+    ParsedManifest manifest;
+    QString error;
+    if (!parseManifest(manifestData, sourcePath, sshHost, &manifest, &error, wslDistribution, wslUser, sshUser)) {
+        showError(error);
+        return;
+    }
+
+    // Registering the same tool again updates it instead of creating a duplicate.
+    const QList<AppDatabase::AutomationTool> tools = database_->automationTools(0, &error);
+    for (const AppDatabase::AutomationTool &existing : tools) {
+        if (existing.externalId != manifest.tool.externalId || !existing.sameExecutionTarget(manifest.tool)) {
+            continue;
+        }
+        if (!confirmManifestUpdate(existing, manifest)) return;
+        if (applyManifestUpdate(existing.id, manifest)) {
+            loadAll(existing.id);
+        }
+        return;
+    }
+
+    QString groupNotice;
+    int groupId = qMax(0, requestedGroupId >= 0 ? requestedGroupId : selectedGroupId_);
+    if (groupId == 0 && !manifest.group.isEmpty()) {
+        for (const AppDatabase::ToolGroup &group : database_->toolGroups(&error)) {
+            if (group.name == manifest.group) {
+                groupId = group.id;
+                break;
+            }
+        }
+        if (groupId == 0) {
+            groupNotice = QStringLiteral("接入声明中的工具组“%1”尚未创建，工具已先放入“%2”。")
+                              .arg(manifest.group, ungroupedName());
+        }
+    }
+
+    AppDatabase::AutomationTool tool = manifest.tool;
+    tool.groupId = groupId;
+    // Retain legacy storage defaults for compatibility; these no longer schedule reads.
+    tool.refreshEnabled = false;
+    tool.refreshMode = QStringLiteral("interval");
+    tool.refreshIntervalSeconds = 5 * 60;
+    tool.dailyRefreshTime = QStringLiteral("08:00");
+
+    int toolId = 0;
+    if (!database_->saveAutomationTool(tool, manifest.commands, &toolId, &error)) {
+        showError(error);
+        loadAll();
+        return;
+    }
+
+    loadAll(toolId);
+    if (!groupNotice.isEmpty()) {
+        QMessageBox::information(this, QStringLiteral("工具已注册"), groupNotice);
+    }
+}
+
+bool AutomationPage::applyManifestUpdate(int toolId, ParsedManifest manifest)
+{
+    if (!canEditTool(toolId)) return false;
+    QString error;
+    if (!ManifestParser::applyUpdate(*database_, toolId, std::move(manifest), &error)) {
+        showError(error);
+        return false;
+    }
+    stateCache_.remove(toolId);
+    stateErrors_.remove(toolId);
+    updateCachedStateExpiry();
+    return true;
+}
+
+void AutomationPage::reloadManifest()
+{
+    AppDatabase::AutomationTool tool;
+    if (!findTool(selectedToolId_, &tool) || tool.registrationPath.isEmpty() || !canEditTool(tool.id)
+        || manifestReadsInFlight_.contains(tool.id)) return;
+    {
+        manifestReadsInFlight_.insert(tool.id);
+        commandHint_->setText(QStringLiteral("正在重新读取声明…"));
+        commandHint_->show();
+        const auto complete = [this, tool](bool ok, const QByteArray &data, const QString &error) {
+            manifestReadsInFlight_.remove(tool.id);
+            AppDatabase::AutomationTool current;
+            if (!findTool(tool.id, &current) || !current.sameExecutionTarget(tool)
+                || current.externalId != tool.externalId || current.registrationPath != tool.registrationPath) return;
+            if (!ok) {
+                if (selectedToolId_ == tool.id) {
+                    commandHint_->setText(QStringLiteral("声明读取失败，可重试。"));
+                    commandHint_->show();
+                }
+                showError(error);
+                return;
+            }
+            finishManifestReload(tool, data);
+        };
+        if (tool.targetType == QStringLiteral("wsl"))
+            WslProcess::capture(this, WslProcess::arguments(tool.wslDistribution, tool.wslUser,
+                QStringLiteral("cat"), {QStringLiteral("--"), tool.registrationPath}), complete);
+        else if (tool.targetType == QStringLiteral("ssh"))
+            SshConnection::capture(this, tool.sshHost, tool.sshUser,
+                QStringLiteral("cat -- %1").arg(shellQuote(tool.registrationPath)), complete);
+        else
+            FileAccess::request(this, QStringLiteral("read"), tool.registrationPath, complete);
+        return;
+    }
+}
+
+void AutomationPage::finishManifestReload(const AppDatabase::AutomationTool &tool, const QByteArray &data)
+{
+    QString error;
+    ParsedManifest manifest;
+    if (!parseManifest(data, tool.registrationPath, tool.sshHost, &manifest, &error,
+                       tool.wslDistribution, tool.wslUser, tool.sshUser)) {
+        if (selectedToolId_ == tool.id) {
+            commandHint_->setText(QStringLiteral("声明校验失败，保留原有工具信息。"));
+            commandHint_->show();
+        }
+        showError(error);
+        return;
+    }
+    if (manifest.tool.externalId != tool.externalId
+        && QMessageBox::question(this, QStringLiteral("工具标识已变化"),
+                                 QStringLiteral("声明中的工具 id 从“%1”变成了“%2”。仍然用它更新当前工具吗？")
+                                     .arg(tool.externalId, manifest.tool.externalId),
+                                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No)
+               != QMessageBox::Yes) {
+        return;
+    }
+    const int commandCount = manifest.commands.size();
+    AppDatabase::AutomationTool current;
+    if (!findTool(tool.id, &current) || !confirmManifestUpdate(current, manifest)) return;
+    if (!applyManifestUpdate(tool.id, manifest)) {
+        return;
+    }
+    const bool stillSelected = selectedToolId_ == tool.id;
+    loadAll(stillSelected ? tool.id : selectedToolId_);
+    if (!stillSelected) return;
+    commandHint_->setText(QStringLiteral("已重新读取声明，共 %1 条命令").arg(commandCount));
+    commandHint_->show();
+    QTimer::singleShot(4000, this, [this] {
+        if (selectedToolId_ > 0 && commandList_->count() > 0) {
+            commandHint_->hide();
+        }
+    });
+}
+
+void AutomationPage::deleteTool()
+{
+    AppDatabase::AutomationTool tool;
+    if (database_ == nullptr || !findTool(selectedToolId_, &tool) || tool.builtin) {
+        return;
+    }
+    if (!canEditTool(tool.id)) return;
+    if (QMessageBox::question(this, QStringLiteral("移除工具注册"),
+                              QStringLiteral("只会移除 Orchestrate 中的注册关系，不会删除工具文件。确定继续吗？"),
+                              QMessageBox::Yes | QMessageBox::No, QMessageBox::No)
+        != QMessageBox::Yes) {
+        return;
+    }
+    const int toolId = selectedToolId_;
+    QString error;
+    if (!database_->deleteAutomationTool(toolId, &error)) {
+        showError(error);
+        return;
+    }
+    stateCache_.remove(toolId);
+    stateErrors_.remove(toolId);
+    updateCachedStateExpiry();
+    runRecords_.remove(toolId);
+    tree_->setCurrentItem(nullptr);
+    loadAll();
+}
+
+void AutomationPage::clearStateItems()
+{
+    while (QLayoutItem *item = stateItemsLayout_->takeAt(0)) {
+        delete item->widget();
+        delete item;
+    }
+    stateItemsTitle_->hide();
+    stateItemsBox_->hide();
+}
+
+void AutomationPage::renderState(const QJsonObject &state)
+{
+    const QString result = ToolState::displayResult(state);
+    const QString toolId = jsonString(state, QStringLiteral("tool_id"));
+    const QString summary = jsonString(state, QStringLiteral("summary"));
+
+    stateBadge_->setText(QStringLiteral("● %1").arg(resultLabel(result, toolId)));
+    stateBadge_->setStyleSheet(badgeStyle(result));
+    stateSummary_->setText(summary.isEmpty() ? QStringLiteral("状态文件没有提供摘要。") : summary);
+    if (ToolState::expired(state))
+        stateSummary_->setText(QStringLiteral("这份状态已超过工具声明的有效期，请刷新或检查工具。上次摘要：") + summary);
+
+    clearStateItems();
+    const QJsonArray items = state.value(QStringLiteral("items")).toArray();
+    for (const QJsonValue &value : items) {
+        if (!value.isObject()) {
+            continue;
+        }
+        const QJsonObject itemObject = value.toObject();
+        const QString itemResult = jsonString(itemObject, QStringLiteral("result"));
+        auto *row = new QFrame(stateItemsBox_);
+        row->setObjectName(QStringLiteral("stateRow"));
+        auto *rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(12, 8, 12, 8);
+        rowLayout->setSpacing(10);
+        auto *name = new QLabel(jsonString(itemObject, QStringLiteral("name"), QStringLiteral("未命名")), row);
+        name->setObjectName(QStringLiteral("stateRowName"));
+        name->setMinimumWidth(96);
+        rowLayout->addWidget(name);
+        auto *itemBadge = new QLabel(resultLabel(itemResult, toolId), row);
+        itemBadge->setStyleSheet(badgeStyle(itemResult)
+                                 + QStringLiteral("font-size: 12px; padding: 2px 9px; border-radius: 9px;"));
+        itemBadge->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        rowLayout->addWidget(itemBadge);
+        auto *itemSummary = makeMuted(jsonString(itemObject, QStringLiteral("summary")), row);
+        itemSummary->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        rowLayout->addWidget(itemSummary, 1);
+        stateItemsLayout_->addWidget(row);
+    }
+    stateItemsTitle_->setVisible(stateItemsLayout_->count() > 0);
+    stateItemsBox_->setVisible(stateItemsLayout_->count() > 0);
+}
+
+void AutomationPage::renderStateMessage(const QString &badge, const QString &result, const QString &message)
+{
+    stateBadge_->setText(QStringLiteral("● %1").arg(badge));
+    stateBadge_->setStyleSheet(badgeStyle(result));
+    stateSummary_->setText(message);
+    clearStateItems();
+}
+
+void AutomationPage::applyStateResult(int toolId,
+                                      bool success,
+                                      const QJsonObject &state,
+                                      const QString &error)
+{
+    if (success) {
+        stateCache_.insert(toolId, state);
+        stateErrors_.remove(toolId);
+    } else {
+        stateCache_.remove(toolId);
+        stateErrors_.insert(toolId, error);
+    }
+    updateToolIcon(toolId);
+    // Selection may change while a deduplicated background read is in flight.
+    // Render for the current selection, not the selection when the read began.
+    if (selectedToolId_ == toolId) {
+        if (success) {
+            renderState(state);
+        } else {
+            renderStateMessage(QStringLiteral("读取失败"), QStringLiteral("failure"), error);
+        }
+    }
+    updateCachedStateExpiry();
+}
+
+void AutomationPage::startAsyncWslStateRead(const AppDatabase::AutomationTool &tool, bool updateVisibleState)
+{
+    if (stateReadsInFlight_.contains(tool.id)) return;
+    startStateReadProcess(tool, updateVisibleState, ToolStateReader::createProcess(this, tool));
+}
+
+void AutomationPage::startAsyncSshStateRead(const AppDatabase::AutomationTool &tool, bool updateVisibleState)
+{
+    if (stateReadsInFlight_.contains(tool.id)) return;
+    startStateReadProcess(tool, updateVisibleState, ToolStateReader::createProcess(this, tool));
+}
+
+void AutomationPage::startStateReadProcess(const AppDatabase::AutomationTool &tool,
+                                            bool updateVisibleState, QProcess *process, int timeoutMs)
+{
+    process->setParent(this);
+    if (stateReadsInFlight_.contains(tool.id)) {
+        process->deleteLater();
+        return;
+    }
+    stateReadsInFlight_.insert(tool.id);
+    const QString channelName = tool.targetType == QStringLiteral("wsl") ? QStringLiteral("WSL") : QStringLiteral("SSH");
+    if (updateVisibleState && selectedToolId_ == tool.id && !stateCache_.contains(tool.id))
+        renderStateMessage(QStringLiteral("读取中"), QStringLiteral("loading"), QStringLiteral("正在通过 %1 读取工具状态…").arg(channelName));
+
+    ToolStateReader::readProcess(this, tool, process,
+        [this, tool, updateVisibleState](bool success, const QJsonObject &state, const QString &error) {
+            finishStateRead(tool, updateVisibleState, success, state, error);
+        }, timeoutMs);
+}
+
+void AutomationPage::finishStateRead(const AppDatabase::AutomationTool &tool, bool updateVisibleState,
+                                      bool success, const QJsonObject &state, const QString &error)
+{
+    stateReadsInFlight_.remove(tool.id);
+    // A removed or reconfigured registration must not receive an old request's result.
+    AppDatabase::AutomationTool current;
+    if (findTool(tool.id, &current) && current.externalId == tool.externalId
+        && current.statePath == tool.statePath && current.sameExecutionTarget(tool))
+        applyStateResult(tool.id, success, state, error);
+    else if (current.id > 0)
+        refreshStateForTool(current.id, updateVisibleState);
+}
+
+void AutomationPage::refreshStateForTool(int toolId, bool updateVisibleState)
+{
+    AppDatabase::AutomationTool tool;
+    if (!findTool(toolId, &tool) || tool.statePath.isEmpty()) {
+        return;
+    }
+    if (tool.targetType == QStringLiteral("wsl")) {
+        startAsyncWslStateRead(tool, updateVisibleState);
+        return;
+    }
+    if (!tool.sshHost.isEmpty()) {
+        startAsyncSshStateRead(tool, updateVisibleState);
+        return;
+    }
+    if (stateReadsInFlight_.contains(tool.id)) return;
+    stateReadsInFlight_.insert(tool.id);
+    ToolStateReader::readLocal(this, tool, [this, tool, updateVisibleState](bool success, const QJsonObject &state, const QString &error) {
+        finishStateRead(tool, updateVisibleState, success, state, error);
+    });
+}
+
+void AutomationPage::refreshState()
+{
+    if (selectedToolId_ > 0) {
+        refreshStateForTool(selectedToolId_, true);
+    }
+}
+
+void AutomationPage::refreshAllStates()
+{
+    if (database_ == nullptr) {
+        return;
+    }
+    QString error;
+    const QList<AppDatabase::AutomationTool> tools = database_->automationTools(0, &error);
+    if (!error.isEmpty()) {
+        return;
+    }
+    for (const AppDatabase::AutomationTool &tool : tools) {
+        refreshStateForTool(tool.id, tool.id == selectedToolId_);
+    }
+}
+
+void AutomationPage::updateCachedStateExpiry()
+{
+    stateExpiryTimer_->stop();
+    const QDateTime now = QDateTime::currentDateTime();
+    QDateTime nextExpiry;
+    for (auto it = stateCache_.cbegin(); it != stateCache_.cend(); ++it) {
+        const auto deadline = ToolState::timestamp(it.value().value(QStringLiteral("expires_at")).toString());
+        if (!deadline.isValid()) continue;
+        if (deadline <= now) {
+            updateToolIcon(it.key());
+            if (it.key() == selectedToolId_ && isVisible()) renderState(it.value());
+        } else if (!nextExpiry.isValid() || deadline < nextExpiry) {
+            nextExpiry = deadline;
+        }
+    }
+    if (nextExpiry.isValid()) {
+        const qint64 delay = qMax<qint64>(1, now.msecsTo(nextExpiry));
+        stateExpiryTimer_->start(int(qMin<qint64>(delay, std::numeric_limits<int>::max())));
+    }
+}
+
+QString AutomationPage::remoteCommandLine(const AppDatabase::AutomationTool &tool,
+                                          const QString &executable,
+                                          const QStringList &arguments) const
+{
+    QStringList commandParts;
+    commandParts << QStringLiteral("exec") << shellQuote(executable);
+    for (const QString &argument : arguments) {
+        commandParts << shellQuote(argument);
+    }
+    QString commandLine = commandParts.join(QLatin1Char(' '));
+    if (!tool.workingDirectory.isEmpty()) {
+        commandLine = QStringLiteral("cd %1 && %2")
+                          .arg(shellQuote(tool.workingDirectory), commandLine);
+    }
+    return commandLine;
+}
+
+void AutomationPage::renderRunRecord()
+{
+    if (selectedToolId_ > 0) updateToolIcon(selectedToolId_);
+    // The bounded record is still captured while hidden. Lay it out on show.
+    if (!isVisible()) { displayedOutputTool_ = -1; return; }
+    if (!runRecords_.contains(selectedToolId_)) {
+        runPanel_->hide();
+        return;
+    }
+    const RunRecord &record = runRecords_[selectedToolId_];
+    runTitle_->setText(QStringLiteral("最近运行：%1").arg(record.title)
+        + (record.outputTruncated ? QStringLiteral("（仅保留最近 256 Ki 字符）") : QString()));
+    QString color = QString::fromLatin1(UiTheme::Success);
+    if (record.running) {
+        color = QString::fromLatin1(UiTheme::Accent);
+    } else if (record.failed) {
+        color = QString::fromLatin1(UiTheme::Danger);
+    }
+    runStatus_->setText(record.status);
+    runStatus_->setStyleSheet(QStringLiteral("color: %1; font-weight: 600;").arg(color));
+    const qint64 start = record.outputOffset;
+    const qint64 end = start + record.output.size();
+    auto *scroll = runOutput_->verticalScrollBar();
+    const bool reset = displayedOutputTool_ != selectedToolId_ || displayedOutputEnd_ < start
+        || displayedOutputEnd_ > end || displayedOutputStart_ > start;
+    const bool follow = reset || scroll->value() >= scroll->maximum() - 2;
+    if (reset) TextLayoutGuard::setPlainText(runOutput_, record.output);
+    else if (start != displayedOutputStart_ || end != displayedOutputEnd_) {
+        QTextCursor cursor(runOutput_->document());
+        cursor.beginEditBlock();
+        if (start > displayedOutputStart_) {
+            cursor.setPosition(0);
+            cursor.setPosition(int(start - displayedOutputStart_), QTextCursor::KeepAnchor);
+            cursor.removeSelectedText();
+        }
+        cursor.movePosition(QTextCursor::End);
+        const QString appended = record.output.mid(displayedOutputEnd_ - start);
+        TextLayoutGuard::prepareInsertion(runOutput_, cursor, appended);
+        cursor.insertText(appended);
+        cursor.endEditBlock();
+    }
+    displayedOutputTool_ = selectedToolId_;
+    displayedOutputStart_ = start;
+    displayedOutputEnd_ = end;
+    if (follow) scroll->setValue(scroll->maximum());
+    runPanel_->show();
+}
+
+void AutomationPage::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    updateCachedStateExpiry();
+    renderRunRecord();
+}
+
+void AutomationPage::appendRunOutput(int toolId, const QString &text)
+{
+    if (text.isEmpty()) return;
+    auto &record = runRecords_[toolId];
+    // Keep offsets in the same normalized UTF-16 space as QTextDocument,
+    // including CRLF pairs split across process reads.
+    QString normalized = text;
+    if (record.outputEndedWithCr && normalized.startsWith(QLatin1Char('\n'))) normalized.remove(0, 1);
+    record.outputEndedWithCr = text.endsWith(QLatin1Char('\r'));
+    normalized.replace(QStringLiteral("\r\n"), QStringLiteral("\n"));
+    normalized.replace(QLatin1Char('\r'), QLatin1Char('\n'));
+    record.output += normalized;
+    if (record.output.size() > maxRunOutputChars) {
+        const auto previousSize = record.output.size();
+        record.output = record.output.right(maxRunOutputChars);
+        if (!record.output.isEmpty() && record.output.front().isLowSurrogate()) record.output.remove(0, 1);
+        record.outputTruncated = true;
+        record.outputOffset += previousSize - record.output.size();
+    }
+}
+
+void AutomationPage::runCommand(QListWidgetItem *item)
+{
+    if (database_ == nullptr || item == nullptr || selectedToolId_ <= 0 || !(item->flags() & Qt::ItemIsEnabled)) {
+        return;
+    }
+    const int toolId = selectedToolId_;
+    if (!runningProcesses_.value(toolId).isNull()) {
+        QMessageBox::information(this, QStringLiteral("命令正在运行"),
+                                 QStringLiteral("这个工具还有命令在运行，请等它结束后再运行其他命令。"));
+        return;
+    }
+
+    AppDatabase::AutomationTool tool;
+    if (!findTool(toolId, &tool)) {
+        showError(QStringLiteral("找不到当前工具注册信息。"));
+        return;
+    }
+    const QString expectedTarget = !tool.wslDistribution.isEmpty() ? QStringLiteral("wsl")
+        : tool.sshHost.isEmpty() ? QStringLiteral("windows-local") : QStringLiteral("ssh");
+    if (tool.targetType != expectedTarget || (expectedTarget == QStringLiteral("wsl")
+        && (!tool.sshHost.isEmpty() || !WslProcess::validDistribution(tool.wslDistribution)
+            || (!tool.wslUser.isEmpty() && !WslProcess::validName(tool.wslUser))))) {
+        showError(QStringLiteral("当前注册的执行目标不受支持，请修正 target_type 后重新读取声明。"));
+        return;
+    }
+    const int commandId = item->data(Qt::UserRole).toInt();
+    QString error;
+    AppDatabase::ToolCommand command;
+    for (const AppDatabase::ToolCommand &candidate : database_->toolCommands(toolId, &error)) {
+        if (candidate.id == commandId) {
+            command = candidate;
+            break;
+        }
+    }
+    if (command.id == 0) {
+        showError(error.isEmpty() ? QStringLiteral("找不到这条命令，请重新读取声明。") : error);
+        return;
+    }
+
+    if (!command.enabled) return;
+
+    QHash<QString, QString> values;
+    if (!command.parameters.isEmpty()) {
+        // The parameter dialog doubles as the confirmation for high-risk commands.
+        CommandForm form(command, [this, tool](QObject *context, CommandForm::StateCallback callback) {
+            ToolStateReader::read(context, tool,
+                [this, tool, callback](bool success, const QJsonObject &state, const QString &error) {
+                    AppDatabase::AutomationTool current;
+                    if (!findTool(tool.id, &current) || current.externalId != tool.externalId
+                        || current.statePath != tool.statePath || !current.sameExecutionTarget(tool)) {
+                        callback(false, {}, QStringLiteral("工具注册已变化，请关闭表单后重新打开。"));
+                        return;
+                    }
+                    callback(success, state, error);
+                });
+        }, this, tool.targetType == "windows-local", [tool](QObject *context, const QJsonObject &source,
+            const QHash<QString, QString> &values, CommandForm::OptionsCallback callback) {
+            OptionsSource::read(context, tool, source, values, std::move(callback));
+        }, [this,&command,tool](const QString &key,QJsonObject *source,const QHash<QString,QString> &values,QWidget *parent){
+            auto commands=database_->toolCommands(tool.id);
+            if(!ToolEditor::editSource(source,tool,parent,commands,values))return false;
+            auto parameters=command.parameters;
+            for(int i=0;i<parameters.size();++i){auto parameter=parameters[i].toObject();if(parameter.value("key")==key){parameter["options_source"]=*source;parameter.remove("discovery_base");parameters[i]=parameter;}}
+            QString problem;
+            if(!CommandParameters::validate(command.name,parameters,command.arguments,&problem)){showError(problem);return false;}
+            AppDatabase::AutomationTool current;
+            if(!findTool(tool.id,&current)||!current.sameExecutionTarget(tool)||current.workingDirectory!=tool.workingDirectory||current.environment!=tool.environment){showError(QStringLiteral("工具已更新，请重新打开参数窗口。"));return false;}
+            commands=database_->toolCommands(tool.id);
+            bool found=false;for(auto &candidate:commands)if(candidate.id==command.id&&candidate.parameters==command.parameters&&candidate.arguments==command.arguments&&candidate.executable==command.executable){candidate.parameters=parameters;found=true;break;}
+            if(!found){showError(QStringLiteral("命令已更新，请重新打开参数窗口。"));return false;}
+            if(!saveUserCommands(tool.id,commands))return false;
+            command.parameters=parameters;
+            return true;
+        });
+        if (form.exec() != QDialog::Accepted) return;
+        values = form.values();
+    } else if (command.highRisk
+               && QMessageBox::question(this, QStringLiteral("高风险命令"),
+                                        QStringLiteral("“%1”被工具声明为高风险，确定运行吗？").arg(command.name),
+                                        QMessageBox::Yes | QMessageBox::No, QMessageBox::No)
+                      != QMessageBox::Yes) {
+        return;
+    }
+
+    // Modal dialogs process events: the registration or command may have been
+    // replaced while the user was filling in the form or confirming a command.
+    AppDatabase::AutomationTool current;
+    bool commandUnchanged = false;
+    for (const auto &candidate : database_->toolCommands(toolId)) {
+        if (candidate.id == command.id && candidate.name == command.name
+            && candidate.executable == command.executable && candidate.arguments == command.arguments
+            && candidate.parameters == command.parameters && candidate.highRisk == command.highRisk
+            && candidate.interactive == command.interactive && candidate.enabled) commandUnchanged = true;
+    }
+    if (!findTool(toolId, &current) || !current.sameExecutionTarget(tool)
+        || current.externalId != tool.externalId || current.statePath != tool.statePath
+        || current.workingDirectory != tool.workingDirectory || current.environment != tool.environment || !commandUnchanged) {
+        showError(QStringLiteral("工具或命令已更新，请重新打开表单确认后运行。"));
+        return;
+    }
+    if (!runningProcesses_.value(toolId).isNull()) {
+        showError(QStringLiteral("这个工具已有命令在运行，请等它结束后再试。"));
+        return;
+    }
+    const QStringList arguments = CommandArguments::expand(command.arguments, values, command.parameters);
+    const auto launch = CommandLaunch::build(tool, command, arguments);
+    if (command.interactive) {
+        RunRecord record; record.title = command.name;
+        record.failed = !CommandLaunch::openTerminal(launch, &error);
+        record.status = record.failed ? QStringLiteral("终端启动失败") : QStringLiteral("已打开终端");
+        record.output = record.failed ? error : QStringLiteral("在终端查看输出与退出结果，按 Ctrl+C 可请求中止。关闭连接不代表远端任务已停止。");
+        runRecords_.insert(toolId, record); displayedOutputTool_ = -1; renderRunRecord(); updateToolIcon(toolId);
+        return;
+    }
+
+    if (tool.targetType == QStringLiteral("wsl")) {
+        for (const auto &argument : arguments) {
+            if (argument.contains(QChar::Null)) {
+                showError(QStringLiteral("WSL 参数不能包含 NUL。"));
+                return;
+            }
+        }
+    }
+    auto *process = new QProcess(this);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+    CommandLaunch::configure(process, launch);
+    QStringList displayed {command.executable};
+    for (const auto &argument : arguments) displayed << displayArgument(argument);
+    const QString commandLine = displayed.join(QLatin1Char(' '));
+
+    RunRecord record;
+    record.title = command.name;
+    record.running = true;
+    record.status = QStringLiteral("运行中…");
+    runRecords_.insert(toolId, record);
+    displayedOutputTool_ = -1;
+    appendRunOutput(toolId, QStringLiteral("$ %1\n").arg(commandLine));
+    runningProcesses_.insert(toolId, process);
+    renderRunRecord();
+
+    const auto decoder = std::make_shared<QStringDecoder>(QStringDecoder::Utf8);
+    auto *outputTimer = new QTimer(process);
+    outputTimer->setSingleShot(true);
+    outputTimer->setInterval(100);
+    connect(outputTimer, &QTimer::timeout, this, [this, toolId] {
+        if (selectedToolId_ == toolId) renderRunRecord();
+    });
+    const auto drain = [this, process, toolId, decoder] {
+        while (process->bytesAvailable() > 0) appendRunOutput(toolId, (*decoder)(process->read(64 * 1024)));
+    };
+    connect(process, &QProcess::readyRead, this, [drain, outputTimer] {
+        drain();
+        if (!outputTimer->isActive()) outputTimer->start();
+    });
+    connect(process, &QProcess::errorOccurred, this, [this, process, toolId, outputTimer](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart) {
+            return;
+        }
+        RunRecord &failed = runRecords_[toolId];
+        failed.running = false;
+        failed.failed = true;
+        failed.status = QStringLiteral("启动失败");
+        appendRunOutput(toolId, process->errorString());
+        outputTimer->stop();
+        runningProcesses_.remove(toolId);
+        updateToolIcon(toolId);
+        if (selectedToolId_ == toolId) {
+            renderRunRecord();
+        }
+        process->deleteLater();
+    });
+    connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, [this, process, toolId, decoder, drain, outputTimer](int exitCode, QProcess::ExitStatus status) {
+        drain();
+        QChar tail[8];
+        const auto final = decoder->finalize(tail, 8);
+        appendRunOutput(toolId, QString(tail, final.next - tail));
+        outputTimer->stop();
+        RunRecord &finished = runRecords_[toolId];
+        finished.running = false;
+        finished.failed = status != QProcess::NormalExit || exitCode != 0;
+        finished.status = finished.failed
+            ? QStringLiteral("失败（退出码 %1）").arg(exitCode)
+            : QStringLiteral("已完成 · %1").arg(QTime::currentTime().toString(QStringLiteral("HH:mm:ss")));
+        runningProcesses_.remove(toolId);
+        updateToolIcon(toolId);
+        if (selectedToolId_ == toolId) {
+            renderRunRecord();
+        }
+        refreshStateForTool(toolId, true);
+        process->deleteLater();
+    });
+    process->start();
+    process->closeWriteChannel();
+}
+
+void AutomationPage::showError(const QString &message)
+{
+    QMessageBox::critical(this, QStringLiteral("自动化工具操作失败"), message);
+}

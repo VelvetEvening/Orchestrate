@@ -1,0 +1,32 @@
+#include <winver.h>
+#include "version.h"
+
+// Explorer、快捷方式和固定到任务栏时使用的 exe 图标；运行中的窗口图标由 Qt 资源设置。
+IDI_ICON1 ICON "app-icon/app.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION ORCHESTRATE_VERSION_MAJOR,ORCHESTRATE_VERSION_MINOR,ORCHESTRATE_VERSION_PATCH,0
+ PRODUCTVERSION ORCHESTRATE_VERSION_MAJOR,ORCHESTRATE_VERSION_MINOR,ORCHESTRATE_VERSION_PATCH,0
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+ FILEFLAGS 0
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "FileDescription", "Orchestrate\0"
+            VALUE "FileVersion", ORCHESTRATE_VERSION "\0"
+            VALUE "InternalName", "Orchestrate\0"
+            VALUE "OriginalFilename", "Orchestrate.exe\0"
+            VALUE "ProductName", "Orchestrate\0"
+            VALUE "ProductVersion", ORCHESTRATE_VERSION "\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

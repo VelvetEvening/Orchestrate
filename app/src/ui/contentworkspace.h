@@ -1,0 +1,78 @@
+#pragma once
+
+#include <QDialog>
+#include <QHash>
+#include <QPointer>
+#include <QWidget>
+#include <functional>
+#include <memory>
+
+class QStackedWidget;
+class ContentWindow;
+class QLabel;
+
+// Opt in when leaving a page must resolve unsaved changes without closing it.
+class ContentLeaveGuard {
+public:
+    virtual ~ContentLeaveGuard() = default;
+    virtual bool confirmLeave() = 0;
+};
+
+// One content instance moves between the module and an optional native window.
+// Returning keeps the instance, after any opt-in leave guard has succeeded.
+class ContentWorkspace final : public QWidget {
+    Q_OBJECT
+public:
+    explicit ContentWorkspace(QWidget *root, QWidget *parent = nullptr);
+    ~ContentWorkspace() override;
+    static ContentWorkspace *find(QWidget *source);
+    bool activate(const QString &key, QWidget *source = nullptr);
+    void present(const QString &key, QDialog *content, QWidget *source = nullptr);
+    void rekey(const QString &oldKey, const QString &newKey);
+    bool closePage(const QString &key);
+    bool closePrefix(const QString &prefix);
+    bool closeAll();
+    bool confirmLeaveCurrent();
+    void setActivationGuard(std::function<bool()> guard);
+    void back();
+    QString currentKey() const;
+    QDialog *content(const QString &key) const;
+signals:
+    void activationRequested();
+protected:
+    bool eventFilter(QObject *object, QEvent *event) override;
+private:
+    struct Entry;
+    using EntryPtr = std::shared_ptr<Entry>;
+    EntryPtr entryFor(QWidget *source) const;
+    void showEntry(const EntryPtr &entry);
+    void returnFrom(const EntryPtr &entry, bool confirmLeave = true);
+    void remove(const EntryPtr &entry);
+    void detach(const EntryPtr &entry);
+    void attach(ContentWindow *host, const QString &selected);
+    void updateHeader(const EntryPtr &entry);
+    bool descendant(const EntryPtr &entry, const QString &ancestor) const;
+    QStackedWidget *stack_;
+    QWidget *root_;
+    QHash<QString, EntryPtr> entries_;
+    QList<QString> order_;
+    bool destroying_ = false;
+    std::function<bool()> activationGuard_;
+};
+
+// Small editor forms share the same explicit save/discard/cancel boundary.
+class DraftDialog : public QDialog, public ContentLeaveGuard {
+public:
+    using QDialog::QDialog;
+    std::function<bool()> dirty;
+    std::function<bool()> saveDraft;
+    std::function<void()> resetDraft;
+    QLabel *createSaveStatus(const QString &name);
+    void updateSaveStatus(const QString &missing = QString());
+    void showSaveError(const QString &error);
+    void showSavedStatus(const QString &text = QStringLiteral("已保存"));
+    bool confirmLeave() override;
+    void reject() override;
+private:
+    QLabel *saveStatus_ = nullptr;
+};

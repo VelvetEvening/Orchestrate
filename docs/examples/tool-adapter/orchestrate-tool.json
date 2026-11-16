@@ -1,0 +1,31 @@
+{
+  "schema": "orchestrate-tool/v1",
+  "id": "example-adapter",
+  "name": "本地接入示例",
+  "description": "只在自身目录生成示例状态，不联网、不创建计划任务。",
+  "target_type": "windows-local",
+  "working_directory": ".",
+  "state_path": "state/current.json",
+  "commands": [
+    {
+      "name": "生成示例结果",
+      "executable": "python",
+      "arguments": ["-u", "adapter.py", "run", "--message", "{message}", "--count", "{count}", "{uppercase}"],
+      "parameters": [
+        {"key": "message", "label": "内容", "type": "string", "required": true, "default": "你好 Orchestrate", "state_key": "settings.message"},
+        {"key": "count", "label": "条数", "type": "integer", "min": 1, "max": 5, "default": 2, "state_key": "settings.count"},
+        {"key": "uppercase", "label": "大小写", "type": "boolean", "text": "英文字母转大写", "default": false, "state_key": "settings.uppercase", "true_value": "--uppercase", "false_value": ""}
+      ],
+      "interactive": false,
+      "high_risk": false
+    },
+    {
+      "name": "模拟失败",
+      "description": "生成 failure 状态并返回非零退出码，用于验证失败展示。",
+      "executable": "python",
+      "arguments": ["-u", "adapter.py", "fail"],
+      "interactive": false,
+      "high_risk": false
+    }
+  ]
+}
