@@ -28,6 +28,7 @@ Remove-Item Env:ORCHESTRATE_TEST_STRESS
 ## 隔离与诊断
 
 - 使用专用目录、合成数据库和模拟任务。CANNLab 接入由帮助命令夹具验证，不依赖个人工具，不运行业务查询。
+- 外观回归归入已有套件：`markdown_edit` 检查主题切换后的字号与文稿状态，`heading_text` 检查日历符号，`workspace_navigation` 检查偏好恢复与操作密度。
 - Python 样例使用 CMake 指定的解释器，子进程复用 `sys.executable`；测试不会安装 Python。
 - `heading_text`、`workspace_navigation`、`configurable_tools` 默认不输出审查截图。设置 `ORCHESTRATE_TEST_ARTIFACTS=1` 后写入各自构建目录的 `artifacts/`；像素断言始终执行。
 - 日志位于 `app/build-qt/Testing/Temporary/` 和各套件的 `results.txt`。CI 失败时上传日志。

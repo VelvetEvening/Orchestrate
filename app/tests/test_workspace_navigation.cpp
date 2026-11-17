@@ -22,10 +22,12 @@
 #include <QFile>
 #include <QFontDatabase>
 #include <QLabel>
+#include <QLayout>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QPersistentModelIndex>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QStackedWidget>
@@ -119,6 +121,139 @@ private slots:
         const auto path=qApp->applicationDirPath()+"/data";
         QVERIFY(QFileInfo(qApp->applicationDirPath()).fileName()=="workspace-navigation-test");
         QVERIFY(!QFileInfo::exists(path) || QDir(path).removeRecursively()); seed();
+    }
+    void appearanceAndSidebarPreferencesRestore() {
+        for (const auto &id : {QStringLiteral("mist"), QStringLiteral("paper"), QStringLiteral("precision")}) {
+            {
+                MainWindow window; prepareWindow(window);
+                QVERIFY(window.ready());
+                auto *choice = window.findChild<QComboBox *>("appearancePreset");
+                auto *toggle = window.findChild<QPushButton *>("sidebarToggle");
+                QVERIFY(choice && toggle);
+                choice->setCurrentIndex(choice->findData(id));
+                QVERIFY(!qApp->styleSheet().contains(QLatin1Char('@')));
+                window.findChildren<QPushButton *>("navButton").at(4)->click();
+                window.resize(980, 640);
+                QCoreApplication::processEvents();
+                auto *section = choice->parentWidget();
+                QVERIFY(choice->isVisible());
+                QVERIFY(section->rect().contains(choice->geometry()));
+                QVERIFY(choice->x() > section->width() / 2);
+                const int right = section->contentsRect().right() - section->layout()->contentsMargins().right();
+                QVERIFY(qAbs(choice->geometry().right() - right) <= 1);
+                const auto expandedIcon = toggle->icon().pixmap(24, 24).toImage();
+                toggle->click();
+                QVERIFY(expandedIcon != toggle->icon().pixmap(24, 24).toImage());
+            }
+            {
+                MainWindow restored;
+                QVERIFY(restored.ready());
+                QCOMPARE(UiTheme::presetId(), id);
+                QCOMPARE(restored.findChild<QComboBox *>("appearancePreset")->currentData().toString(), id);
+                QCOMPARE(restored.findChild<QWidget *>("sidebar")->width(), 72);
+                auto *toggle = restored.findChild<QPushButton *>("sidebarToggle");
+                QCOMPARE(toggle->toolTip(), QStringLiteral("展开侧边栏"));
+                QCOMPARE(toggle->accessibleName(), toggle->toolTip());
+                toggle->click();
+            }
+        }
+        AppDatabase db;
+        QVERIFY(db.open());
+        QVERIFY(db.setSetting("appearance_preset", "retired-preset"));
+        MainWindow fallback;
+        QVERIFY(fallback.ready());
+        QCOMPARE(fallback.findChild<QComboBox *>("appearancePreset")->currentData().toString(), QStringLiteral("mist"));
+    }
+    void themeDensityPreservesWorkspaceState() {
+        AppDatabase db;
+        QString error;
+        QVERIFY2(db.open(&error), qPrintable(error));
+        const int projectId = db.projects().first().id;
+        for (const auto &name : {QStringLiteral("展开文件夹"), QStringLiteral("收起文件夹")}) {
+            int folderId = 0;
+            QVERIFY2(db.addRecordFolder(projectId, name, &folderId, &error), qPrintable(error));
+            QVERIFY2(db.addWorkRecord(projectId, name + QStringLiteral("中的记录"),
+                                     QStringLiteral("保留记录内容。"), folderId, &error), qPrintable(error));
+        }
+        // Create the views under a saved compact preference, then cycle their styles.
+        QVERIFY(db.setSetting("appearance_preset", "precision"));
+        MainWindow window; prepareWindow(window);
+        QVERIFY(window.ready());
+        auto *choice = window.findChild<QComboBox *>("appearancePreset");
+        auto *projects = window.findChild<ProjectsPage *>();
+        auto *calendar = window.findChild<CalendarPage *>();
+        QVERIFY(choice && projects && calendar);
+        auto *projectList = projects->findChild<QListWidget *>("projectList");
+        auto *workList = projects->findChild<QTreeWidget *>("workRecordList");
+        auto *diaryList = calendar->findChild<QListWidget *>("diaryList");
+        QVERIFY(projectList && workList && diaryList);
+        QCOMPARE(workList->topLevelItemCount(), 3);
+        auto *expanded = workList->topLevelItem(0);
+        auto *collapsed = workList->topLevelItem(1);
+        QCOMPARE(expanded->childCount(), 1);
+        QCOMPARE(collapsed->childCount(), 1);
+        expanded->setExpanded(true);
+        collapsed->setExpanded(false);
+        auto *selectedRecord = workList->topLevelItem(2);
+        workList->setCurrentItem(selectedRecord);
+        diaryList->setCurrentRow(0);
+        button(calendar, QStringLiteral("日记集合"))->click();
+        auto *collectionList = window.findChild<QListWidget *>("diaryCollectionList");
+        QVERIFY(collectionList);
+        collectionList->setCurrentRow(3);
+        auto *selectedProject = projectList->currentItem();
+        auto *selectedDiary = diaryList->currentItem();
+        auto *selectedCollection = collectionList->currentItem();
+        const auto folderIndex = workList->model()->index(0, 0);
+        struct Row {
+            QAbstractItemView *view;
+            QPersistentModelIndex index;
+            int normalHeight;
+        };
+        const QList<Row> rows {
+            {projectList, projectList->model()->index(0, 0), 44},
+            {workList, folderIndex, 44},
+            {workList, workList->model()->index(0, 0, folderIndex), 44},
+            {workList, workList->model()->index(2, 0), 44},
+            {diaryList, diaryList->model()->index(0, 0), 42},
+            {collectionList, collectionList->model()->index(3, 0), 48}
+        };
+        auto *indexPane = projects->findChild<QWidget *>("workspaceIndex");
+        QVERIFY(indexPane);
+        auto *navButton = window.findChildren<QPushButton *>("navButton").at(1);
+        int normalButtonHeight = 0, normalSpacing = 0;
+        QMargins normalMargins;
+        for (const auto &id : {QStringLiteral("precision"), QStringLiteral("mist"), QStringLiteral("paper"), QStringLiteral("precision")}) {
+            choice->setCurrentIndex(choice->findData(id));
+            QCoreApplication::processEvents();
+            for (const auto &row : rows) {
+                QVERIFY(row.index.isValid());
+                const int height = row.view->visualRect(row.index).height();
+                if (id == QStringLiteral("precision"))
+                    QVERIFY(height >= 24 && height < row.normalHeight);
+                else
+                    QCOMPARE(height, row.normalHeight);
+            }
+            if (id == QStringLiteral("mist")) {
+                normalButtonHeight = navButton->height();
+                normalMargins = indexPane->layout()->contentsMargins();
+                normalSpacing = indexPane->layout()->spacing();
+            } else if (id == QStringLiteral("paper")) {
+                QCOMPARE(navButton->height(), normalButtonHeight);
+                QCOMPARE(indexPane->layout()->contentsMargins(), normalMargins);
+                QCOMPARE(indexPane->layout()->spacing(), normalSpacing);
+            } else if (normalButtonHeight > 0) {
+                QVERIFY(navButton->height() < normalButtonHeight);
+                QVERIFY(indexPane->layout()->contentsMargins().top() < normalMargins.top());
+                QVERIFY(indexPane->layout()->spacing() < normalSpacing);
+            }
+            QCOMPARE(projectList->currentItem(), selectedProject);
+            QCOMPARE(workList->currentItem(), selectedRecord);
+            QCOMPARE(diaryList->currentItem(), selectedDiary);
+            QCOMPARE(collectionList->currentItem(), selectedCollection);
+            QVERIFY(expanded->isExpanded());
+            QVERIFY(!collapsed->isExpanded());
+        }
     }
     void returnDetachAttachPreservesDraftAndUndo() {
         MainWindow window; prepareWindow(window);

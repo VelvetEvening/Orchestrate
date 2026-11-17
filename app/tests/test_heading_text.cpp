@@ -104,6 +104,35 @@ int countColor(const QImage &img, const QColor &color)
             if(img.pixelColor(x,y)==color) ++count;
     return count;
 }
+int countBlendedColor(const QImage &img, const QColor &ink, const QColor &background)
+{
+    const int base[]{background.red(), background.green(), background.blue()};
+    const int delta[]{ink.red() - base[0], ink.green() - base[1], ink.blue() - base[2]};
+    int channel = 0;
+    for (int i = 1; i < 3; ++i)
+        if (qAbs(delta[i]) > qAbs(delta[channel])) channel = i;
+    if (delta[channel] == 0) return 0;
+    int count = 0;
+    for (int y = 0; y < img.height(); ++y) {
+        for (int x = 0; x < img.width(); ++x) {
+            const QColor color = img.pixelColor(x, y);
+            const int pixel[]{color.red(), color.green(), color.blue()};
+            const qreal coverage = qreal(pixel[channel] - base[channel]) / delta[channel];
+            if (coverage < 0.4 || coverage > 1.01) continue;
+            bool matches = true;
+            for (int i = 0; i < 3; ++i)
+                matches = matches && qAbs(pixel[i] - qRound(base[i] + coverage * delta[i])) <= 2;
+            if (matches) ++count;
+        }
+    }
+    return count;
+}
+int countReminderMark(const QImage &img)
+{
+    // A thin antialiased ring need not contain any fully opaque ink pixels.
+    return countBlendedColor(img, QColor(UiTheme::ReminderMarker), QColor(UiTheme::IndexSurface))
+        + countBlendedColor(img, QColor(UiTheme::ReminderMarker), QColor(UiTheme::Selection));
+}
 void require(bool ok, const QString &message)
 {
     if (!ok) throw std::runtime_error(message.toStdString());
@@ -1851,8 +1880,18 @@ private slots:
         QCOMPARE(dayList->item(0)->text(),QStringLiteral("旧日记简介"));
     }
 
+    void calendarRecordSymbolsAndFutureDates_data()
+    {
+        QTest::addColumn<QString>("preset");
+        QTest::newRow("mist") << QStringLiteral("mist");
+        QTest::newRow("paper") << QStringLiteral("paper");
+        QTest::newRow("precision") << QStringLiteral("precision");
+    }
     void calendarRecordSymbolsAndFutureDates()
     {
+        QFETCH(QString, preset);
+        UiTheme::apply(*qApp, preset);
+        const auto restoreTheme = qScopeGuard([] { UiTheme::apply(*qApp, QStringLiteral("mist")); });
         CalendarCellProbe probe;
         const QDate today=QDate::currentDate();
         probe.setCurrentPage(today.year(),today.month());
@@ -1862,17 +1901,19 @@ private slots:
         probe.setCurrentPage(future.year(),future.month());
         probe.setRecordDates({future},{future});
         const QImage both=probe.renderDate(future);
-        QVERIFY(countColor(both,QColor(UiTheme::Success))>=12);
-        QVERIFY(countColor(both,QColor(UiTheme::Warning))>=8);
+        QVERIFY(countColor(both,QColor(UiTheme::DiaryMarker))>=12);
+        QVERIFY(countReminderMark(both)>0);
         QVERIFY(countColor(both,QColor(UiTheme::IndexSurface))>200);
         QVERIFY(countColor(both,QColor(UiTheme::Muted))>0);
-        // Marker centers occupy fixed separate sides beneath the date number.
-        QCOMPARE(both.pixelColor(33,50),QColor(UiTheme::Success));
-        QCOMPARE(both.pixelColor(45,50),QColor(UiTheme::Warning));
+        // The diary is solid; the reminder ring leaves the index surface visible.
+        const int markerY = preset == QStringLiteral("precision") ? 46 : 50;
+        QCOMPARE(both.pixelColor(33,markerY),QColor(UiTheme::DiaryMarker));
+        QCOMPARE(both.pixelColor(45,markerY),QColor(UiTheme::IndexSurface));
+        QVERIFY(both.pixelColor(47,markerY)!=QColor(UiTheme::IndexSurface));
         probe.setSelectedDate(future);
         const auto selected=probe.renderDate(future);
-        QVERIFY(countColor(selected,QColor(UiTheme::Success))>=12);
-        QVERIFY(countColor(selected,QColor(UiTheme::Warning))>=8);
+        QVERIFY(countColor(selected,QColor(UiTheme::DiaryMarker))>=12);
+        QVERIFY(countReminderMark(selected)>0);
         const QDate outside=QDate(future.year(),future.month(),1).addMonths(1);
         const auto outsideImage=probe.renderDate(outside);
         QCOMPARE(outsideImage.pixelColor(0,0),QColor(UiTheme::IndexSurface));
@@ -1896,7 +1937,7 @@ private slots:
             saveDialog(dialog);
         },[&]{button(*page,QStringLiteral("添加日记"))->click();});
         QCoreApplication::processEvents();
-        QVERIFY(countColor(calendar->grab().toImage(),QColor(UiTheme::Success))>=12);
+        QVERIFY(countColor(calendar->grab().toImage(),QColor(UiTheme::DiaryMarker))>=12);
         interact(QStringLiteral("添加提醒"),[&](QDialog &dialog) {
             dialog.findChild<QLineEdit *>(QStringLiteral("reminderTitle"))->setText(QStringLiteral("今天的提醒"));
             dialog.findChild<QDateTimeEdit *>(QStringLiteral("reminderTime"))->setDateTime(QDateTime(date,QTime(23,59)));
@@ -1904,8 +1945,8 @@ private slots:
         },[&]{button(*page,QStringLiteral("添加提醒"))->click();});
         QCoreApplication::processEvents();
         const auto marked=calendar->grab().toImage();
-        QVERIFY(countColor(marked,QColor(UiTheme::Success))>=12);
-        QVERIFY(countColor(marked,QColor(UiTheme::Warning))>=8);
+        QVERIFY(countColor(marked,QColor(UiTheme::DiaryMarker))>=12);
+        QVERIFY(countReminderMark(marked)>0);
         capture(window,QStringLiteral("calendar-record-markers"));
         window.resize(980,640);
         capture(window,QStringLiteral("calendar-simplified-compact"));
@@ -1936,8 +1977,8 @@ private slots:
         calendar->setSelectedDate(date);
         QCoreApplication::processEvents();
         const auto removed=calendar->grab().toImage();
-        QCOMPARE(countColor(removed,QColor(UiTheme::Success)),0);
-        QVERIFY(countColor(removed,QColor(UiTheme::Warning))>=8);
+        QCOMPARE(countColor(removed,QColor(UiTheme::DiaryMarker)),0);
+        QVERIFY(countReminderMark(removed)>0);
         button(*page,QStringLiteral("日记集合"))->click();
         collection=window.findChild<QDialog *>(QStringLiteral("diaryCollection"));
         QCOMPARE(collection->findChild<QListWidget *>(QStringLiteral("diaryCollectionList"))->count(),0);

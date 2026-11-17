@@ -62,6 +62,7 @@ private slots:
     void optionalStateAndStableCommandEditing(){
         auto t=tool("manual");auto a=echo();auto b=a;b.name="second";QString error;
         QVERIFY(database_.saveAutomationTool(t,{a,b},&t.id,&error));
+        auto cleanupTool = qScopeGuard([this, id = t.id] { database_.deleteAutomationTool(id); });
         AutomationPage page(&database_);page.resize(1180,760);page.show();page.loadAll(t.id);
         QVERIFY(page.stateSection_->isHidden());QVERIFY(!page.stateReadsInFlight_.contains(t.id));QVERIFY(!page.stateErrors_.contains(t.id));
         auto commands=database_.toolCommands(t.id);const int first=commands[0].id,second=commands[1].id;
@@ -70,11 +71,19 @@ private slots:
         AppDatabase::AutomationTool stored;QVERIFY(page.findTool(t.id,&stored));QVERIFY(stored.customized);
         page.loadToolDetails(t.id);page.runCommand(page.commandList_->item(1));QVERIFY(!page.runRecords_.contains(t.id));
         page.runCommand(page.commandList_->item(0));QTRY_VERIFY_WITH_TIMEOUT(!page.runRecords_.value(t.id).running,5000);QVERIFY(!page.runRecords_.value(t.id).failed);
+        {
+            const auto restoreTheme = qScopeGuard([] { UiTheme::apply(*qApp, QStringLiteral("mist")); });
+            UiTheme::apply(*qApp, QStringLiteral("paper"));
+            QCoreApplication::processEvents();
+            QCOMPARE(page.runStatus_->font().weight(), QFont::DemiBold);
+            const auto icon = page.tree_->currentItem()->icon(0).pixmap(32,32).toImage();
+            QCOMPARE(icon.pixelColor(16,16), QColor(UiTheme::Muted));
+        }
         QVERIFY(sql("CREATE TRIGGER reject_custom BEFORE INSERT ON tool_commands WHEN NEW.name='reject' BEGIN SELECT RAISE(ABORT,'injected'); END"));
         saved[0].name="reject";t.name="should rollback";QVERIFY(!database_.saveAutomationTool(t,saved,nullptr,&error));
         QCOMPARE(database_.toolCommands(t.id)[0].name,QString("second"));QVERIFY(sql("DROP TRIGGER reject_custom"));
         TestSupport::capture(page, "tool-desktop");page.resize(900,600);TestSupport::capture(page, "tool-compact");
-        QVERIFY(database_.deleteAutomationTool(t.id));
+        QVERIFY(database_.deleteAutomationTool(t.id)); cleanupTool.dismiss();
     }
     void sourceParsingIsAllOrNothing(){
         QList<CommandParameters::Option> options;QString error;
@@ -352,12 +361,20 @@ private slots:
         const QString directory=cliFixture_.path();
         auto t=tool("CANNLab");t.workingDirectory=directory;DiscoveryDialog dialog(t);dialog.show();
         auto *entry=dialog.findChild<QComboBox*>("discoveryEntry");QTRY_VERIFY(!entry->currentText().isEmpty());
-        auto *customize=dialog.findChild<QPushButton*>("customizeDiscovery");customize->click();auto *read=dialog.findChild<QPushButton*>("readCommandHelp");read->click();
+        auto *customize=dialog.findChild<QPushButton*>("customizeDiscovery");
+        const auto closedIcon = customize->icon().pixmap(20,20).toImage();
+        customize->click();
+        QCOMPARE(customize->toolTip(), QStringLiteral("收起自行挑选与调整"));
+        QCOMPARE(customize->accessibleName(), customize->toolTip());
+        QVERIFY(closedIcon != customize->icon().pixmap(20,20).toImage());
+        auto *read=dialog.findChild<QPushButton*>("readCommandHelp");read->click();
         auto *list=dialog.findChild<QTreeWidget*>("discoveredCommands");QTRY_COMPARE_WITH_TIMEOUT(list->topLevelItemCount(),8,15000);list->topLevelItem(0)->setCheckState(0,Qt::Checked);
         entry->setCurrentText("orchestrate-nonexistent-entry");QCOMPARE(list->topLevelItemCount(),0);QVERIFY(dialog.selected().isEmpty());QVERIFY(!dialog.save->isEnabled());
         read->click();QTRY_VERIFY(!dialog.error->isHidden());QVERIFY(!dialog.save->isEnabled());QCOMPARE(dialog.result(),int(QDialog::Rejected));
         TestSupport::capture(dialog, "directory-entry-error");
-        customize->click();QVERIFY(dialog.save->isEnabled());dialog.save->click();QTRY_VERIFY(!dialog.error->isHidden());QCOMPARE(dialog.result(),int(QDialog::Rejected));QVERIFY(dialog.selected().isEmpty());
+        customize->click();
+        QCOMPARE(customize->toolTip(), QStringLiteral("展开自行挑选与调整"));
+        QVERIFY(dialog.save->isEnabled());dialog.save->click();QTRY_VERIFY(!dialog.error->isHidden());QCOMPARE(dialog.result(),int(QDialog::Rejected));QVERIFY(dialog.selected().isEmpty());
         dialog.reject();
         AutomationPage page(&database_);page.resize(900,600);page.show();for(int i=0;i<page.tree_->topLevelItemCount();++i)if(page.tree_->topLevelItem(i)->data(0,Qt::UserRole).toInt()==0)page.tree_->setCurrentItem(page.tree_->topLevelItem(i));page.showEmptyDetails(0);QVERIFY(page.emptyMessage_->text().contains(QStringLiteral("接入工具")));TestSupport::capture(page, "tool-empty");
     }

@@ -448,3 +448,13 @@ void MarkdownEdit::contextMenuEvent(QContextMenuEvent *event)
     }
     menu.exec(event->globalPos());
 }
+
+void MarkdownEdit::changeEvent(QEvent *event)
+{
+    QTextEdit::changeEvent(event);
+    if (event->type() == QEvent::PaletteChange || event->type() == QEvent::StyleChange) {
+        // Re-render presentation only; source, undo history and selection survive.
+        force_ = true;
+        refreshTimer_.start(0);
+    }
+}

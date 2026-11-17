@@ -66,11 +66,24 @@ inline QLabel *hint(const QString &text)
 {
     auto *label = new QLabel(text); label->setTextFormat(Qt::PlainText); label->setWordWrap(true); UiTheme::setRole(label, "muted"); label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum); return label;
 }
+inline void updateDisclosureButton(QPushButton *button, bool expanded, const QString &section)
+{
+    button->setIcon(UiTheme::icon(expanded ? QStringLiteral("chevron-down") : QStringLiteral("chevron-right")));
+    button->setIconSize(QSize(16, 16));
+    const QString action = (expanded ? QStringLiteral("收起") : QStringLiteral("展开")) + section;
+    button->setToolTip(action);
+    button->setAccessibleName(action);
+}
+
 inline void advanced(Dialog &dialog, QWidget *fields)
 {
     auto *toggle = new QPushButton(QStringLiteral("高级设置"), &dialog); toggle->setCheckable(true); toggle->setAutoDefault(false);
     UiTheme::setRole(toggle, "quiet"); fields->hide(); dialog.body->addWidget(toggle, 0, Qt::AlignLeft); dialog.body->addWidget(fields);
-    QObject::connect(toggle, &QPushButton::toggled, fields, &QWidget::setVisible);
+    updateDisclosureButton(toggle, false, QStringLiteral("高级设置"));
+    QObject::connect(toggle, &QPushButton::toggled, fields, [toggle, fields](bool expanded) {
+        fields->setVisible(expanded);
+        updateDisclosureButton(toggle, expanded, QStringLiteral("高级设置"));
+    });
 }
 using ToolConfiguration::validEnvironment;
 inline bool editTool(AppDatabase::AutomationTool *tool, QWidget *parent)

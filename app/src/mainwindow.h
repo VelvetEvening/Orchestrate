@@ -42,6 +42,7 @@ private:
     void buildTray();
     void switchToPage(int index, bool confirmLeave = true);
     void toggleSidebar();
+    void updateSidebarAppearance();
     void quitApplication();
     void installUpdate();
     void refreshAutoStartSettings(const QString &error = QString());

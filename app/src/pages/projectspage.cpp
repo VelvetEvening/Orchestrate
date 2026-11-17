@@ -99,7 +99,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     auto *listCard = surface(splitter, "index");
     listCard->setObjectName(QStringLiteral("workspaceIndex"));
     auto *left = new QVBoxLayout(listCard);
-    left->setContentsMargins(16,22,16,24);
+    UiTheme::setLayoutMetrics(left, {16,22,16,24}, 6);
     projectStatusTabs_ = new QTabBar(listCard);
     projectStatusTabs_->setObjectName(QStringLiteral("projectStatusTabs"));
     projectStatusTabs_->setAccessibleName(QStringLiteral("项目状态筛选"));
@@ -145,8 +145,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     left->addWidget(create);
     details_ = surface(splitter, "content");
     detailsLayout_ = new QVBoxLayout(details_);
-    detailsLayout_->setContentsMargins(24,22,24,24);
-    detailsLayout_->setSpacing(12);
+    UiTheme::setLayoutMetrics(detailsLayout_, {24,22,24,24}, 12);
     auto *header = new QHBoxLayout;
     projectTitle_ = label(QString(), QStringLiteral("objectTitle"), details_);
     projectTitle_->setWordWrap(true);
@@ -168,8 +167,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     auto *recordsPanel_ = new QWidget(details_);
     recordsPanel_->setObjectName(QStringLiteral("recordsPanel"));
     auto *records = new QVBoxLayout(recordsPanel_);
-    records->setContentsMargins(0,0,0,0);
-    records->setSpacing(10);
+    UiTheme::setLayoutMetrics(records, {0,0,0,0}, 10);
     auto *searchRow = new QHBoxLayout;
     searchRow->setSpacing(10);
     search_ = new QLineEdit(recordsPanel_);
@@ -285,7 +283,6 @@ void ProjectsPage::loadProjects(int preferred)
     for (const auto &project : projects) {
         if (project.completed != completed) continue;
         auto *item = new QListWidgetItem(project.name, projectList_);
-        item->setSizeHint(QSize(0,44));
         item->setData(Qt::UserRole,project.id);
         item->setData(SiblingOrderScopeRole, QStringLiteral("projects"));
         item->setData(Qt::UserRole + 1, project.directory);
@@ -545,7 +542,6 @@ void ProjectsPage::refreshWorkRecords()
         item->setIcon(0,folder.starred ? starredIcon : folderIcon);
         item->setData(0,Qt::AccessibleTextRole,folder.starred
             ? folder.name + QStringLiteral("，重点文件夹，已置顶") : folder.name);
-        item->setSizeHint(0,QSize(0,44));
         item->setToolTip(0,folder.name + (folder.starred
             ? QStringLiteral("\n重点文件夹 · 已置顶\n右键取消重点标记、重命名或删除文件夹")
             : QStringLiteral("\n右键标记重点并置顶、重命名或删除文件夹")));
@@ -558,7 +554,6 @@ void ProjectsPage::refreshWorkRecords()
         auto *folder = folderItems.value(record.folderId);
         auto *item = folder ? new QTreeWidgetItem(folder) : new QTreeWidgetItem(workList_);
         item->setText(0,recordTitle(record));
-        item->setSizeHint(0,QSize(0,44));
         item->setData(0,Qt::UserRole,record.id);
         item->setData(0,FolderRole,false);
         item->setData(0,SiblingOrderScopeRole,QStringLiteral("records.%1").arg(record.folderId));

@@ -31,14 +31,12 @@ QLabel[uiRole="error"], QLabel#clipboardStatus, QLabel#outlineSaveError[uiRole="
 QLabel[uiRole="success"], QLabel#outlineSaveError[uiRole="success"], QLabel#recordSaveStatus[uiRole="success"] { color: @success@; }
 QLabel[uiRole="warning"], QLabel#recordSaveStatus[uiRole="warning"] { color: @warning@; }
 QLabel[uiRole="accent"] { color: @accent@; }
-QLabel#diaryLegend { color: @success@; font-size: 12px; }
-QLabel#reminderLegend { color: @warning@; font-size: 12px; }
 QFrame#card, QWidget#updateWidget {
     background: @surface@; border: 1px solid @border@; border-radius: 10px;
 }
 QPushButton, QToolButton {
     background: @surface@; color: @text@; border: 1px solid @controlBorder@;
-    border-radius: 6px; padding: 6px 11px; min-height: 20px;
+    border-radius: @controlRadius@; padding: @controlPadding@; min-height: 20px;
 }
 QPushButton:hover, QToolButton:hover { background: @hover@; border-color: @focus@; }
 QPushButton:pressed, QToolButton:pressed { background: @selection@; border-color: @focus@; }
@@ -65,7 +63,7 @@ QPushButton#dangerButton, QPushButton[uiRole="danger"], QPushButton#deleteProjec
 QPushButton#dangerButton:hover, QPushButton[uiRole="danger"]:hover, QPushButton#deleteProjectButton:hover { background: @dangerBackground@; border-color: @dangerHoverBorder@; }
 QPushButton#dangerButton:focus, QPushButton[uiRole="danger"]:focus, QPushButton#deleteProjectButton:focus { border-color: @danger@; }
 QPushButton[uiRole="danger"]:disabled, QPushButton#dangerButton:disabled { color: @disabled@; background: transparent; border-color: transparent; }
-QPushButton#navButton { background: transparent; border: 1px solid transparent; text-align: left; padding: 10px 12px; font-size: 14px; border-radius: 7px; }
+QPushButton#navButton { background: transparent; border: 1px solid transparent; text-align: left; padding: @navPadding@; font-size: 14px; border-radius: @navRadius@; }
 QPushButton#navButton:hover { background: @navHover@; }
 QPushButton#navButton:checked { background: @selection@; color: @accent@; border-color: @border@; font-weight: 600; }
 QPushButton#navButton:focus { border-color: @focus@; }
@@ -75,7 +73,7 @@ QPushButton#sidebarToggle:pressed { background: @selection@; }
 QPushButton#sidebarToggle:focus { border-color: @focus@; }
 QLineEdit, QPlainTextEdit, QTextEdit, QAbstractSpinBox, QComboBox {
     background: @surface@; color: @text@; border: 1px solid @controlBorder@;
-    border-radius: 6px; padding: 6px 9px; placeholder-text-color: @muted@;
+    border-radius: @controlRadius@; padding: @inputPadding@; placeholder-text-color: @muted@;
 }
 QLineEdit:hover, QComboBox:hover, QAbstractSpinBox:hover { border-color: @focus@; }
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QAbstractSpinBox:focus, QComboBox:focus { border-color: @accent@; }
@@ -111,17 +109,23 @@ QRadioButton::indicator { width: 16px; height: 16px; border: 1px solid @controlB
 QRadioButton::indicator:checked { background: @selection@; border-color: @focus@; image: url(:/ui/icons/radio.svg); }
 QRadioButton::indicator:hover { border-color: @accent@; }
 QListWidget, QTreeWidget, QTableView { background: @surface@; alternate-background-color: @background@; border: 1px solid @border@; border-radius: 6px; padding: 4px; }
-QListWidget::item, QTreeWidget::item { padding: 8px 9px; border: 1px solid transparent; border-radius: 4px; }
+QListWidget::item, QTreeWidget::item { padding: @itemPadding@; border: 1px solid transparent; border-radius: 4px; }
 QListWidget::item:hover, QTreeWidget::item:hover { background: @hover@; }
 QListWidget::item:selected, QTreeWidget::item:selected { background: @selection@; color: @accent@; }
 QListWidget::item:focus, QTreeWidget::item:focus { border-color: @focus@; }
 QListWidget#projectList, QTreeWidget#workRecordList, QTreeWidget#toolTree,
 QListWidget#reminderList, QListWidget#diaryList, QTreeWidget#clipboardItems { border: none; background: transparent; padding: 0; }
-QTreeWidget#toolTree::item { padding: 8px 5px; }
+QTreeWidget#toolTree::item { padding: @toolItemPadding@; }
+/* Minimums exclude the 1px borders; normal rows retain their 44/42/48px heights. */
+QListWidget#projectList::item, QTreeWidget#workRecordList::item { min-height: @recordMinHeight@; padding-top: 0; padding-bottom: 0; }
+QListWidget#diaryList::item { min-height: @diaryMinHeight@; padding-top: 0; padding-bottom: 0; }
+QListWidget#diaryCollectionList::item { min-height: @collectionMinHeight@; padding-top: 0; padding-bottom: 0; }
 QTreeWidget#clipboardItems::item { min-height: 30px; padding: 8px 12px; }
 QTreeWidget::branch { background: transparent; }
+QTreeWidget::branch:has-children:closed { image: url(:/ui/icons/chevron-right.svg); }
+QTreeWidget::branch:has-children:open { image: url(:/ui/icons/chevron-down.svg); }
 QHeaderView::section { background: @background@; color: @muted@; border: none; border-bottom: 1px solid @border@; padding: 7px; }
-QTabBar::tab { color: @muted@; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 7px 12px; margin-right: 4px; min-width: 36px; min-height: 20px; }
+QTabBar::tab { color: @muted@; background: transparent; border: 1px solid transparent; border-radius: @controlRadius@; padding: @tabPadding@; margin-right: 4px; min-width: 36px; min-height: 20px; }
 QTabBar::tab:hover { background: @hover@; }
 QTabBar::tab:selected { color: @accent@; background: @selection@; border-color: @controlBorder@; font-weight: 600; }
 QTabBar::tab:focus { border-color: @accent@; }
@@ -166,7 +170,7 @@ QGroupBox { border: 1px solid @border@; border-radius: 7px; margin-top: 14px; pa
 QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 5px; color: @muted@; }
 QCalendarWidget { background: @indexSurface@; }
 QCalendarWidget QWidget#qt_calendar_navigationbar { background: @indexSurface@; }
-QCalendarWidget QToolButton { border: 1px solid transparent; background: @indexSurface@; padding: 7px; font-size: 14px; }
+QCalendarWidget QToolButton { border: 1px solid transparent; background: @indexSurface@; padding: @calendarPadding@; font-size: 14px; }
 QCalendarWidget QToolButton:hover { background: @hover@; }
 QCalendarWidget QToolButton:focus { border-color: @focus@; }
 QCalendarWidget QToolButton#qt_calendar_monthbutton { color: @text@; font-size: 18px; font-weight: 600; }
@@ -189,5 +193,6 @@ QFrame#stateRow { background: @background@; border: none; border-radius: 0; }
 QLabel#stateRowName, QLabel#commandContextTitle { font-weight: 600; }
 QFrame#runPanel { background: @background@; border: none; border-radius: 0; }
 QLabel#runTitle { color: @text@; font-weight: 600; }
+QLabel#runStatus { font-weight: 600; }
 QPlainTextEdit#runOutput { background: transparent; color: @text@; border: none; padding: 0; }
 QLabel#warningText, QLabel#commandParameterError { color: @warning@; background: @warningBackground@; border: none; border-radius: 6px; padding: 8px 10px; }

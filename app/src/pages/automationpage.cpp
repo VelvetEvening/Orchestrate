@@ -258,8 +258,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     auto *treeCard = makeSurface(splitter, "index");
     treeCard->setObjectName(QStringLiteral("workspaceIndex"));
     auto *treeLayout = new QVBoxLayout(treeCard);
-    treeLayout->setContentsMargins(16, 22, 16, 24);
-    treeLayout->setSpacing(8);
+    UiTheme::setLayoutMetrics(treeLayout, {16, 22, 16, 24}, 8);
     auto *treeTitle = makeCardTitle(QStringLiteral("工具组"), treeCard);
     treeTitle->setContentsMargins(4, 0, 0, 0);
     treeLayout->addWidget(treeTitle);
@@ -298,7 +297,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     tree_->header()->setStretchLastSection(false);
     tree_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
     tree_->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    tree_->setRootIsDecorated(false);
+    tree_->setRootIsDecorated(true);
     tree_->setIndentation(18);
     tree_->setIconSize(QSize(16, 16));
     tree_->setMinimumWidth(240);
@@ -352,8 +351,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     // Header: identity and registration actions.
     auto *headerCard = makeSurface(column);
     auto *headerLayout = new QVBoxLayout(headerCard);
-    headerLayout->setContentsMargins(24, 22, 24, 22);
-    headerLayout->setSpacing(6);
+    UiTheme::setLayoutMetrics(headerLayout, {24, 22, 24, 22}, 6);
     auto *headerRow = new QHBoxLayout;
     headerRow->setSpacing(8);
     toolName_ = new QLabel(headerCard);
@@ -379,8 +377,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     auto *stateCard = makeSurface(column);
     stateSection_ = stateCard;
     auto *stateLayout = new QVBoxLayout(stateCard);
-    stateLayout->setContentsMargins(24, 22, 24, 24);
-    stateLayout->setSpacing(8);
+    UiTheme::setLayoutMetrics(stateLayout, {24, 22, 24, 24}, 8);
     auto *stateHeader = new QHBoxLayout;
     stateHeader->addWidget(makeCardTitle(QStringLiteral("当前状态"), stateCard));
     stateHeader->addStretch(1);
@@ -418,8 +415,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     // Commands and the output of the latest run.
     auto *commandCard = makeSurface(column, "content");
     auto *commandLayout = new QVBoxLayout(commandCard);
-    commandLayout->setContentsMargins(24, 22, 24, 24);
-    commandLayout->setSpacing(10);
+    UiTheme::setLayoutMetrics(commandLayout, {24, 22, 24, 24}, 10);
     auto *commandHeader = new QHBoxLayout;
     commandHeader->addWidget(makeCardTitle(QStringLiteral("工具命令"), commandCard));
     commandHeader->addStretch(1);
@@ -476,6 +472,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     runTitle_->setWordWrap(true);
     runHeader->addWidget(runTitle_, 1);
     runStatus_ = new QLabel(runPanel_);
+    runStatus_->setObjectName(QStringLiteral("runStatus"));
     runHeader->addWidget(runStatus_);
     runLayout->addLayout(runHeader);
     runOutput_ = new QPlainTextEdit(runPanel_);
@@ -1521,6 +1518,7 @@ void AutomationPage::renderState(const QJsonObject &state)
     const QString summary = jsonString(state, QStringLiteral("summary"));
 
     stateBadge_->setText(QStringLiteral("● %1").arg(resultLabel(result, toolId)));
+    stateBadge_->setProperty("themeStatus", result);
     stateBadge_->setStyleSheet(badgeStyle(result));
     stateSummary_->setText(summary.isEmpty() ? QStringLiteral("状态文件没有提供摘要。") : summary);
     if (ToolState::expired(state))
@@ -1544,6 +1542,8 @@ void AutomationPage::renderState(const QJsonObject &state)
         name->setMinimumWidth(96);
         rowLayout->addWidget(name);
         auto *itemBadge = new QLabel(resultLabel(itemResult, toolId), row);
+        itemBadge->setProperty("themeStatus", itemResult);
+        itemBadge->setProperty("themeStatusExtra", QStringLiteral("font-size: 12px; padding: 2px 9px; border-radius: 9px;"));
         itemBadge->setStyleSheet(badgeStyle(itemResult)
                                  + QStringLiteral("font-size: 12px; padding: 2px 9px; border-radius: 9px;"));
         itemBadge->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
@@ -1560,6 +1560,7 @@ void AutomationPage::renderState(const QJsonObject &state)
 void AutomationPage::renderStateMessage(const QString &badge, const QString &result, const QString &message)
 {
     stateBadge_->setText(QStringLiteral("● %1").arg(badge));
+    stateBadge_->setProperty("themeStatus", result);
     stateBadge_->setStyleSheet(badgeStyle(result));
     stateSummary_->setText(message);
     clearStateItems();
@@ -1727,14 +1728,8 @@ void AutomationPage::renderRunRecord()
     const RunRecord &record = runRecords_[selectedToolId_];
     runTitle_->setText(QStringLiteral("最近运行：%1").arg(record.title)
         + (record.outputTruncated ? QStringLiteral("（仅保留最近 256 Ki 字符）") : QString()));
-    QString color = QString::fromLatin1(UiTheme::Success);
-    if (record.running) {
-        color = QString::fromLatin1(UiTheme::Accent);
-    } else if (record.failed) {
-        color = QString::fromLatin1(UiTheme::Danger);
-    }
     runStatus_->setText(record.status);
-    runStatus_->setStyleSheet(QStringLiteral("color: %1; font-weight: 600;").arg(color));
+    UiTheme::setRole(runStatus_, record.running ? "accent" : record.failed ? "error" : "success");
     const qint64 start = record.outputOffset;
     const qint64 end = start + record.output.size();
     auto *scroll = runOutput_->verticalScrollBar();
@@ -1768,6 +1763,18 @@ void AutomationPage::showEvent(QShowEvent *event)
     QWidget::showEvent(event);
     updateCachedStateExpiry();
     renderRunRecord();
+}
+
+void AutomationPage::changeEvent(QEvent *event)
+{
+    QWidget::changeEvent(event);
+    if (event->type() != QEvent::StyleChange || !tree_) return;
+    // Status dots are cached pixmaps; redraw them from the existing state.
+    for (int i = 0; i < tree_->topLevelItemCount(); ++i) {
+        auto *group = tree_->topLevelItem(i);
+        for (int j = 0; j < group->childCount(); ++j)
+            updateToolIcon(group->child(j)->data(0, Qt::UserRole).toInt());
+    }
 }
 
 void AutomationPage::appendRunOutput(int toolId, const QString &text)
