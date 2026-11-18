@@ -28,11 +28,12 @@ CollaborationRecordDialog::CollaborationRecordDialog(AppDatabase *database,
     layout->setSpacing(12);
     auto *header = new QHBoxLayout;
     header->setSpacing(16);
-    auto *titleLayout = new QVBoxLayout;
-    titleLayout->setContentsMargins(0, 0, 0, 0);
-    title_ = addSummaryField(titleLayout, this, QStringLiteral("workRecordTitle"), QStringLiteral("标题"));
+    title_ = new QLineEdit(this);
+    title_->setObjectName(QStringLiteral("workRecordTitle"));
+    title_->setAccessibleName(QStringLiteral("标题"));
+    title_->setPlaceholderText(QStringLiteral("填写标题"));
     title_->setMaximumWidth(520);
-    header->addLayout(titleLayout, 1);
+    header->addWidget(title_, 1);
     status_ = new QLabel(this);
     status_->setObjectName(QStringLiteral("recordSaveStatus"));
     status_->setAccessibleName(QStringLiteral("保存状态"));

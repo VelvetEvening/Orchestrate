@@ -148,7 +148,7 @@ QTabBar#clipboardTabs QToolButton { padding: 0; }
 QTabWidget::pane { border: 1px solid @border@; border-radius: 6px; background: @surface@; }
 QFrame#summaryField { background: @surface@; border: none; }
 QLabel#summaryCaption { color: @muted@; padding: 6px 12px 6px 0; }
-QFrame#summaryField QLineEdit { padding: 8px 10px; }
+QFrame#summaryField QLineEdit, QLineEdit#workRecordTitle { padding: 8px 10px; }
 QScrollArea { border: none; background: transparent; }
 QWidget#detailsColumn { background: transparent; }
 QWidget#contentHeader { background: @surface@; border-bottom: 1px solid @border@; }

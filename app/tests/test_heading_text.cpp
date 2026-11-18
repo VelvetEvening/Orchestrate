@@ -2682,12 +2682,14 @@ private slots:
         QVERIFY(!page->findChild<HeadingTextEdit *>(QStringLiteral("projectOutline")));
         interact(QStringLiteral("添加记录"), [&](QDialog &dialog) {
             require(!dialogEditor(dialog)->isPreviewMode(),QStringLiteral("New record must start in edit"));
-            auto *prefix=dialog.findChild<QLabel *>(QStringLiteral("summaryCaption"));
-            require(prefix && prefix->text()==QStringLiteral("标题"),QStringLiteral("Title caption missing"));
-            require(prefix->parentWidget()!=dialog.findChild<QLineEdit *>(QStringLiteral("workRecordTitle")),QStringLiteral("Caption still inside editable value"));
+            auto *title = dialog.findChild<QLineEdit *>(QStringLiteral("workRecordTitle"));
+            auto *summary = dialog.findChild<HeadingTextEdit *>(QStringLiteral("recordSummaryEditor"));
+            require(title && title->accessibleName() == QStringLiteral("标题"), QStringLiteral("Record title needs an accessible name"));
+            require(summary && title->mapTo(&dialog, QPoint()).x() == summary->mapTo(&dialog, QPoint()).x(),
+                    QStringLiteral("Record title must align with the editor's left edge"));
             dialogEditor(dialog)->setPlainText(sample);
             saveDialog(dialog); require(!static_cast<CollaborationRecordDialog &>(dialog).hasSaved(),QStringLiteral("Missing title allowed"));
-            dialog.findChild<QLineEdit *>(QStringLiteral("workRecordTitle"))->setText(QStringLiteral("第一阶段总结"));
+            title->setText(QStringLiteral("第一阶段总结"));
             capture(dialog,QStringLiteral("work-record-editor"));
             saveDialog(dialog);
         }, [&]{button(*page,QStringLiteral("添加记录"))->click();});
