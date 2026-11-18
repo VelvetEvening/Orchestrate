@@ -12,17 +12,13 @@
 #include "automation/toolconfiguration.h"
 #include "automation/optionssource.h"
 #include "automation/discoverydialog.h"
-#include "automation/manifestimport.h"
 #include "widgets/treeaccessibility.h"
 #include "widgets/textlayoutguard.h"
 
-#include <QComboBox>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDialog>
 #include <QDir>
-#include <QFile>
-#include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QFormLayout>
@@ -31,8 +27,6 @@
 #include <QHeaderView>
 #include <QInputDialog>
 #include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonParseError>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -43,7 +37,6 @@
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QPushButton>
-#include <QRegularExpression>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSignalBlocker>
@@ -1276,37 +1269,6 @@ void AutomationPage::deleteGroup()
     loadAll();
 }
 
-void AutomationPage::importTool()
-{
-    if (database_ == nullptr || importInFlight_) return;
-    importInFlight_ = true;
-    const int requestedGroup = selectedGroupId_;
-    if (!ManifestImport::readLocal(this,
-            [this, requestedGroup](bool ok, const ManifestImport::Source &source, const QString &error) {
-                importInFlight_ = false;
-                if (!ok) { showError(QStringLiteral("无法读取接入声明：%1").arg(error)); return; }
-                registerToolManifest(source.data, source.path, {}, {}, {}, {}, requestedGroup);
-            })) {
-        importInFlight_ = false;
-    }
-}
-
-void AutomationPage::importRemoteTool()
-{
-    if (database_ == nullptr) return;
-    ManifestImport::Source source;
-    if (ManifestImport::readSsh(this, *database_, &source))
-        registerToolManifest(source.data, source.path, source.sshHost, {}, {}, source.sshUser);
-}
-
-void AutomationPage::importWslTool()
-{
-    if (database_ == nullptr) return;
-    ManifestImport::Source source;
-    if (ManifestImport::readWsl(this, *database_, &source))
-        registerToolManifest(source.data, source.path, {}, source.wslDistribution, source.wslUser);
-}
-
 bool AutomationPage::readManifest(const QString &sourcePath,
                                   QByteArray *data,
                                   QString *errorMessage) const
@@ -1325,73 +1287,6 @@ bool AutomationPage::parseManifest(const QByteArray &manifestData,
 {
     return ManifestParser::parse(manifestData, sourcePath, sshHost, manifest, errorMessage,
                                  wslDistribution, wslUser, sshUser);
-}
-
-void AutomationPage::registerToolManifest(const QByteArray &manifestData,
-                                           const QString &sourcePath,
-                                           const QString &sshHost,
-                                           const QString &wslDistribution,
-                                           const QString &wslUser,
-                                           const QString &sshUser, int requestedGroupId)
-{
-    if (database_ == nullptr) {
-        return;
-    }
-
-    ParsedManifest manifest;
-    QString error;
-    if (!parseManifest(manifestData, sourcePath, sshHost, &manifest, &error, wslDistribution, wslUser, sshUser)) {
-        showError(error);
-        return;
-    }
-
-    // Registering the same tool again updates it instead of creating a duplicate.
-    const QList<AppDatabase::AutomationTool> tools = database_->automationTools(0, &error);
-    for (const AppDatabase::AutomationTool &existing : tools) {
-        if (existing.externalId != manifest.tool.externalId || !existing.sameExecutionTarget(manifest.tool)) {
-            continue;
-        }
-        if (!confirmManifestUpdate(existing, manifest)) return;
-        if (applyManifestUpdate(existing.id, manifest)) {
-            loadAll(existing.id);
-        }
-        return;
-    }
-
-    QString groupNotice;
-    int groupId = qMax(0, requestedGroupId >= 0 ? requestedGroupId : selectedGroupId_);
-    if (groupId == 0 && !manifest.group.isEmpty()) {
-        for (const AppDatabase::ToolGroup &group : database_->toolGroups(&error)) {
-            if (group.name == manifest.group) {
-                groupId = group.id;
-                break;
-            }
-        }
-        if (groupId == 0) {
-            groupNotice = QStringLiteral("接入声明中的工具组“%1”尚未创建，工具已先放入“%2”。")
-                              .arg(manifest.group, ungroupedName());
-        }
-    }
-
-    AppDatabase::AutomationTool tool = manifest.tool;
-    tool.groupId = groupId;
-    // Retain legacy storage defaults for compatibility; these no longer schedule reads.
-    tool.refreshEnabled = false;
-    tool.refreshMode = QStringLiteral("interval");
-    tool.refreshIntervalSeconds = 5 * 60;
-    tool.dailyRefreshTime = QStringLiteral("08:00");
-
-    int toolId = 0;
-    if (!database_->saveAutomationTool(tool, manifest.commands, &toolId, &error)) {
-        showError(error);
-        loadAll();
-        return;
-    }
-
-    loadAll(toolId);
-    if (!groupNotice.isEmpty()) {
-        QMessageBox::information(this, QStringLiteral("工具已注册"), groupNotice);
-    }
 }
 
 bool AutomationPage::applyManifestUpdate(int toolId, ParsedManifest manifest)

@@ -112,7 +112,6 @@ add_library(OrchestrateApplication STATIC
     src/pages/collaborationrecorddialog.h
     src/pages/automationpage.cpp
     src/pages/automationpage.h
-    src/automation/manifestimport.cpp src/automation/manifestimport.h
 )
 target_link_libraries(OrchestrateApplication PUBLIC
     OrchestrateData OrchestrateAutomation OrchestrateText OrchestrateShortcut OrchestrateAutoStart

@@ -26,7 +26,6 @@
 #include <QPlainTextEdit>
 #include <QTimer>
 #include <QFontDatabase>
-#include <QMenu>
 #include <QInputDialog>
 #include <QListWidget>
 #include <QProcess>
@@ -40,6 +39,49 @@ class AutomationContractTest : public QObject
 {
     Q_OBJECT
     AppDatabase database_;
+    bool registerFromDirectory(AutomationPage &page, const QString &target, const QString &host,
+                               const QString &user, const QString &path, bool expectUpdate = false)
+    {
+        auto *button = page.findChild<QPushButton *>("registerTool");
+        if (!button) return false;
+        bool submitted = false, confirmed = false, expired = false;
+        QElapsedTimer elapsed;
+        QTimer drive;
+        connect(&drive, &QTimer::timeout, &page, [&] {
+            auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            if (!dialog) return;
+            if (elapsed.elapsed() > 35000) {
+                expired = true;
+                dialog->reject();
+                return;
+            }
+            if (expectUpdate && dialog->objectName() == "manifestUpdatePreview") {
+                confirmed = true;
+                dialog->accept();
+                return;
+            }
+            if (submitted || dialog->objectName() != "toolDiscoveryDialog") return;
+            auto *environment = dialog->findChild<QComboBox *>("directoryTarget");
+            auto *location = dialog->findChild<QComboBox *>("directoryHost");
+            auto *login = dialog->findChild<QLineEdit *>("directoryUser");
+            auto *directory = dialog->findChild<QLineEdit *>("directoryPath");
+            auto *save = dialog->findChild<QPushButton *>("saveConfiguration");
+            if (!environment || !location || !login || !directory || !save) {
+                dialog->reject();
+                return;
+            }
+            environment->setCurrentIndex(environment->findData(target));
+            location->setCurrentText(host);
+            login->setText(user);
+            directory->setText(path);
+            submitted = true;
+            save->click();
+        });
+        elapsed.start();
+        drive.start(20);
+        button->click();
+        return submitted && !expired && confirmed == expectUpdate;
+    }
     bool execSql(const QString &statement)
     {
         const QString name = QUuid::createUuid().toString();
@@ -134,10 +176,10 @@ private slots:
             QVERIFY(!manifest.tool.externalId.isEmpty());
         }
     }
-    void registrationMenu()
+    void registrationOpensDiscoveryDialog()
     {
         AutomationPage page(&database_);auto *button=page.findChild<QPushButton*>("registerTool");QVERIFY(button);
-        QCOMPARE(button->text(),QStringLiteral("接入工具"));QVERIFY(!button->menu());QVERIFY(!page.findChild<QAction*>("importLocalAction"));
+        QCOMPARE(button->text(),QStringLiteral("接入工具"));QVERIFY(!button->menu());
         bool opened=false;QTimer::singleShot(0,[&]{auto *dialog=qobject_cast<QDialog*>(QApplication::activeModalWidget());
             QVERIFY(dialog);QCOMPARE(dialog->objectName(),QString("toolDiscoveryDialog"));auto *target=dialog->findChild<QComboBox*>("directoryTarget");
             QVERIFY(target);QCOMPARE(target->count(),3);target->setCurrentIndex(2);QVERIFY(dialog->findChild<QComboBox*>("directoryHost")->isVisible());opened=true;dialog->reject();});
@@ -254,27 +296,7 @@ private slots:
         const auto restorePath = qScopeGuard([&] { qputenv("PATH", oldPath); });
         // The helper EXE below replaces SSH for this test; no server connection.
         AutomationPage page(&database_);
-        bool submitted = false, expired = false;
-        QTimer driver, deadline;
-        connect(&driver, &QTimer::timeout, &page, [&] {
-            auto *dialog = page.findChild<QDialog *>("sshRegistrationDialog");
-            if (!dialog || submitted) return;
-            dialog->findChild<QComboBox *>("sshHost")->setCurrentText("fixture.invalid");
-            dialog->findChild<QComboBox *>("sshUser")->setCurrentText("alice");
-            dialog->findChild<QLineEdit *>("sshManifestPath")->setText("~/tool folder");
-            dialog->grab().save(QCoreApplication::applicationDirPath() + "/ssh-registration.png");
-            submitted = true;
-            dialog->findChild<QPushButton *>("sshRegisterSubmit")->click();
-        });
-        deadline.setSingleShot(true);
-        connect(&deadline, &QTimer::timeout, &page, [&] {
-            expired = true;
-            if (auto *dialog = page.findChild<QDialog *>("sshRegistrationDialog")) dialog->reject();
-        });
-        driver.start(20); deadline.start(10000);
-        page.importRemoteTool();
-        driver.stop(); deadline.stop();
-        QVERIFY(!expired);
+        QVERIFY(registerFromDirectory(page, "ssh", "fixture.invalid", "alice", "~/tool folder"));
         AppDatabase::AutomationTool tool;
         for (auto candidate : database_.automationTools()) if (candidate.externalId == "ssh-ui-fixture") tool = candidate;
         QVERIFY(tool.id > 0);
@@ -288,6 +310,13 @@ private slots:
         QVERIFY(!page.runRecords_.value(tool.id).failed);
         QVERIFY(page.runRecords_.value(tool.id).output.contains("MOCK USER=alice"));
         QTRY_VERIFY_WITH_TIMEOUT(!page.stateReadsInFlight_.contains(tool.id), 5000);
+        QVERIFY(registerFromDirectory(page, "ssh", "fixture.invalid", "alice", "~/other folder", true));
+        QList<int> matchingTools;
+        for (const auto &saved : database_.automationTools())
+            if (saved.externalId == tool.externalId && saved.sameExecutionTarget(tool)) matchingTools.append(saved.id);
+        QCOMPARE(matchingTools, QList<int>{tool.id});
+        QCOMPARE(database_.toolCommands(tool.id).size(), 1);
+        QTRY_VERIFY_WITH_TIMEOUT(!page.stateReadsInFlight_.contains(tool.id), 5000);
         QTimer previewTimer;
         connect(&previewTimer, &QTimer::timeout, &page, [&] {
             if (auto *preview = page.findChild<QDialog *>("manifestUpdatePreview")) preview->accept();
@@ -300,6 +329,7 @@ private slots:
         AppDatabase::AutomationTool reread;
         QVERIFY(page.findTool(tool.id, &reread));
         QCOMPARE(reread.sshUser, QStringLiteral("alice"));
+        QCOMPARE(reread.registrationPath, QStringLiteral("/srv/moved/orchestrate-tool.json"));
     }
     void shutdownHasOnlyFourCommands()
     {
@@ -334,13 +364,6 @@ private slots:
         QVERIFY(!WslProcess::validName("--exec"));
         QVERIFY(WslProcess::validDistribution("My Ubuntu 中文"));
         QCOMPARE(WslProcess::distributions(QStringLiteral("My Ubuntu 中文\r\n").toUtf8()), QStringList({QStringLiteral("My Ubuntu 中文")}));
-        QString user, path;
-        QByteArray manifest;
-        const QByteArray bytes = QByteArray("alice\0/home/alice/中文 tool/tool.json\0", sizeof("alice\0/home/alice/中文 tool/tool.json\0") - 1) + "{}";
-        QVERIFY(WslProcess::registrationResult(bytes, &user, &path, &manifest));
-        QCOMPARE(user, QStringLiteral("alice"));
-        QCOMPARE(manifest, QByteArray("{}"));
-        QVERIFY(!WslProcess::registrationResult("no separators", &user, &path, &manifest));
     }
     void wslRegistrationIdentityAndPersistence()
     {
@@ -374,22 +397,24 @@ private slots:
             }
         }
         QVERIFY(aliceId > 0);
-        // Re-import same identity updates in place; unrelated distro/users survive.
+        // Reload the selected identity and preserve its stored settings.
         QTimer::singleShot(0, [] {
             auto *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
             if (box) box->button(QMessageBox::Yes)->click();
             else if (auto *preview = qobject_cast<QDialog *>(QApplication::activeModalWidget()); preview && preview->objectName() == "manifestUpdatePreview") preview->accept();
         });
-        page.registerToolManifest(bytes, "/moved/tool.json", {}, "Ubuntu", "alice");
+        AppDatabase::AutomationTool current;
+        QVERIFY(page.findTool(aliceId, &current));
+        page.finishManifestReload(current, bytes);
         AppDatabase::AutomationTool updated;
         QVERIFY(page.findTool(aliceId, &updated));
-        QCOMPARE(updated.registrationPath, QStringLiteral("/moved/tool.json"));
+        QCOMPARE(updated.registrationPath, QStringLiteral("/tool/tool.json"));
         QCOMPARE(updated.wslUser, QStringLiteral("alice"));
         QVERIFY(updated.refreshEnabled);
         QCOMPARE(updated.refreshIntervalSeconds, 600);
         page.loadToolDetails(aliceId);
         QCOMPARE(page.toolSource_->text(), QStringLiteral("WSL"));
-        QVERIFY(!page.toolSource_->toolTip().contains("/moved/tool.json"));
+        QVERIFY(!page.toolSource_->toolTip().contains("/tool/tool.json"));
         QVERIFY(!page.toolSource_->isHidden());
         bool informationVisible = false;
         QTimer::singleShot(0, [&] {
@@ -398,7 +423,7 @@ private slots:
             QStringList values;
             for (auto *label : dialog->findChildren<QLabel *>()) values << label->text();
             informationVisible = values.contains("Ubuntu") && values.contains("alice")
-                && values.contains("/moved/tool.json");
+                && values.contains("/tool/tool.json");
             dialog->accept();
         });
         page.showToolInformation(aliceId);
@@ -537,50 +562,10 @@ p = pathlib.Path(sys.argv[1])
         QVERIFY2(call("python3", {"-c", writer, directory, QString::fromUtf8(QJsonDocument(object).toJson()),
                                  QString::fromUtf8(QJsonDocument(liveState).toJson())}), qPrintable(error));
         const QString tildePath = QStringLiteral("~/") + base.section(QLatin1Char('/'), -1) + QStringLiteral("/中文 tool ' $;(test)");
-        QVERIFY2(call("sh", {"-c", WslProcess::registrationScript(), "orchestrate-register", tildePath}), qPrintable(error));
-        QString user, path;
-        QByteArray manifest;
-        QVERIFY(WslProcess::registrationResult(output, &user, &path, &manifest));
-        QCOMPARE(path, directory + "/orchestrate-tool.json");
-        QCOMPARE(QJsonDocument::fromJson(manifest).object(), object);
-
+        QVERIFY2(call("id", {"-un"}), qPrintable(error));
+        const auto user = QString::fromUtf8(output).trimmed();
         AutomationPage page(&database_);
-        // Drive the actual asynchronous registration dialog, not a parallel test-only registration path.
-        bool submitted = false;
-        bool usersRequested = false;
-        bool expired = false;
-        QTimer drive;
-        connect(&drive, &QTimer::timeout, &page, [&] {
-            auto *dialog = page.findChild<QDialog *>("wslRegistrationDialog");
-            if (!dialog || submitted) return;
-            auto *submit = dialog->findChild<QPushButton *>("wslRegisterSubmit");
-            if (!submit || !submit->isEnabled()) return;
-            if (!usersRequested) {
-                dialog->findChild<QComboBox *>("wslDistribution")->setCurrentText(distro);
-                usersRequested = true;
-                dialog->findChild<QPushButton *>("wslRefreshUsers")->click();
-                return;
-            }
-            dialog->findChild<QLineEdit *>("wslManifestPath")->setText(tildePath);
-            submitted = true;
-            dialog->grab().save(QCoreApplication::applicationDirPath() + "/wsl-registration.png");
-            submit->click();
-        });
-        QTimer deadline;
-        deadline.setSingleShot(true);
-        connect(&deadline, &QTimer::timeout, &page, [&] {
-            expired = true;
-            if (auto *dialog = page.findChild<QDialog *>("wslRegistrationDialog")) dialog->reject();
-        });
-        drive.start(25);
-        deadline.start(35000);
-        auto *remoteButton = page.findChild<QPushButton *>("registerTool");
-        QVERIFY(remoteButton && remoteButton->menu());
-        remoteButton->findChild<QAction *>("importWslAction")->trigger();
-        drive.stop();
-        deadline.stop();
-        QVERIFY(!expired);
-        QVERIFY(submitted);
+        QVERIFY(registerFromDirectory(page, "wsl", distro, {}, tildePath));
         AppDatabase::AutomationTool tool;
         for (const auto &candidate : database_.automationTools())
             if (candidate.externalId == "wsl-live-fixture") tool = candidate;
@@ -588,7 +573,7 @@ p = pathlib.Path(sys.argv[1])
         const auto cleanupTool = qScopeGuard([&] { database_.deleteAutomationTool(tool.id); });
         QCOMPARE(tool.wslDistribution, distro);
         QCOMPARE(tool.wslUser, user);
-        QCOMPARE(tool.registrationPath, path);
+        QCOMPARE(tool.registrationPath, directory + "/orchestrate-tool.json");
         QCOMPARE(tool.workingDirectory, directory + "/worker");
         QCOMPARE(tool.statePath, directory + "/state/current.json");
         QTRY_VERIFY_WITH_TIMEOUT(!page.stateReadsInFlight_.contains(tool.id), 35000);
@@ -1401,10 +1386,11 @@ int main(int argc, char **argv)
         if (!output.open(stdout, QIODevice::WriteOnly)) return 2;
         const auto manifest = QJsonObject{{"schema", "orchestrate-tool/v1"}, {"id", "ssh-ui-fixture"}, {"name", "SSH fixture"},
             {"target_type", "ssh"}, {"state_path", "current.json"}, {"commands", QJsonArray{QJsonObject{{"name", "Probe"}, {"executable", "probe"}}}}};
-        if (args.last().contains("orchestrate-register")) {
-            output.write(user.toUtf8()); output.write("\0", 1);
-            output.write("/srv/tool/orchestrate-tool.json"); output.write("\0", 1);
-            output.write(QJsonDocument(manifest).toJson());
+        if (args.last().contains("orchestrate-directory-v1")) {
+            const QByteArray root = args.last().contains("other folder") ? "/srv/moved" : "/srv/tool";
+            const QList<QByteArray> inventory{"orchestrate-directory-v1", "R", root, "U", user.toUtf8(),
+                                              "M", QJsonDocument(manifest).toJson(), "F", "orchestrate-tool.json"};
+            for (const auto &field : inventory) { output.write(field); output.putChar('\0'); }
         } else if (args.last().contains("orchestrate-tool.json")) output.write(QJsonDocument(manifest).toJson());
         else if (args.last().contains("current.json")) output.write(QJsonDocument(QJsonObject{
             {"schema", "orchestrate-state/v1"}, {"tool_id", "ssh-ui-fixture"}, {"result", "success"}, {"summary", user},

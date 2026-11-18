@@ -78,9 +78,6 @@ private:
     bool canEditTool(int toolId);
     bool confirmManifestUpdate(const AppDatabase::AutomationTool &current, const ParsedManifest &manifest);
     void discoverCommands(int toolId = 0);
-    void importTool();
-    void importRemoteTool();
-    void importWslTool();
     void finishManifestReload(const AppDatabase::AutomationTool &tool, const QByteArray &data);
     bool readManifest(const QString &sourcePath,
                       QByteArray *data,
@@ -93,12 +90,6 @@ private:
                        const QString &wslDistribution = QString(),
                        const QString &wslUser = QString(),
                        const QString &sshUser = QString()) const;
-    void registerToolManifest(const QByteArray &manifestData,
-                              const QString &sourcePath,
-                              const QString &sshHost = QString(),
-                              const QString &wslDistribution = QString(),
-                              const QString &wslUser = QString(),
-                              const QString &sshUser = QString(), int requestedGroupId = -1);
     bool applyManifestUpdate(int toolId, ParsedManifest manifest);
     int builtinToolGroupId();
     void syncBuiltinTools();
@@ -125,7 +116,6 @@ private:
     void showError(const QString &message);
 
     QSet<int> manifestReadsInFlight_;
-    bool importInFlight_ = false;
 
     QTreeWidget *tree_ = nullptr;
     QLabel *groupHint_ = nullptr;
