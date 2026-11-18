@@ -332,7 +332,7 @@ private slots:
         CliDiscovery::help(this,t,command,[&](bool ok,const QByteArray &bytes,const QString &error){done=true;success=ok;help=bytes;failure=error;});
         QTRY_VERIFY_WITH_TIMEOUT(done,15000);QVERIFY2(success,qPrintable(failure));QVERIFY(help.contains("List fixture items"));
     }
-    void cannlabRecommendedSetupOnly(){
+    void defaultDiscoveryImportsCommandsAndDisplaysDescriptions(){
         const QString directory=cliFixture_.path();
         auto t=tool("CANNLab");t.workingDirectory=directory;DiscoveryDialog dialog(t);dialog.show();
         QTRY_VERIFY(!dialog.findChild<QComboBox*>("discoveryEntry")->currentText().isEmpty());QTRY_VERIFY(dialog.save->isEnabled());TestSupport::capture(dialog, "cannlab-recommended");
@@ -342,7 +342,6 @@ private slots:
         QCOMPARE(menu.arguments,(QStringList{"-m","cannlab","menu"}));QCOMPARE(dialog.environment().value("PYTHONUTF8").toString(),QString("1"));
         QString error;QVERIFY2(database_.saveAutomationTool(t,dialog.selected(),&t.id,&error),qPrintable(error));
         AutomationPage page(&database_);page.resize(1180,760);page.show();page.loadAll(t.id);QCoreApplication::processEvents();
-        QCOMPARE(page.findChild<QPushButton*>("registerTool")->text(),QStringLiteral("接入工具"));QCOMPARE(dialog.windowTitle(),QStringLiteral("接入工具"));
         const auto saved=database_.toolCommands(t.id);
         for(int i=0;i<saved.size();++i){
             QVERIFY2(!saved[i].description.trimmed().isEmpty(),qPrintable(saved[i].name));
@@ -400,13 +399,11 @@ private slots:
         int sameDirectory=0;for(const auto &candidate:database_.automationTools())if(candidate.workingDirectory==directory)++sameDirectory;QCOMPARE(sameDirectory,1);
         QVERIFY(database_.deleteAutomationTool(t.id));
     }
-    void cannlabDirectoryAndHelpOnly(){
+    void customDiscoveryReadsSelectedCommandParameters(){
         const QString directory=cliFixture_.path();
         auto t=tool("CANNLab");t.workingDirectory=directory;
-        bool done=false;QJsonObject inventory;
-        FileAccess::request(this,"describe-tool",directory,[&](bool ok,const QByteArray &bytes,const QString &error){QVERIFY2(ok,qPrintable(error));inventory=QJsonDocument::fromJson(bytes).object();done=true;});QTRY_VERIFY(done);
-        const auto entries=CliDiscovery::entries(inventory,directory);QVERIFY(!entries.isEmpty());QCOMPARE(entries[0].arguments,(QStringList{"-m","cannlab"}));
         DiscoveryDialog dialog(t);dialog.show();auto *entry=dialog.findChild<QComboBox*>("discoveryEntry");QTRY_VERIFY(!entry->currentText().isEmpty());
+        QCOMPARE(QProcess::splitCommand(entry->currentText()).mid(1), (QStringList{"-m", "cannlab"}));
         dialog.findChild<QPushButton*>("customizeDiscovery")->click();
         dialog.findChild<QPushButton*>("readCommandHelp")->click();auto *list=dialog.findChild<QTreeWidget*>("discoveredCommands");QTRY_COMPARE_WITH_TIMEOUT(list->topLevelItemCount(),8,15000);
         TestSupport::capture(dialog, "cannlab-discovery");

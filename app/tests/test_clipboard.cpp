@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "test_support.h"
 #include "clipboard/clipboardcontent.h"
 #include "clipboard/clipboardmonitor.h"
 #include "pages/clipboardpage.h"
@@ -22,6 +23,7 @@
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QSpinBox>
 #include <QStackedWidget>
 #include <QStandardPaths>
 #include <QStyleFactory>
@@ -330,6 +332,53 @@ private slots:
         QVERIFY(monitor.setEnabled(false,&error)); ClipboardMonitor reopened(db.get()); QVERIFY(!reopened.enabled());
     }
 
+    void settingsMenuPersistsMonitoringAndLimit() {
+        ClipboardPage page(db.get());
+        page.resize(900, 650); page.show();
+        auto *settings = page.findChild<QPushButton *>("clipboardSettings");
+        auto *listening = page.findChild<QAction *>("clipboardListening");
+        auto *create = page.findChild<QPushButton *>("clipboardNewItem");
+        QVERIFY(settings && listening && create);
+        QVERIFY(settings->isVisible());
+        QCOMPARE(settings->geometry().top(), create->geometry().top());
+        QCOMPARE(settings->parentWidget()->width() - settings->geometry().right() - 1, 24);
+        for (auto *button : settings->parentWidget()->findChildren<QPushButton *>())
+            QVERIFY(button->text() != QStringLiteral("复制并收起"));
+        auto *menu = settings->menu();
+        QVERIFY(menu && menu->actions().first() == listening);
+        QVERIFY(!listening->isChecked());
+        QTimer::singleShot(0, menu, [=] {
+            menu->setActiveAction(listening);
+            QTest::keyClick(menu, Qt::Key_Return);
+        });
+        settings->setFocus(); QTest::keyClick(settings, Qt::Key_Space);
+        QTRY_COMPARE(db->setting("clipboard.monitor"), "true");
+        {
+            ClipboardPage restored(db.get());
+            QVERIFY(restored.findChild<QAction *>("clipboardListening")->isChecked());
+        }
+        QTimer::singleShot(0, menu, [=] {
+            QTest::mouseClick(menu, Qt::LeftButton, Qt::NoModifier, menu->actionGeometry(listening).center());
+        });
+        settings->click();
+        QTRY_COMPARE(db->setting("clipboard.monitor"), "false");
+        QTimer::singleShot(0, menu, [&] {
+            menu->setActiveAction(menu->actions().last());
+            QTimer::singleShot(0, &page, [] {
+                auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (!dialog) return;
+                auto *limit = dialog->findChild<QSpinBox *>();
+                auto *buttons = dialog->findChild<QDialogButtonBox *>();
+                if (!limit || !buttons) { dialog->reject(); return; }
+                limit->setValue(700);
+                buttons->button(QDialogButtonBox::Save)->click();
+            });
+            QTest::keyClick(menu, Qt::Key_Return);
+        });
+        settings->click();
+        QTRY_COMPARE(db->setting("clipboard.limit"), "700");
+    }
+
     void editorPreservesContentAndProtectsDrafts() {
         auto entry=item("line one\r\nline two\r\n"); QVERIFY(db->saveClipboardItem(&entry,&error));
         ClipboardPage page(db.get()); page.resize(900,650); page.show();
@@ -449,7 +498,7 @@ private slots:
         select(tree,a.id); node(tree,b.id)->setSelected(true);
         QCOMPARE(tree->selectedItems().size(),2);
         int confirmations=0; bool menuSeen=false,labelsOk=true,defaultsOk=true,unchangedBeforeConfirm=true;
-        bool screenshotOk=true; int incomingId=0;
+        int incomingId=0;
         QTimer responder; responder.setInterval(10);
         connect(&responder,&QTimer::timeout,&page,[&] {
             if (auto *menu=qobject_cast<QMenu *>(QApplication::activePopupWidget())) {
@@ -467,7 +516,7 @@ private slots:
                 && message->button(QMessageBox::No)->text()=="取消"
                 && message->button(QMessageBox::Yes)->text()=="确认删除";
             if (!history && response==0 && !inFolder && !contextMenu) {
-                screenshotOk &= message->grab().save(qApp->applicationDirPath()+"/artifacts/delete-single-confirm.png");
+                TestSupport::capture(*message, "delete-single-confirm");
                 // A real monitoring event during the modal must not broaden deletion.
                 if (confirmations==1) {
                     auto *monitor=page.findChild<ClipboardMonitor *>(); monitor->setEnabled(true,&error);
@@ -491,7 +540,7 @@ private slots:
         } else page.findChild<QPushButton *>("clipboardDeleteItems")->click();
         responder.stop();
         QCOMPARE(confirmations,history ? 0 : 1);
-        QCOMPARE(menuSeen,contextMenu); QVERIFY(labelsOk); QVERIFY(defaultsOk); QVERIFY(unchangedBeforeConfirm); QVERIFY(screenshotOk);
+        QCOMPARE(menuSeen,contextMenu); QVERIFY(labelsOk); QVERIFY(defaultsOk); QVERIFY(unchangedBeforeConfirm);
         const bool deleted=history || response==0;
         QCOMPARE(db->clipboardItem(a.id).id,deleted ? 0 : a.id); QCOMPARE(db->clipboardItem(b.id).id,deleted ? 0 : b.id);
         QCOMPARE(db->clipboardItem(keep.id).text,keep.text); QCOMPARE(db->clipboardItem(elsewhere.id).text,elsewhere.text);
@@ -516,7 +565,7 @@ private slots:
     }
 
     void pageAndMainWindowIntegration() {
-        QVERIFY(db->setSetting("shortcut.enabled","false"));
+        QVERIFY(db->setSetting("global_shortcut_enabled","false"));
         int tab=0,folder=0,folder2=0; QVERIFY(db->addClipboardTab("开发素材",&tab,&error)); QVERIFY(db->addClipboardFolder(tab,"提示词",&folder,&error)); QVERIFY(db->addClipboardFolder(tab,"命令",&folder2,&error));
         auto a=item("请梳理这个模块的职责与交互边界。\n保留已有数据，给出清晰的验证步骤。",tab,folder);
         auto b=item("git status --short",tab,folder); auto c=item("复制后在目标应用中手动粘贴。",tab,folder);
@@ -530,16 +579,13 @@ private slots:
         QPushButton *nav=nullptr;
         for (auto *button : window.findChildren<QPushButton *>("navButton")) if (button->text()=="剪贴板") nav=button;
         QVERIFY(nav); QTest::mouseClick(nav,Qt::LeftButton); QVERIFY(stack->currentWidget()->isAncestorOf(page));
-        QStringList visibleLabels;
-        for (auto *label : page->findChildren<QLabel *>()) if (label->isVisibleTo(page) && !label->text().isEmpty()) visibleLabels.append(label->text());
-        QVERIFY(!window.findChild<QLabel *>(QStringLiteral("pageTitle")));
         auto *emptyHint=page->findChild<QLabel *>(QStringLiteral("emptyViewHint"));
         QVERIFY(emptyHint && emptyHint->isVisibleTo(page));
         QVERIFY(emptyHint->text().contains(QStringLiteral("开启监听")));
         QVERIFY(emptyHint->testAttribute(Qt::WA_TransparentForMouseEvents));
         QVERIFY(!page->findChild<QLabel *>("clipboardStatus")->isVisible());
         QVERIFY(!page->findChild<QWidget *>("clipboardFolders"));
-        QVERIFY(window.grab().save(qApp->applicationDirPath()+"/artifacts/clipboard-empty.png"));
+        TestSupport::capture(window, "clipboard-empty");
         auto *tabs=page->findChild<QTabBar *>("clipboardTabs");
         QVERIFY(!tabs->tabIcon(0).isNull()); QVERIFY(tabs->tabIcon(1).isNull());
         QVERIFY(tabs->tabToolTip(0).contains(QStringLiteral("自动收纳")));
@@ -578,8 +624,8 @@ private slots:
         // A successful monitoring toggle clears the transient error, without status copy.
         auto *listening=window.findChild<QAction *>("clipboardListening"); QVERIFY(listening); listening->setChecked(true); listening->setChecked(false);
         QVERIFY(!page->findChild<QLabel *>("clipboardStatus")->isVisible());
-        QTest::qWait(40); QVERIFY(window.grab().save(qApp->applicationDirPath()+"/artifacts/clipboard-desktop.png"));
-        window.resize(980,640); QTest::qWait(30); QVERIFY(window.grab().save(qApp->applicationDirPath()+"/artifacts/clipboard-compact.png"));
+        TestSupport::capture(window, "clipboard-desktop");
+        window.resize(980,640); TestSupport::capture(window, "clipboard-compact");
         if (qEnvironmentVariableIsSet("ORCHESTRATE_CLIPBOARD_LAYOUT_REVIEW")) {
             qInfo() << "Clipboard layout: list point size" << items->font().pointSizeF()
                 << "preview point size" << page->findChild<QPlainTextEdit *>("clipboardPreview")->font().pointSizeF()

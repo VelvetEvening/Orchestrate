@@ -78,7 +78,7 @@ static QPushButton *button(QWidget *root,const QString &text) {
     for (auto *b:root->findChildren<QPushButton*>()) if (b->text()==text && b->isVisible()) return b;
     return nullptr;
 }
-static void seed() {
+static void seed(int diaryCount = 5) {
     AppDatabase db; QString error; if (!db.open(&error)) qFatal("%s",qPrintable(error));
     db.setSetting("global_shortcut_enabled","false"); db.setSetting("clipboard.monitor","false");
     QFile cache(qApp->applicationDirPath()+"/data/update-check.json");
@@ -91,7 +91,7 @@ static void seed() {
     record.summary=QStringLiteral("# 验收要点\n\n返回时保留筛选与阅读位置。切换模块后草稿保持。\n\n独立打开后，可以将同一份内容收回主窗口。");
     record.content=QStringLiteral("# 合成验收记录\n\n这份记录仅用于独立测试目录，不属于日用数据。\n\n## 操作顺序\n\n打开、编辑、返回、切换模块，再回到同一份草稿。\n\n## 公式\n\n\\(a^2+b^2=c^2\\)");
     db.saveWorkRecord(&record,&error);
-    for (int i=0;i<18;++i) db.addDiaryEntry(QDate::currentDate().addDays(-i),QStringLiteral("导航体验记录 %1（示例）").arg(i+1),record.content,&error);
+    for (int i=0;i<diaryCount;++i) db.addDiaryEntry(QDate::currentDate().addDays(-i),QStringLiteral("导航体验记录 %1（示例）").arg(i+1),record.content,&error);
     AppDatabase::ClipboardItem item; item.title=QStringLiteral("验收文本（示例）");
     ClipboardContent::plainText(QStringLiteral("返回不会丢失草稿。"),&item,&error); db.saveClipboardItem(&item,&error);
 }
@@ -123,63 +123,70 @@ private slots:
         QVERIFY(QFileInfo(qApp->applicationDirPath()).fileName()=="workspace-navigation-test");
         QVERIFY(!QFileInfo::exists(path) || QDir(path).removeRecursively()); seed();
     }
-    void appearanceAndSidebarPreferencesRestore() {
+    void appearanceControlsFitAtCompactSize() {
+        MainWindow window; prepareWindow(window);
+        window.resize(980, 640);
+        auto *choice = window.findChild<QComboBox *>("appearancePreset");
+        auto *toggle = window.findChild<QPushButton *>("sidebarToggle");
+        const auto navigation = window.findChildren<QPushButton *>("navButton");
+        auto *settings = navigation.at(4);
+        QVERIFY(choice && toggle);
         int mistDateRowHeight = 0;
         for (const auto &id : {QStringLiteral("mist"), QStringLiteral("paper"), QStringLiteral("precision")}) {
-            {
-                MainWindow window; prepareWindow(window);
-                QVERIFY(window.ready());
-                auto *choice = window.findChild<QComboBox *>("appearancePreset");
-                auto *toggle = window.findChild<QPushButton *>("sidebarToggle");
-                QVERIFY(choice && toggle);
-                choice->setCurrentIndex(choice->findData(id));
-                QVERIFY(!qApp->styleSheet().contains(QLatin1Char('@')));
-                window.resize(980, 640);
-                QCoreApplication::processEvents();
-                auto *calendar = window.findChild<QCalendarWidget *>();
-                QVERIFY(calendar && calendar->isVisible());
-                auto *grid = calendar->findChild<QTableView *>();
-                QVERIFY(grid);
-                const int dateRowHeight = grid->rowHeight(grid->currentIndex().row());
-                if (id == QStringLiteral("mist")) mistDateRowHeight = dateRowHeight;
-                if (id == QStringLiteral("precision")) {
-                    QVERIFY(dateRowHeight >= 36 && dateRowHeight < mistDateRowHeight);
-                    const auto cell = grid->visualRect(grid->currentIndex());
-                    QCOMPARE(grid->indexAt(cell.bottomRight()), grid->currentIndex());
-                }
-                auto *settings = window.findChildren<QPushButton *>("navButton").at(4);
-                settings->click();
-                QCoreApplication::processEvents();
-                auto *section = choice->parentWidget();
-                QVERIFY(choice->isVisible());
-                QVERIFY(section->rect().contains(choice->geometry()));
-                QStyleOptionComboBox option;
-                option.initFrom(choice);
-                option.currentText = choice->currentText();
-                const QRect textRect = choice->style()->subControlRect(
-                    QStyle::CC_ComboBox, &option, QStyle::SC_ComboBoxEditField, choice);
-                QVERIFY(textRect.width() >= choice->fontMetrics().horizontalAdvance(option.currentText));
-                QVERIFY(choice->x() > section->width() / 2);
-                const int right = section->contentsRect().right() - section->layout()->contentsMargins().right();
-                QVERIFY(qAbs(choice->geometry().right() - right) <= 1);
-                const auto expandedIcon = toggle->icon().pixmap(24, 24).toImage();
-                const int expandedHeight = settings->height();
-                toggle->click();
-                QCoreApplication::processEvents();
-                QCOMPARE(settings->height(), expandedHeight);
-                QVERIFY(expandedIcon != toggle->icon().pixmap(24, 24).toImage());
+            choice->setCurrentIndex(choice->findData(id));
+            QVERIFY(!qApp->styleSheet().contains(QLatin1Char('@')));
+            QCoreApplication::processEvents();
+            auto *calendar = window.findChild<QCalendarWidget *>();
+            QVERIFY(calendar && calendar->isVisible());
+            auto *grid = calendar->findChild<QTableView *>();
+            QVERIFY(grid);
+            const int dateRowHeight = grid->rowHeight(grid->currentIndex().row());
+            if (id == QStringLiteral("mist")) mistDateRowHeight = dateRowHeight;
+            if (id == QStringLiteral("precision")) {
+                QVERIFY(dateRowHeight >= 36 && dateRowHeight < mistDateRowHeight);
+                const auto cell = grid->visualRect(grid->currentIndex());
+                QCOMPARE(grid->indexAt(cell.bottomRight()), grid->currentIndex());
             }
-            {
-                MainWindow restored;
-                QVERIFY(restored.ready());
-                QCOMPARE(UiTheme::presetId(), id);
-                QCOMPARE(restored.findChild<QComboBox *>("appearancePreset")->currentData().toString(), id);
-                QCOMPARE(restored.findChild<QWidget *>("sidebar")->width(), 72);
-                auto *toggle = restored.findChild<QPushButton *>("sidebarToggle");
-                QCOMPARE(toggle->toolTip(), QStringLiteral("展开侧边栏"));
-                QCOMPARE(toggle->accessibleName(), toggle->toolTip());
-                toggle->click();
-            }
+            settings->click();
+            QCoreApplication::processEvents();
+            auto *section = choice->parentWidget();
+            QVERIFY(choice->isVisible());
+            QVERIFY(section->rect().contains(choice->geometry()));
+            QStyleOptionComboBox option;
+            option.initFrom(choice);
+            option.currentText = choice->currentText();
+            const QRect textRect = choice->style()->subControlRect(
+                QStyle::CC_ComboBox, &option, QStyle::SC_ComboBoxEditField, choice);
+            QVERIFY(textRect.width() >= choice->fontMetrics().horizontalAdvance(option.currentText));
+            QVERIFY(choice->x() > section->width() / 2);
+            const int right = section->contentsRect().right() - section->layout()->contentsMargins().right();
+            QVERIFY(qAbs(choice->geometry().right() - right) <= 1);
+            const auto expandedIcon = toggle->icon().pixmap(24, 24).toImage();
+            const int expandedHeight = settings->height();
+            toggle->click();
+            QCoreApplication::processEvents();
+            QCOMPARE(settings->height(), expandedHeight);
+            QVERIFY(expandedIcon != toggle->icon().pixmap(24, 24).toImage());
+            toggle->click();
+            navigation.first()->click();
+        }
+    }
+    void appearanceAndSidebarPreferencesRestore() {
+        {
+            MainWindow window;
+            auto *choice = window.findChild<QComboBox *>("appearancePreset");
+            choice->setCurrentIndex(choice->findData("paper"));
+            window.findChild<QPushButton *>("sidebarToggle")->click();
+        }
+        {
+            MainWindow restored;
+            QVERIFY(restored.ready());
+            QCOMPARE(UiTheme::presetId(), QStringLiteral("paper"));
+            QCOMPARE(restored.findChild<QComboBox *>("appearancePreset")->currentData().toString(), QStringLiteral("paper"));
+            QCOMPARE(restored.findChild<QWidget *>("sidebar")->width(), 72);
+            auto *toggle = restored.findChild<QPushButton *>("sidebarToggle");
+            QCOMPARE(toggle->toolTip(), QStringLiteral("展开侧边栏"));
+            QCOMPARE(toggle->accessibleName(), toggle->toolTip());
         }
         AppDatabase db;
         QVERIFY(db.open());
@@ -556,7 +563,6 @@ private slots:
         capture(window,"diary-collection-clean");
         list->setFocus(); QTest::keyClick(list,Qt::Key_Return); auto *editor=workspace->content(workspace->currentKey());
         QVERIFY(editor && editor!=collection); auto *text=editor->findChild<HeadingTextEdit*>(); QVERIFY(!text->isPreviewMode());
-        QTest::qWait(2500);
         capture(window,"v3.5.6-diary"); window.resize(980,640); capture(window,"v3.5.6-diary-compact");
         workspace->back(); QCOMPARE(list->currentRow(),row); QCOMPARE(search->text(),QStringLiteral("导航体验"));
         workspace->back(); QVERIFY(page->isVisible());
@@ -616,19 +622,25 @@ private slots:
         saveEditor(editor);
         QVERIFY(workspace->closePage("diary/collection")); QVERIFY(page->isVisible());
     }
-    void hiddenClipboardDraftAndExitGuard() {
-        MainWindow window; prepareWindow(window); window.findChildren<QPushButton*>("navButton").at(3)->click();
-        auto *page=window.findChild<ClipboardPage*>(); auto *workspace=ContentWorkspace::find(page);
-        page->findChild<QPushButton*>("clipboardNewItem")->click();
-        auto *editor=workspace->content(workspace->currentKey()); QVERIFY(editor);
-        auto *body=editor->findChild<QPlainTextEdit*>("clipboardItemBody"); body->setPlainText(QStringLiteral("保留草稿"));
-        capture(window,"v3.5.6-clipboard"); window.resize(980,640); capture(window,"v3.5.6-clipboard-compact");
-        QVERIFY(answerLeave(QMessageBox::Cancel,[&]{workspace->back();}));
-        QVERIFY(answerLeave(QMessageBox::Cancel,[&]{window.findChildren<QPushButton*>("navButton").at(0)->click();}));
-        bool prompted=false;
-        QTimer::singleShot(0,[&]{auto *box=qobject_cast<QMessageBox*>(QApplication::activeModalWidget()); if(box){prompted=true;box->button(QMessageBox::Cancel)->click();}});
-        QVERIFY(!window.close()); QVERIFY(prompted); QVERIFY(window.isVisible()); QCOMPARE(body->toPlainText(),QStringLiteral("保留草稿"));
+    void closingMainWindowProtectsDraft() {
+        MainWindow window; prepareWindow(window);
+        window.findChildren<QPushButton *>("navButton").at(3)->click();
+        auto *page = window.findChild<ClipboardPage *>();
+        page->findChild<QPushButton *>("clipboardNewItem")->click();
+        auto *workspace = ContentWorkspace::find(page);
+        auto *editor = workspace->content(workspace->currentKey());
+        auto *body = editor->findChild<QPlainTextEdit *>("clipboardItemBody");
+        body->setPlainText(QStringLiteral("保留草稿"));
+        auto *toTray = window.findChild<QCheckBox *>("closeToTrayCheck");
+        window.findChild<QSystemTrayIcon *>()->show();
+        for (bool closeToTray : {false, true}) {
+            toTray->setChecked(closeToTray);
+            QVERIFY(answerLeave(QMessageBox::Cancel, [&]{ window.close(); }));
+            QVERIFY(window.isVisible());
+            QCOMPARE(body->toPlainText(), QStringLiteral("保留草稿"));
+        }
         saveEditor(editor);
+        toTray->setChecked(false);
         QVERIFY(window.close());
     }
     void unifiedDraftLeaveGuards_data() {
@@ -671,10 +683,6 @@ private slots:
         if(time) { time->setDateTime(savedTime.addDays(2)); repeat->setCurrentIndex(1); project->setCurrentIndex(1); }
         QVERIFY(answerLeave(QMessageBox::Cancel,[&]{workspace->back();}));
         QVERIFY(answerLeave(QMessageBox::Cancel,[&]{nav.at(1)->click();})); QVERIFY(nav.at(module)->isChecked());
-        QVERIFY(answerLeave(QMessageBox::Cancel,[&]{window.close();})); QVERIFY(window.isVisible());
-        window.findChild<QCheckBox *>("closeToTrayCheck")->setChecked(true);
-        window.findChild<QSystemTrayIcon *>()->show();
-        QVERIFY(answerLeave(QMessageBox::Cancel,[&]{window.close();})); QVERIFY(window.isVisible());
         QVERIFY(answerLeave(QMessageBox::Discard,[&]{workspace->back();})); QVERIFY(page->isVisible());
         QVERIFY(workspace->activate(key)); QCOMPARE(body(),savedBody); QCOMPARE(title->text(),savedTitle); QVERIFY(!draft->dirty());
         if(time) { QCOMPARE(time->dateTime(),savedTime); QCOMPARE(repeat->currentIndex(),savedRepeat); QCOMPARE(project->currentIndex(),savedProject); }
@@ -769,7 +777,7 @@ private slots:
     }
 };
 static int runResourceProbe(QApplication &app) {
-    seed();
+    seed(18);
     if(app.arguments().contains("--probe-listener")){
         if(QApplication::platformName()!="offscreen")qFatal("listener probe must use isolated offscreen clipboard");
         AppDatabase db;QString error;if(!db.open(&error))qFatal("probe db");db.setSetting("clipboard.monitor","true");
@@ -832,7 +840,7 @@ int main(int argc,char **argv) {
     if (QFileInfo(app.applicationDirPath()).fileName()!="workspace-navigation-test") return 2;
     if (app.arguments().contains("--resource-probe")) return runResourceProbe(app);
     if (app.arguments().contains("--ui-preview")) {
-        seed(); MainWindow window; prepareWindow(window); window.setWindowTitle(QStringLiteral("Orchestrate v3.7.0 · 隔离验收")); return app.exec();
+        seed(18); MainWindow window; prepareWindow(window); window.setWindowTitle(QStringLiteral("Orchestrate v3.7.0 · 隔离验收")); return app.exec();
     }
     app.setQuitOnLastWindowClosed(false); WorkspaceNavigationTest test; return QTest::qExec(&test,argc,argv);
 }

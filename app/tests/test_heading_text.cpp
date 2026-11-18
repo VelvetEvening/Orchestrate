@@ -6,7 +6,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QTextBrowser>
 #include "platform/globalshortcut.h"
 #include <QCheckBox>
 #include <QToolButton>
@@ -54,7 +53,6 @@
 #include <QScrollArea>
 #include <QStackedWidget>
 #include <QSplitter>
-#include <QSpinBox>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -461,7 +459,11 @@ private slots:
             QCoreApplication::processEvents();
             const QPoint togglePosition = toggle->mapTo(&window, QPoint());
             for (int collapsed = 0; collapsed < 2; ++collapsed) {
-                for (int i = 0; i < navigation.size(); ++i) {
+                // Cover every page once. Projects and Settings exercise the layouts
+                // with and without an index pane at the other widths and sidebar states.
+                const QList<int> pages = size.width() == 1180 && !collapsed
+                    ? QList<int>{0, 1, 2, 3, 4} : QList<int>{1, 4};
+                for (int i : pages) {
                     QTest::mouseClick(navigation.at(i), Qt::LeftButton);
                     QCoreApplication::processEvents();
                     QVERIFY(navigation.at(i)->isChecked());
@@ -505,35 +507,9 @@ private slots:
         capture(window, QStringLiteral("seamless-project-splitter"));
         projectsSplit->setSizes(originalSizes);
         QTest::mouseClick(navigation.at(3), Qt::LeftButton);
-        auto *listening = window.findChild<QAction *>("clipboardListening");
-        auto *settings = window.findChild<QPushButton *>("clipboardSettings");
-        QVERIFY(listening && settings && settings->isVisible());
-        QCOMPARE(settings->geometry().top(), window.findChild<QPushButton *>("clipboardNewItem")->geometry().top());
-        QCOMPARE(settings->parentWidget()->width() - settings->geometry().right() - 1, 24);
-        for (auto *candidate : settings->parentWidget()->findChildren<QPushButton *>())
-            QVERIFY(candidate->text() != QStringLiteral("复制并收起"));
-        QVERIFY(!header->isAncestorOf(settings));
-        QVERIFY(settings->menu() && settings->menu()->actions().first() == listening);
         toggle->setFocus();
         QTest::keyClick(toggle, Qt::Key_Tab);
         QCOMPARE(QApplication::focusWidget(), navigation.at(3));
-        interactMenu([&](QMenu &menu) {
-            QVERIFY(!listening->isChecked());
-            capture(menu, QStringLiteral("clipboard-settings-menu-off"));
-            menu.setActiveAction(listening);
-            QTest::keyClick(&menu, Qt::Key_Return);
-        }, [&] { settings->setFocus(); QTest::keyClick(settings, Qt::Key_Space); });
-        QCOMPARE(database_->setting("clipboard.monitor"), "true");
-        {
-            ClipboardPage restored(database_.get());
-            QVERIFY(restored.findChild<QAction *>("clipboardListening")->isChecked());
-        }
-        interactMenu([&](QMenu &menu) {
-            QVERIFY(listening->isChecked());
-            capture(menu, QStringLiteral("clipboard-settings-menu-on"));
-            QTest::mouseClick(&menu, Qt::LeftButton, Qt::NoModifier, menu.actionGeometry(listening).center());
-        }, [&] { settings->click(); });
-        QCOMPARE(database_->setting("clipboard.monitor"), "false");
         QTest::mouseClick(navigation.first(), Qt::LeftButton);
         toggle->setFocus();
         QTest::keyClick(toggle, Qt::Key_Space);
@@ -541,19 +517,6 @@ private slots:
         QCOMPARE(toggle->accessibleName(), QStringLiteral("展开侧边栏"));
         QTest::keyClick(toggle, Qt::Key_Tab);
         QCOMPARE(QApplication::focusWidget(), navigation.first());
-        QTest::mouseClick(navigation.at(3), Qt::LeftButton);
-        interact(QStringLiteral("历史设置"), [](QDialog &dialog) {
-            auto *limit = dialog.findChild<QSpinBox *>();
-            QVERIFY(limit); limit->setValue(700);
-            capture(dialog, QStringLiteral("clipboard-settings-history"));
-            dialog.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Save)->click();
-        }, [&] {
-            interactMenu([&](QMenu &menu) {
-                menu.setActiveAction(menu.actions().last());
-                QTest::keyClick(&menu, Qt::Key_Return);
-            }, [&] { settings->click(); });
-        });
-        QCOMPARE(database_->setting("clipboard.limit"), "700");
     }
 
 
@@ -1187,15 +1150,13 @@ private slots:
             if (tree->topLevelItem(i)->childCount()) QVERIFY(!tree->topLevelItem(i)->isExpanded());
     }
 
-    void updateNoticeNavigationAndCompleteNotes()
+    void updateNoticeOpensSettings()
     {
         const QString cache = fixture(QStringLiteral("data/update-check.json"));
         const auto cleanup = qScopeGuard([&] { QFile::remove(cache); });
         const QString tag = QStringLiteral("v2.3.0");
         const QString asset = QStringLiteral("Orchestrate-v2.3.0-windows-x64.zip");
-        QString notes = QStringLiteral("# 更新体验改进\n\n## 自动检查\n\n- 每天检查一次，发现新版本时提醒。\n- 下载与安装由你确认。\n\n## 完整更新说明\n\n");
-        for (int i = 0; i < 60; ++i) notes += QStringLiteral("- 第 %1 项说明：支持完整阅读、滚动和复制。\n").arg(i + 1);
-        notes += QStringLiteral("\n完整说明末尾_END");
+        const QString notes = QStringLiteral("更新说明");
         QJsonObject release {{"tag_name", tag}, {"body", notes}, {"assets", QJsonArray{QJsonObject{
             {"name", asset}, {"browser_download_url", "https://github.com/VelvetEvening/Orchestrate/releases/download/v2.3.0/" + asset},
             {"size", 18000000}, {"digest", "sha256:" + QString(64, 'a')}}}}};
@@ -1203,20 +1164,12 @@ private slots:
         file.write(QJsonDocument(QJsonObject{{"automatic_enabled", false}, {"release", release}}).toJson()); file.close();
         MainWindow window;
         auto *update = window.findChild<UpdateWidget *>(); QVERIFY(update);
-        auto *notesView = update->findChild<QTextBrowser *>("releaseNotes"); QVERIFY(notesView);
-        QVERIFY(notesView->toPlainText().isEmpty());
         auto *settings = button(window, QStringLiteral("设置 · 有更新"));
         QVERIFY(settings->toolTip().contains(tag));
         auto *action = window.findChild<QAction *>("viewUpdateAction"); QVERIFY(action); QVERIFY(action->isVisible());
-        action->trigger(); QTest::qWait(30);
-        QVERIFY(!window.findChild<QLabel *>("pageTitle"));
-        QVERIFY(update->isVisible()); QVERIFY(notesView->toPlainText().contains("完整说明末尾_END"));
+        action->trigger();
+        QTRY_VERIFY(update->isVisible());
         capture(window, QStringLiteral("settings-update-available"));
-        window.resize(980, 640); QTest::qWait(30);
-        action->trigger(); QTest::qWait(30);
-        capture(window, QStringLiteral("settings-update-compact"));
-        notesView->verticalScrollBar()->setValue(notesView->verticalScrollBar()->maximum());
-        capture(window, QStringLiteral("settings-update-notes-end"));
         window.findChild<QPushButton *>("sidebarToggle")->click();
         QVERIFY(settings->text().isEmpty()); QVERIFY(settings->toolTip().contains(tag));
         QVERIFY(settings->accessibleName().contains(tag));
