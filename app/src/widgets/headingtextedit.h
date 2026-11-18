@@ -38,6 +38,7 @@ signals:
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
+    void changeEvent(QEvent *event) override;
     void showEvent(QShowEvent *event) override;
 
 private:
@@ -50,5 +51,6 @@ private:
     MarkdownEdit *preview_;
     bool sourceMode_ = false;
     qreal textPointSize_ = 0;
+    bool fontRestorePending_ = false;
     QLabel *mathStatus_;
 };

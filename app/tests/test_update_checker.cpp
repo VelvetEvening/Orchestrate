@@ -1,3 +1,4 @@
+#include "test_support.h"
 #include "update/updatechecker.h"
 #include "update/updatewidget.h"
 #include <QApplication>
@@ -256,11 +257,9 @@ private slots:
         QVERIFY(browser->toPlainText().contains("完整末尾标记_END"));
         QVERIFY(browser->isReadOnly()); QVERIFY(browser->verticalScrollBar()->maximum() > 0);
         QVERIFY(!browser->document()->resource(QTextDocument::ImageResource, QUrl("https://example.com/should-not-load.png")).isValid());
-        const auto artifacts = QCoreApplication::applicationDirPath() + "/artifacts";
-        QDir().mkpath(artifacts);
-        QVERIFY(widget.grab().save(artifacts + "/update-notes-top.png"));
+        TestSupport::capture(widget, "update-notes-top");
         browser->verticalScrollBar()->setValue(browser->verticalScrollBar()->maximum());
-        QVERIFY(widget.grab().save(artifacts + "/update-notes-bottom.png"));
+        TestSupport::capture(widget, "update-notes-bottom");
         QCOMPARE(network.requests, 1);
         network.response = QJsonDocument(release("v2.3.0", QString())).toJson();
         checker.checkNow(); QTRY_VERIFY(!checker.checking());

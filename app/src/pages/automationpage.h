@@ -37,6 +37,7 @@ public:
     bool hasRunningCommands() const;
 
 protected:
+    void changeEvent(QEvent *event) override;
     void showEvent(QShowEvent *event) override;
 
 private:
@@ -60,6 +61,7 @@ private:
     void handleTreeSelection();
     void showTreeContextMenu(const QPoint &position);
     void updateToolIcon(int toolId);
+    void updateToolIcon(QTreeWidgetItem *item);
     QString ungroupedName() const;
     bool findTool(int toolId, AppDatabase::AutomationTool *tool) const;
 
@@ -76,9 +78,6 @@ private:
     bool canEditTool(int toolId);
     bool confirmManifestUpdate(const AppDatabase::AutomationTool &current, const ParsedManifest &manifest);
     void discoverCommands(int toolId = 0);
-    void importTool();
-    void importRemoteTool();
-    void importWslTool();
     void finishManifestReload(const AppDatabase::AutomationTool &tool, const QByteArray &data);
     bool readManifest(const QString &sourcePath,
                       QByteArray *data,
@@ -91,12 +90,6 @@ private:
                        const QString &wslDistribution = QString(),
                        const QString &wslUser = QString(),
                        const QString &sshUser = QString()) const;
-    void registerToolManifest(const QByteArray &manifestData,
-                              const QString &sourcePath,
-                              const QString &sshHost = QString(),
-                              const QString &wslDistribution = QString(),
-                              const QString &wslUser = QString(),
-                              const QString &sshUser = QString(), int requestedGroupId = -1);
     bool applyManifestUpdate(int toolId, ParsedManifest manifest);
     int builtinToolGroupId();
     void syncBuiltinTools();
@@ -117,16 +110,12 @@ private:
     void clearStateItems();
 
     void runCommand(QListWidgetItem *item);
-    QString remoteCommandLine(const AppDatabase::AutomationTool &tool,
-                              const QString &executable,
-                              const QStringList &arguments) const;
     void renderRunRecord();
     void appendRunOutput(int toolId, const QString &text);
     static constexpr qsizetype maxRunOutputChars = 256 * 1024;
     void showError(const QString &message);
 
     QSet<int> manifestReadsInFlight_;
-    bool importInFlight_ = false;
 
     QTreeWidget *tree_ = nullptr;
     QLabel *groupHint_ = nullptr;

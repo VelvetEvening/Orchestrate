@@ -8,7 +8,6 @@ class QTreeWidget;
 class GitHistoryWindow;
 class QLabel;
 class QPushButton;
-class QVBoxLayout;
 class QDialog;
 class QTabBar;
 namespace Git { class Reader; }
@@ -35,7 +34,6 @@ private:
     void refreshGitAvailability();
     void setGitAvailability(bool available, const QString &hint);
     void filterRecords();
-    void updateRecordActions();
     void showProjectContextMenu(const QPoint &position);
     void showRecordContextMenu(const QPoint &position);
     void folderDialog(bool creating);
@@ -55,11 +53,9 @@ private:
     QPushButton *gitHistoryButton_;
     Git::Reader *gitAvailabilityReader_;
     bool gitCheckPending_ = false;
-    QVBoxLayout *detailsLayout_;
     QTreeWidget *workList_;
     QLabel *recordHint_;
     int recordsProjectId_ = 0;
     class QLineEdit *search_;
-    QPushButton *deleteWorkButton_;
     QHash<int, QPointer<GitHistoryWindow>> gitWindows_;
 };

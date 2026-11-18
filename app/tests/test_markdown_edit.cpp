@@ -31,6 +31,67 @@ private slots:
         for (const auto &name : {"msyh.ttc", "msyhbd.ttc", "segoeui.ttf", "consola.ttf"}) QFontDatabase::addApplicationFont(fonts.filePath(name));
         UiTheme::install(*qApp);
     }
+    void themeSwitchPreservesEditorState_data() {
+        QTest::addColumn<bool>("reading");
+        QTest::addColumn<bool>("sourceMode");
+        QTest::addColumn<qreal>("pointSize");
+        QTest::newRow("body-reading") << true << false << qreal(20);
+        QTest::newRow("summary-reading") << true << false << qreal(24);
+        QTest::newRow("live-editing") << false << false << qreal(19.5);
+        QTest::newRow("source-editing") << false << true << qreal(21);
+        QTest::newRow("inherited-font") << false << false << qreal(0);
+    }
+    void themeSwitchPreservesEditorState() {
+        QFETCH(bool, reading);
+        QFETCH(bool, sourceMode);
+        QFETCH(qreal, pointSize);
+        UiTheme::apply(*qApp, QStringLiteral("mist"));
+        HeadingTextEdit editor;
+        editor.resize(640, 480);
+        editor.setPlainText(QStringLiteral("# 阅读标题\n\n正文阅读与未保存草稿。\n\n[主题链接](https://example.com)\n\n`行内代码`\n\n- 项目记录"));
+        if (pointSize > 0) editor.setTextPointSize(pointSize);
+        editor.setPreviewMode(reading);
+        editor.setSourceMode(sourceMode);
+        editor.show();
+        QCoreApplication::processEvents();
+        auto *source = editor.findChild<QPlainTextEdit *>(QStringLiteral("headingSource"));
+        auto *view = editor.findChild<MarkdownEdit *>(QStringLiteral("headingPreview"));
+        QVERIFY(source && view);
+        if (pointSize == 0) pointSize = source->font().pointSizeF();
+        source->moveCursor(QTextCursor::End);
+        source->insertPlainText(QStringLiteral(" 未保存"));
+        view->refresh();
+        const QString draft = editor.toPlainText();
+        const int anchor = draft.indexOf(QStringLiteral("正文阅读"));
+        const int position = anchor + 4;
+        auto selection = source->textCursor();
+        selection.setPosition(anchor);
+        selection.setPosition(position, QTextCursor::KeepAnchor);
+        source->setTextCursor(selection);
+        view->setSourceCursor(position, anchor);
+        QSignalSpy zoomChanges(&editor, &HeadingTextEdit::textPointSizeChanged);
+        for (const auto &id : {QStringLiteral("paper"), QStringLiteral("precision"), QStringLiteral("mist")}) {
+            UiTheme::apply(*qApp, id);
+            QCoreApplication::processEvents();
+            QCOMPARE(source->font().pointSizeF(), pointSize);
+            QCOMPARE(view->font().pointSizeF(), pointSize);
+            QCOMPARE(view->document()->defaultFont().pointSizeF(), pointSize);
+            const auto paragraph = view->document()->find(QStringLiteral("正文阅读"));
+            QVERIFY(!paragraph.isNull());
+            QCOMPARE(paragraph.charFormat().fontPointSize(), pointSize);
+            QCOMPARE(view->document()->find(QStringLiteral("主题链接")).charFormat().foreground().color(), QColor(UiTheme::Accent));
+            QCOMPARE(view->document()->find(QStringLiteral("行内代码")).charFormat().background().color(), QColor(UiTheme::Sidebar));
+            QCOMPARE(editor.toPlainText(), draft);
+            QCOMPARE(source->textCursor().position(), position);
+            QCOMPARE(source->textCursor().anchor(), anchor);
+            QCOMPARE(view->sourcePosition(view->textCursor().position()), position);
+            QCOMPARE(view->sourcePosition(view->textCursor().anchor()), anchor);
+            QVERIFY(source->document()->isUndoAvailable());
+        }
+        QCOMPARE(zoomChanges.count(), 0);
+        source->undo();
+        QVERIFY(!editor.toPlainText().endsWith(QStringLiteral(" 未保存")));
+    }
     void firstHeadingUsesRenderingUntilCursorActivation() {
         HeadingTextEdit editor;
         editor.resize(700, 460);

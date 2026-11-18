@@ -42,7 +42,9 @@ public:
         add_=new QPushButton(QStringLiteral("添加命令…"));add_->setObjectName("addDiscoveredCommand");add_->setAutoDefault(false);commandActions->addWidget(add_);commandActions->addStretch();detailsLayout->addLayout(commandActions);
         help_=new QPlainTextEdit;help_->setObjectName("discoveryHelp");help_->setReadOnly(true);help_->setMaximumHeight(100);detailsLayout->addWidget(help_);
         save->setText(QStringLiteral("按默认配置接入"));
+        ToolEditor::updateDisclosureButton(customize_, customize_->isChecked(), QStringLiteral("自行挑选与调整"));
         connect(customize_,&QPushButton::toggled,this,[this](bool enabled){
+            ToolEditor::updateDisclosureButton(customize_, enabled, QStringLiteral("自行挑选与调整"));
             details_->setVisible(enabled);save->setText(enabled?QStringLiteral("加入所选命令"):QStringLiteral("按默认配置接入"));resize(enabled?860:700,enabled?820:400);setBusy(busy_);
         });
         connect(entry_,&QComboBox::currentTextChanged,this,[this]{

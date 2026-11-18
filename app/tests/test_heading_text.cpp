@@ -6,7 +6,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QTextBrowser>
 #include "platform/globalshortcut.h"
 #include <QCheckBox>
 #include <QToolButton>
@@ -54,7 +53,6 @@
 #include <QScrollArea>
 #include <QStackedWidget>
 #include <QSplitter>
-#include <QSpinBox>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -103,6 +101,35 @@ int countColor(const QImage &img, const QColor &color)
         for(int x=0;x<img.width();++x)
             if(img.pixelColor(x,y)==color) ++count;
     return count;
+}
+int countBlendedColor(const QImage &img, const QColor &ink, const QColor &background)
+{
+    const int base[]{background.red(), background.green(), background.blue()};
+    const int delta[]{ink.red() - base[0], ink.green() - base[1], ink.blue() - base[2]};
+    int channel = 0;
+    for (int i = 1; i < 3; ++i)
+        if (qAbs(delta[i]) > qAbs(delta[channel])) channel = i;
+    if (delta[channel] == 0) return 0;
+    int count = 0;
+    for (int y = 0; y < img.height(); ++y) {
+        for (int x = 0; x < img.width(); ++x) {
+            const QColor color = img.pixelColor(x, y);
+            const int pixel[]{color.red(), color.green(), color.blue()};
+            const qreal coverage = qreal(pixel[channel] - base[channel]) / delta[channel];
+            if (coverage < 0.4 || coverage > 1.01) continue;
+            bool matches = true;
+            for (int i = 0; i < 3; ++i)
+                matches = matches && qAbs(pixel[i] - qRound(base[i] + coverage * delta[i])) <= 2;
+            if (matches) ++count;
+        }
+    }
+    return count;
+}
+int countReminderMark(const QImage &img)
+{
+    // A thin antialiased ring need not contain any fully opaque ink pixels.
+    return countBlendedColor(img, QColor(UiTheme::ReminderMarker), QColor(UiTheme::IndexSurface))
+        + countBlendedColor(img, QColor(UiTheme::ReminderMarker), QColor(UiTheme::Selection));
 }
 void require(bool ok, const QString &message)
 {
@@ -432,7 +459,11 @@ private slots:
             QCoreApplication::processEvents();
             const QPoint togglePosition = toggle->mapTo(&window, QPoint());
             for (int collapsed = 0; collapsed < 2; ++collapsed) {
-                for (int i = 0; i < navigation.size(); ++i) {
+                // Cover every page once. Projects and Settings exercise the layouts
+                // with and without an index pane at the other widths and sidebar states.
+                const QList<int> pages = size.width() == 1180 && !collapsed
+                    ? QList<int>{0, 1, 2, 3, 4} : QList<int>{1, 4};
+                for (int i : pages) {
                     QTest::mouseClick(navigation.at(i), Qt::LeftButton);
                     QCoreApplication::processEvents();
                     QVERIFY(navigation.at(i)->isChecked());
@@ -476,35 +507,9 @@ private slots:
         capture(window, QStringLiteral("seamless-project-splitter"));
         projectsSplit->setSizes(originalSizes);
         QTest::mouseClick(navigation.at(3), Qt::LeftButton);
-        auto *listening = window.findChild<QAction *>("clipboardListening");
-        auto *settings = window.findChild<QPushButton *>("clipboardSettings");
-        QVERIFY(listening && settings && settings->isVisible());
-        QCOMPARE(settings->geometry().top(), window.findChild<QPushButton *>("clipboardNewItem")->geometry().top());
-        QCOMPARE(settings->parentWidget()->width() - settings->geometry().right() - 1, 24);
-        for (auto *candidate : settings->parentWidget()->findChildren<QPushButton *>())
-            QVERIFY(candidate->text() != QStringLiteral("复制并收起"));
-        QVERIFY(!header->isAncestorOf(settings));
-        QVERIFY(settings->menu() && settings->menu()->actions().first() == listening);
         toggle->setFocus();
         QTest::keyClick(toggle, Qt::Key_Tab);
         QCOMPARE(QApplication::focusWidget(), navigation.at(3));
-        interactMenu([&](QMenu &menu) {
-            QVERIFY(!listening->isChecked());
-            capture(menu, QStringLiteral("clipboard-settings-menu-off"));
-            menu.setActiveAction(listening);
-            QTest::keyClick(&menu, Qt::Key_Return);
-        }, [&] { settings->setFocus(); QTest::keyClick(settings, Qt::Key_Space); });
-        QCOMPARE(database_->setting("clipboard.monitor"), "true");
-        {
-            ClipboardPage restored(database_.get());
-            QVERIFY(restored.findChild<QAction *>("clipboardListening")->isChecked());
-        }
-        interactMenu([&](QMenu &menu) {
-            QVERIFY(listening->isChecked());
-            capture(menu, QStringLiteral("clipboard-settings-menu-on"));
-            QTest::mouseClick(&menu, Qt::LeftButton, Qt::NoModifier, menu.actionGeometry(listening).center());
-        }, [&] { settings->click(); });
-        QCOMPARE(database_->setting("clipboard.monitor"), "false");
         QTest::mouseClick(navigation.first(), Qt::LeftButton);
         toggle->setFocus();
         QTest::keyClick(toggle, Qt::Key_Space);
@@ -512,19 +517,6 @@ private slots:
         QCOMPARE(toggle->accessibleName(), QStringLiteral("展开侧边栏"));
         QTest::keyClick(toggle, Qt::Key_Tab);
         QCOMPARE(QApplication::focusWidget(), navigation.first());
-        QTest::mouseClick(navigation.at(3), Qt::LeftButton);
-        interact(QStringLiteral("历史设置"), [](QDialog &dialog) {
-            auto *limit = dialog.findChild<QSpinBox *>();
-            QVERIFY(limit); limit->setValue(700);
-            capture(dialog, QStringLiteral("clipboard-settings-history"));
-            dialog.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Save)->click();
-        }, [&] {
-            interactMenu([&](QMenu &menu) {
-                menu.setActiveAction(menu.actions().last());
-                QTest::keyClick(&menu, Qt::Key_Return);
-            }, [&] { settings->click(); });
-        });
-        QCOMPARE(database_->setting("clipboard.limit"), "700");
     }
 
 
@@ -1158,15 +1150,13 @@ private slots:
             if (tree->topLevelItem(i)->childCount()) QVERIFY(!tree->topLevelItem(i)->isExpanded());
     }
 
-    void updateNoticeNavigationAndCompleteNotes()
+    void updateNoticeOpensSettings()
     {
         const QString cache = fixture(QStringLiteral("data/update-check.json"));
         const auto cleanup = qScopeGuard([&] { QFile::remove(cache); });
         const QString tag = QStringLiteral("v2.3.0");
         const QString asset = QStringLiteral("Orchestrate-v2.3.0-windows-x64.zip");
-        QString notes = QStringLiteral("# 更新体验改进\n\n## 自动检查\n\n- 每天检查一次，发现新版本时提醒。\n- 下载与安装由你确认。\n\n## 完整更新说明\n\n");
-        for (int i = 0; i < 60; ++i) notes += QStringLiteral("- 第 %1 项说明：支持完整阅读、滚动和复制。\n").arg(i + 1);
-        notes += QStringLiteral("\n完整说明末尾_END");
+        const QString notes = QStringLiteral("更新说明");
         QJsonObject release {{"tag_name", tag}, {"body", notes}, {"assets", QJsonArray{QJsonObject{
             {"name", asset}, {"browser_download_url", "https://github.com/VelvetEvening/Orchestrate/releases/download/v2.3.0/" + asset},
             {"size", 18000000}, {"digest", "sha256:" + QString(64, 'a')}}}}};
@@ -1174,20 +1164,12 @@ private slots:
         file.write(QJsonDocument(QJsonObject{{"automatic_enabled", false}, {"release", release}}).toJson()); file.close();
         MainWindow window;
         auto *update = window.findChild<UpdateWidget *>(); QVERIFY(update);
-        auto *notesView = update->findChild<QTextBrowser *>("releaseNotes"); QVERIFY(notesView);
-        QVERIFY(notesView->toPlainText().isEmpty());
         auto *settings = button(window, QStringLiteral("设置 · 有更新"));
         QVERIFY(settings->toolTip().contains(tag));
         auto *action = window.findChild<QAction *>("viewUpdateAction"); QVERIFY(action); QVERIFY(action->isVisible());
-        action->trigger(); QTest::qWait(30);
-        QVERIFY(!window.findChild<QLabel *>("pageTitle"));
-        QVERIFY(update->isVisible()); QVERIFY(notesView->toPlainText().contains("完整说明末尾_END"));
+        action->trigger();
+        QTRY_VERIFY(update->isVisible());
         capture(window, QStringLiteral("settings-update-available"));
-        window.resize(980, 640); QTest::qWait(30);
-        action->trigger(); QTest::qWait(30);
-        capture(window, QStringLiteral("settings-update-compact"));
-        notesView->verticalScrollBar()->setValue(notesView->verticalScrollBar()->maximum());
-        capture(window, QStringLiteral("settings-update-notes-end"));
         window.findChild<QPushButton *>("sidebarToggle")->click();
         QVERIFY(settings->text().isEmpty()); QVERIFY(settings->toolTip().contains(tag));
         QVERIFY(settings->accessibleName().contains(tag));
@@ -1851,8 +1833,18 @@ private slots:
         QCOMPARE(dayList->item(0)->text(),QStringLiteral("旧日记简介"));
     }
 
+    void calendarRecordSymbolsAndFutureDates_data()
+    {
+        QTest::addColumn<QString>("preset");
+        QTest::newRow("mist") << QStringLiteral("mist");
+        QTest::newRow("paper") << QStringLiteral("paper");
+        QTest::newRow("precision") << QStringLiteral("precision");
+    }
     void calendarRecordSymbolsAndFutureDates()
     {
+        QFETCH(QString, preset);
+        UiTheme::apply(*qApp, preset);
+        const auto restoreTheme = qScopeGuard([] { UiTheme::apply(*qApp, QStringLiteral("mist")); });
         CalendarCellProbe probe;
         const QDate today=QDate::currentDate();
         probe.setCurrentPage(today.year(),today.month());
@@ -1862,17 +1854,19 @@ private slots:
         probe.setCurrentPage(future.year(),future.month());
         probe.setRecordDates({future},{future});
         const QImage both=probe.renderDate(future);
-        QVERIFY(countColor(both,QColor(UiTheme::Success))>=12);
-        QVERIFY(countColor(both,QColor(UiTheme::Warning))>=8);
+        QVERIFY(countColor(both,QColor(UiTheme::DiaryMarker))>=12);
+        QVERIFY(countReminderMark(both)>0);
         QVERIFY(countColor(both,QColor(UiTheme::IndexSurface))>200);
         QVERIFY(countColor(both,QColor(UiTheme::Muted))>0);
-        // Marker centers occupy fixed separate sides beneath the date number.
-        QCOMPARE(both.pixelColor(33,50),QColor(UiTheme::Success));
-        QCOMPARE(both.pixelColor(45,50),QColor(UiTheme::Warning));
+        // The diary is solid; the reminder ring leaves the index surface visible.
+        const int markerY = preset == QStringLiteral("precision") ? 46 : 50;
+        QCOMPARE(both.pixelColor(33,markerY),QColor(UiTheme::DiaryMarker));
+        QCOMPARE(both.pixelColor(45,markerY),QColor(UiTheme::IndexSurface));
+        QVERIFY(both.pixelColor(47,markerY)!=QColor(UiTheme::IndexSurface));
         probe.setSelectedDate(future);
         const auto selected=probe.renderDate(future);
-        QVERIFY(countColor(selected,QColor(UiTheme::Success))>=12);
-        QVERIFY(countColor(selected,QColor(UiTheme::Warning))>=8);
+        QVERIFY(countColor(selected,QColor(UiTheme::DiaryMarker))>=12);
+        QVERIFY(countReminderMark(selected)>0);
         const QDate outside=QDate(future.year(),future.month(),1).addMonths(1);
         const auto outsideImage=probe.renderDate(outside);
         QCOMPARE(outsideImage.pixelColor(0,0),QColor(UiTheme::IndexSurface));
@@ -1896,7 +1890,7 @@ private slots:
             saveDialog(dialog);
         },[&]{button(*page,QStringLiteral("添加日记"))->click();});
         QCoreApplication::processEvents();
-        QVERIFY(countColor(calendar->grab().toImage(),QColor(UiTheme::Success))>=12);
+        QVERIFY(countColor(calendar->grab().toImage(),QColor(UiTheme::DiaryMarker))>=12);
         interact(QStringLiteral("添加提醒"),[&](QDialog &dialog) {
             dialog.findChild<QLineEdit *>(QStringLiteral("reminderTitle"))->setText(QStringLiteral("今天的提醒"));
             dialog.findChild<QDateTimeEdit *>(QStringLiteral("reminderTime"))->setDateTime(QDateTime(date,QTime(23,59)));
@@ -1904,8 +1898,8 @@ private slots:
         },[&]{button(*page,QStringLiteral("添加提醒"))->click();});
         QCoreApplication::processEvents();
         const auto marked=calendar->grab().toImage();
-        QVERIFY(countColor(marked,QColor(UiTheme::Success))>=12);
-        QVERIFY(countColor(marked,QColor(UiTheme::Warning))>=8);
+        QVERIFY(countColor(marked,QColor(UiTheme::DiaryMarker))>=12);
+        QVERIFY(countReminderMark(marked)>0);
         capture(window,QStringLiteral("calendar-record-markers"));
         window.resize(980,640);
         capture(window,QStringLiteral("calendar-simplified-compact"));
@@ -1936,8 +1930,8 @@ private slots:
         calendar->setSelectedDate(date);
         QCoreApplication::processEvents();
         const auto removed=calendar->grab().toImage();
-        QCOMPARE(countColor(removed,QColor(UiTheme::Success)),0);
-        QVERIFY(countColor(removed,QColor(UiTheme::Warning))>=8);
+        QCOMPARE(countColor(removed,QColor(UiTheme::DiaryMarker)),0);
+        QVERIFY(countReminderMark(removed)>0);
         button(*page,QStringLiteral("日记集合"))->click();
         collection=window.findChild<QDialog *>(QStringLiteral("diaryCollection"));
         QCOMPARE(collection->findChild<QListWidget *>(QStringLiteral("diaryCollectionList"))->count(),0);
@@ -2014,6 +2008,11 @@ private slots:
         auto *projects=page->findChild<QListWidget *>("projectList");
         auto *search=page->findChild<QLineEdit *>("recordSearch");
         QVERIFY(tree && projects && search);
+        auto *add = page->findChild<QPushButton *>("addWorkRecordButton");
+        QVERIFY(add && add->isVisible());
+        QCOMPARE(add->x(), tree->x());
+        QVERIFY(add->y() > tree->geometry().bottom());
+        QCOMPARE(search->width(), tree->width());
         auto folderByName=[&](const QString &name) -> QTreeWidgetItem * {
             for (int i=0;i<tree->topLevelItemCount();++i)
                 if (tree->topLevelItem(i)->data(0,Qt::UserRole+1).toBool() && tree->topLevelItem(i)->text(0)==name) return tree->topLevelItem(i);
@@ -2068,7 +2067,8 @@ private slots:
         QVERIFY(initialization->isExpanded());
         tree->setCurrentItem(initialization->child(0));
         initialization->setExpanded(false);
-        QVERIFY(!button(*page,QStringLiteral("删除"))->isEnabled());
+        for (auto *action : page->findChildren<QPushButton *>())
+            QVERIFY(action->text() != QStringLiteral("删除"));
         search->setText(QStringLiteral("初始化检查"));
         QVERIFY(initialization->isExpanded() && !initialization->isHidden());
         QVERIFY(folderByName(QStringLiteral("界面优化"))->isHidden());
@@ -2130,6 +2130,19 @@ private slots:
         for (const auto &record : database_->workRecords(project))
             if (record.title == QStringLiteral("初始化检查清单")) QCOMPARE(record.folderId,0);
         QVERIFY(!folderByName(QStringLiteral("界面优化")));
+        const auto matches = tree->findItems(QStringLiteral("初始化检查清单"), Qt::MatchExactly);
+        QCOMPARE(matches.size(), 1);
+        tree->setCurrentItem(folderByName(QStringLiteral("工作区初始化")));
+        interactMenu([&](QMenu &menu) {
+            interact(QStringLiteral("删除协作记录"), [&](QDialog &dialog) {
+                auto *confirmation = qobject_cast<QMessageBox *>(&dialog);
+                require(confirmation, "Missing record deletion confirmation");
+                confirmation->button(QMessageBox::Yes)->click();
+            }, [&]{ menuAction(menu, QStringLiteral("删除记录…"))->trigger(); });
+        }, [&]{ tree->customContextMenuRequested(tree->visualItemRect(matches.first()).center()); });
+        QCOMPARE(database_->workRecords(project).size(), 2);
+        for (const auto &record : database_->workRecords(project))
+            QVERIFY(record.title != QStringLiteral("初始化检查清单"));
         button(window,QStringLiteral("Git 历史"))->setFocus();
         QVERIFY(!page->findChild<HeadingTextEdit *>(QStringLiteral("projectOutline")));
     }
@@ -2641,12 +2654,14 @@ private slots:
         QVERIFY(!page->findChild<HeadingTextEdit *>(QStringLiteral("projectOutline")));
         interact(QStringLiteral("添加记录"), [&](QDialog &dialog) {
             require(!dialogEditor(dialog)->isPreviewMode(),QStringLiteral("New record must start in edit"));
-            auto *prefix=dialog.findChild<QLabel *>(QStringLiteral("summaryCaption"));
-            require(prefix && prefix->text()==QStringLiteral("标题"),QStringLiteral("Title caption missing"));
-            require(prefix->parentWidget()!=dialog.findChild<QLineEdit *>(QStringLiteral("workRecordTitle")),QStringLiteral("Caption still inside editable value"));
+            auto *title = dialog.findChild<QLineEdit *>(QStringLiteral("workRecordTitle"));
+            auto *summary = dialog.findChild<HeadingTextEdit *>(QStringLiteral("recordSummaryEditor"));
+            require(title && title->accessibleName() == QStringLiteral("标题"), QStringLiteral("Record title needs an accessible name"));
+            require(summary && title->mapTo(&dialog, QPoint()).x() == summary->mapTo(&dialog, QPoint()).x(),
+                    QStringLiteral("Record title must align with the editor's left edge"));
             dialogEditor(dialog)->setPlainText(sample);
             saveDialog(dialog); require(!static_cast<CollaborationRecordDialog &>(dialog).hasSaved(),QStringLiteral("Missing title allowed"));
-            dialog.findChild<QLineEdit *>(QStringLiteral("workRecordTitle"))->setText(QStringLiteral("第一阶段总结"));
+            title->setText(QStringLiteral("第一阶段总结"));
             capture(dialog,QStringLiteral("work-record-editor"));
             saveDialog(dialog);
         }, [&]{button(*page,QStringLiteral("添加记录"))->click();});

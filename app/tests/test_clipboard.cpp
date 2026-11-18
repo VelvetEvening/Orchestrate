@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "test_support.h"
 #include "clipboard/clipboardcontent.h"
 #include "clipboard/clipboardmonitor.h"
 #include "pages/clipboardpage.h"
@@ -22,6 +23,7 @@
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QSpinBox>
 #include <QStackedWidget>
 #include <QStandardPaths>
 #include <QStyleFactory>
@@ -150,6 +152,60 @@ private slots:
         QCOMPARE(db->clipboardItem(first.id).text,QString("first")); QVERIFY(!db->clipboardItem(first.id).automatic);
     }
 
+    void repeatedCopiesMoveTheSameHistoryRowsToTheTop() {
+        ClipboardPage page(db.get());
+        page.show();
+        auto *monitor = page.findChild<ClipboardMonitor *>();
+        auto *tree = page.findChild<QTreeWidget *>("clipboardItems");
+        QVERIFY(monitor && tree && monitor->setEnabled(true, &error));
+        QApplication::clipboard()->setText("A");
+        QTRY_COMPARE(tree->topLevelItemCount(), 1);
+        const int a = tree->topLevelItem(0)->data(0, Qt::UserRole).toInt();
+        QApplication::clipboard()->setText("B");
+        QTRY_COMPARE(tree->topLevelItemCount(), 2);
+        const int b = tree->topLevelItem(0)->data(0, Qt::UserRole).toInt();
+        QVERIFY(a != b);
+        const auto original = db->clipboardItem(a);
+        QApplication::clipboard()->setText("A");
+        QTRY_COMPARE(tree->topLevelItem(0)->data(0, Qt::UserRole).toInt(), a);
+        QCOMPARE(tree->topLevelItemCount(), 2);
+        QCOMPARE(db->clipboardItem(a).createdAt, original.createdAt);
+        QApplication::clipboard()->setText("B");
+        QTRY_COMPARE(tree->topLevelItem(0)->data(0, Qt::UserRole).toInt(), b);
+        QCOMPARE(tree->topLevelItem(1)->data(0, Qt::UserRole).toInt(), a);
+        QCOMPARE(tree->topLevelItemCount(), 2);
+    }
+
+    void existingHistoryReusesFirstMatchingRowAfterRestart() {
+        auto first = item("A"), otherA = item("A"), b = item("B");
+        QVERIFY(db->captureClipboardItem(&first, 100, &error));
+        otherA.automatic = true;
+        QVERIFY(db->saveClipboardItem(&otherA, &error)); // A duplicate from an older history.
+        QVERIFY(db->captureClipboardItem(&b, 100, &error));
+        QVERIFY(sql("DROP INDEX clipboard_auto_fingerprint"));
+        db.reset();
+        db = std::make_unique<AppDatabase>();
+        QVERIFY2(db->open(&error), qPrintable(error));
+        QVERIFY2(sql("SELECT id FROM clipboard_items INDEXED BY clipboard_auto_fingerprint "
+                     "WHERE tab_id=1 AND folder_id IS NULL AND automatic=1 LIMIT 0"), qPrintable(error));
+
+        auto repeat = item("A");
+        QVERIFY(sql("CREATE TRIGGER block_promotion BEFORE UPDATE OF position ON clipboard_items "
+                    "BEGIN SELECT RAISE(ABORT,'test failure'); END"));
+        QVERIFY(!db->captureClipboardItem(&repeat, 100, &error));
+        QCOMPARE(repeat.id, 0);
+        QCOMPARE(db->clipboardItems(1, 0).first().id, b.id);
+        QVERIFY(sql("DROP TRIGGER block_promotion"));
+        QVERIFY(db->captureClipboardItem(&repeat, 100, &error));
+        QCOMPARE(repeat.id, first.id);
+        QCOMPARE(repeat.createdAt, first.createdAt);
+        const auto history = db->clipboardItems(1, 0);
+        QCOMPARE(history.size(), 3);
+        QCOMPARE(history.at(0).id, first.id);
+        QCOMPARE(history.at(1).id, b.id);
+        QCOMPARE(history.at(2).id, otherA.id);
+    }
+
     void automaticRetentionProtectsCuratedContent() {
         auto curated=item("手动保留"); QVERIFY(db->saveClipboardItem(&curated,&error));
         int customTab=0; QVERIFY(db->addClipboardTab("长期保留",&customTab,&error));
@@ -164,6 +220,13 @@ private slots:
         QCOMPARE(db->clipboardItems(customTab,0).size(),2);
         QCOMPARE(db->clipboardItem(custom.id).text,custom.text); QCOMPARE(db->clipboardItem(transferred.id).text,transferred.text);
         auto same=item("自动 105"); QVERIFY(db->captureClipboardItem(&same,100,&error)); QCOMPARE(db->clipboardItems(1,0).size(),101);
+        for (const auto &archived : {curated, moved, transferred}) {
+            auto recopy = item(archived.text);
+            QVERIFY(db->captureClipboardItem(&recopy, 100, &error));
+            QVERIFY(recopy.id != archived.id);
+            QCOMPARE(db->clipboardItems(1, 0).first().id, recopy.id);
+            QVERIFY(!db->clipboardItem(archived.id).automatic);
+        }
         auto failed=item("失败应回滚");
         QVERIFY(sql("CREATE TRIGGER fail_clipboard BEFORE INSERT ON clipboard_items BEGIN SELECT RAISE(ABORT,'test failure'); END"));
         QVERIFY(!db->captureClipboardItem(&failed,100,&error)); QCOMPARE(failed.id,0); QCOMPARE(db->clipboardItems(1,0).size(),101);
@@ -188,6 +251,30 @@ private slots:
         QList<int> after; for(const auto &entry:db->clipboardItems(1,0)) after.append(entry.id); QCOMPARE(after,order);
     }
 
+    void captureSurvivesWhenAllOlderRowsAreBeingEdited() {
+        QList<int> editing;
+        for (int i = 0; i < 100; ++i) {
+            auto entry = item(QStringLiteral("draft %1").arg(i));
+            QVERIFY(db->captureClipboardItem(&entry, 100, &error));
+            editing.append(entry.id);
+        }
+        QVERIFY(sql("CREATE TRIGGER reject_extra_move BEFORE UPDATE OF position ON clipboard_items "
+                    "BEGIN SELECT RAISE(ABORT,'new items should already be at the front'); END"));
+        auto newest = item("new while all older items are protected");
+        QVERIFY2(db->captureClipboardItem(&newest, 100, &error, editing), qPrintable(error));
+        const auto history = db->clipboardItems(1, 0);
+        QCOMPARE(history.size(), 101);
+        QCOMPARE(history.first().id, newest.id);
+
+        const int released = editing.takeFirst();
+        auto next = item("new after one editor closes");
+        QVERIFY2(db->captureClipboardItem(&next, 100, &error, editing), qPrintable(error));
+        QCOMPARE(db->clipboardItems(1, 0).size(), 100);
+        QCOMPARE(db->clipboardItems(1, 0).first().id, next.id);
+        QVERIFY(!db->clipboardItem(released).id);
+        QVERIFY(!db->clipboardItem(newest.id).id);
+    }
+
     void editorSurvivesRetentionAndReleasesProtection() {
         QList<int> ids;
         for(int i=0;i<100;++i) { auto entry=item(QString("editing history %1").arg(i)); QVERIFY(db->captureClipboardItem(&entry,100,&error)); ids.append(entry.id); }
@@ -200,6 +287,9 @@ private slots:
             auto *body=dialog->findChild<QPlainTextEdit *>("clipboardItemBody"); body->setPlainText("edited and retained");
             QApplication::clipboard()->setText("copy during edit one"); QTest::qWait(180);
             survived=db->clipboardItem(ids.first()).id && !db->clipboardItem(ids.at(1)).id && db->clipboardItems(1,0).size()==100;
+            QApplication::clipboard()->setText("editing history 0"); QTest::qWait(180);
+            survived = survived && db->clipboardItems(1,0).first().id == ids.first()
+                && body->toPlainText() == QStringLiteral("edited and retained");
             sql("CREATE TRIGGER fail_edit_capacity BEFORE UPDATE ON clipboard_items WHEN OLD.id="+QString::number(ids.first())+" BEGIN SELECT RAISE(ABORT,'save failure'); END");
             saveEditor(dialog);
             QApplication::clipboard()->setText("copy during failed edit"); QTest::qWait(180);
@@ -240,6 +330,53 @@ private slots:
         QApplication::clipboard()->setText("保存失败反馈"); QTRY_COMPARE(failures.size(),1); QCOMPARE(db->clipboardItems(1,0).size(),1);
         QVERIFY(!monitor.copyItem(99999,&error));
         QVERIFY(monitor.setEnabled(false,&error)); ClipboardMonitor reopened(db.get()); QVERIFY(!reopened.enabled());
+    }
+
+    void settingsMenuPersistsMonitoringAndLimit() {
+        ClipboardPage page(db.get());
+        page.resize(900, 650); page.show();
+        auto *settings = page.findChild<QPushButton *>("clipboardSettings");
+        auto *listening = page.findChild<QAction *>("clipboardListening");
+        auto *create = page.findChild<QPushButton *>("clipboardNewItem");
+        QVERIFY(settings && listening && create);
+        QVERIFY(settings->isVisible());
+        QCOMPARE(settings->geometry().top(), create->geometry().top());
+        QCOMPARE(settings->parentWidget()->width() - settings->geometry().right() - 1, 24);
+        for (auto *button : settings->parentWidget()->findChildren<QPushButton *>())
+            QVERIFY(button->text() != QStringLiteral("复制并收起"));
+        auto *menu = settings->menu();
+        QVERIFY(menu && menu->actions().first() == listening);
+        QVERIFY(!listening->isChecked());
+        QTimer::singleShot(0, menu, [=] {
+            menu->setActiveAction(listening);
+            QTest::keyClick(menu, Qt::Key_Return);
+        });
+        settings->setFocus(); QTest::keyClick(settings, Qt::Key_Space);
+        QTRY_COMPARE(db->setting("clipboard.monitor"), "true");
+        {
+            ClipboardPage restored(db.get());
+            QVERIFY(restored.findChild<QAction *>("clipboardListening")->isChecked());
+        }
+        QTimer::singleShot(0, menu, [=] {
+            QTest::mouseClick(menu, Qt::LeftButton, Qt::NoModifier, menu->actionGeometry(listening).center());
+        });
+        settings->click();
+        QTRY_COMPARE(db->setting("clipboard.monitor"), "false");
+        QTimer::singleShot(0, menu, [&] {
+            menu->setActiveAction(menu->actions().last());
+            QTimer::singleShot(0, &page, [] {
+                auto *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+                if (!dialog) return;
+                auto *limit = dialog->findChild<QSpinBox *>();
+                auto *buttons = dialog->findChild<QDialogButtonBox *>();
+                if (!limit || !buttons) { dialog->reject(); return; }
+                limit->setValue(700);
+                buttons->button(QDialogButtonBox::Save)->click();
+            });
+            QTest::keyClick(menu, Qt::Key_Return);
+        });
+        settings->click();
+        QTRY_COMPARE(db->setting("clipboard.limit"), "700");
     }
 
     void editorPreservesContentAndProtectsDrafts() {
@@ -361,7 +498,7 @@ private slots:
         select(tree,a.id); node(tree,b.id)->setSelected(true);
         QCOMPARE(tree->selectedItems().size(),2);
         int confirmations=0; bool menuSeen=false,labelsOk=true,defaultsOk=true,unchangedBeforeConfirm=true;
-        bool screenshotOk=true; int incomingId=0;
+        int incomingId=0;
         QTimer responder; responder.setInterval(10);
         connect(&responder,&QTimer::timeout,&page,[&] {
             if (auto *menu=qobject_cast<QMenu *>(QApplication::activePopupWidget())) {
@@ -379,7 +516,7 @@ private slots:
                 && message->button(QMessageBox::No)->text()=="取消"
                 && message->button(QMessageBox::Yes)->text()=="确认删除";
             if (!history && response==0 && !inFolder && !contextMenu) {
-                screenshotOk &= message->grab().save(qApp->applicationDirPath()+"/artifacts/delete-single-confirm.png");
+                TestSupport::capture(*message, "delete-single-confirm");
                 // A real monitoring event during the modal must not broaden deletion.
                 if (confirmations==1) {
                     auto *monitor=page.findChild<ClipboardMonitor *>(); monitor->setEnabled(true,&error);
@@ -403,7 +540,7 @@ private slots:
         } else page.findChild<QPushButton *>("clipboardDeleteItems")->click();
         responder.stop();
         QCOMPARE(confirmations,history ? 0 : 1);
-        QCOMPARE(menuSeen,contextMenu); QVERIFY(labelsOk); QVERIFY(defaultsOk); QVERIFY(unchangedBeforeConfirm); QVERIFY(screenshotOk);
+        QCOMPARE(menuSeen,contextMenu); QVERIFY(labelsOk); QVERIFY(defaultsOk); QVERIFY(unchangedBeforeConfirm);
         const bool deleted=history || response==0;
         QCOMPARE(db->clipboardItem(a.id).id,deleted ? 0 : a.id); QCOMPARE(db->clipboardItem(b.id).id,deleted ? 0 : b.id);
         QCOMPARE(db->clipboardItem(keep.id).text,keep.text); QCOMPARE(db->clipboardItem(elsewhere.id).text,elsewhere.text);
@@ -428,7 +565,7 @@ private slots:
     }
 
     void pageAndMainWindowIntegration() {
-        QVERIFY(db->setSetting("shortcut.enabled","false"));
+        QVERIFY(db->setSetting("global_shortcut_enabled","false"));
         int tab=0,folder=0,folder2=0; QVERIFY(db->addClipboardTab("开发素材",&tab,&error)); QVERIFY(db->addClipboardFolder(tab,"提示词",&folder,&error)); QVERIFY(db->addClipboardFolder(tab,"命令",&folder2,&error));
         auto a=item("请梳理这个模块的职责与交互边界。\n保留已有数据，给出清晰的验证步骤。",tab,folder);
         auto b=item("git status --short",tab,folder); auto c=item("复制后在目标应用中手动粘贴。",tab,folder);
@@ -442,16 +579,13 @@ private slots:
         QPushButton *nav=nullptr;
         for (auto *button : window.findChildren<QPushButton *>("navButton")) if (button->text()=="剪贴板") nav=button;
         QVERIFY(nav); QTest::mouseClick(nav,Qt::LeftButton); QVERIFY(stack->currentWidget()->isAncestorOf(page));
-        QStringList visibleLabels;
-        for (auto *label : page->findChildren<QLabel *>()) if (label->isVisibleTo(page) && !label->text().isEmpty()) visibleLabels.append(label->text());
-        QVERIFY(!window.findChild<QLabel *>(QStringLiteral("pageTitle")));
         auto *emptyHint=page->findChild<QLabel *>(QStringLiteral("emptyViewHint"));
         QVERIFY(emptyHint && emptyHint->isVisibleTo(page));
         QVERIFY(emptyHint->text().contains(QStringLiteral("开启监听")));
         QVERIFY(emptyHint->testAttribute(Qt::WA_TransparentForMouseEvents));
         QVERIFY(!page->findChild<QLabel *>("clipboardStatus")->isVisible());
         QVERIFY(!page->findChild<QWidget *>("clipboardFolders"));
-        QVERIFY(window.grab().save(qApp->applicationDirPath()+"/artifacts/clipboard-empty.png"));
+        TestSupport::capture(window, "clipboard-empty");
         auto *tabs=page->findChild<QTabBar *>("clipboardTabs");
         QVERIFY(!tabs->tabIcon(0).isNull()); QVERIFY(tabs->tabIcon(1).isNull());
         QVERIFY(tabs->tabToolTip(0).contains(QStringLiteral("自动收纳")));
@@ -490,8 +624,8 @@ private slots:
         // A successful monitoring toggle clears the transient error, without status copy.
         auto *listening=window.findChild<QAction *>("clipboardListening"); QVERIFY(listening); listening->setChecked(true); listening->setChecked(false);
         QVERIFY(!page->findChild<QLabel *>("clipboardStatus")->isVisible());
-        QTest::qWait(40); QVERIFY(window.grab().save(qApp->applicationDirPath()+"/artifacts/clipboard-desktop.png"));
-        window.resize(980,640); QTest::qWait(30); QVERIFY(window.grab().save(qApp->applicationDirPath()+"/artifacts/clipboard-compact.png"));
+        TestSupport::capture(window, "clipboard-desktop");
+        window.resize(980,640); TestSupport::capture(window, "clipboard-compact");
         if (qEnvironmentVariableIsSet("ORCHESTRATE_CLIPBOARD_LAYOUT_REVIEW")) {
             qInfo() << "Clipboard layout: list point size" << items->font().pointSizeF()
                 << "preview point size" << page->findChild<QPlainTextEdit *>("clipboardPreview")->font().pointSizeF()

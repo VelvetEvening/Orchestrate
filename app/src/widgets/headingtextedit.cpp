@@ -12,6 +12,7 @@
 #include <QScrollBar>
 #include <QStackedWidget>
 #include <QTabBar>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <QtMath>
@@ -126,7 +127,9 @@ void HeadingTextEdit::zoomText(qreal steps)
 {
     if (qFuzzyIsNull(steps)) return;
     const auto font = source_->font();
-    setTextPointSize((font.pointSizeF() > 0 ? font.pointSizeF() : QFontInfo(font).pointSizeF()) + steps);
+    const qreal current = textPointSize_ > 0 ? textPointSize_
+        : font.pointSizeF() > 0 ? font.pointSizeF() : QFontInfo(font).pointSizeF();
+    setTextPointSize(current + steps);
 }
 void HeadingTextEdit::setTextPointSize(qreal size)
 {
@@ -150,6 +153,21 @@ void HeadingTextEdit::showEvent(QShowEvent *event)
     // Qt style repolishing on reparent can restore the inherited UI font.
     // Restore the chosen content size without persisting a new zoom preference.
     if (textPointSize_ > 0) applyTextPointSize();
+}
+
+void HeadingTextEdit::changeEvent(QEvent *event)
+{
+    QWidget::changeEvent(event);
+    if (textPointSize_ <= 0 || fontRestorePending_) return;
+    if (event->type() != QEvent::StyleChange && event->type() != QEvent::FontChange
+        && event->type() != QEvent::ApplicationFontChange) return;
+    // Stylesheet repolishing resets child fonts after the parent's event.
+    // Restore the reading preference once Qt finishes, without saving a new zoom.
+    fontRestorePending_ = true;
+    QTimer::singleShot(0, this, [this] {
+        applyTextPointSize();
+        fontRestorePending_ = false;
+    });
 }
 
 QString HeadingTextEdit::getText(QWidget *parent, const QString &title, const QString &initial, bool *accepted, bool previewFirst)

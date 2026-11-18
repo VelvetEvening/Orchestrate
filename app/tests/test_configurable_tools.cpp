@@ -62,6 +62,7 @@ private slots:
     void optionalStateAndStableCommandEditing(){
         auto t=tool("manual");auto a=echo();auto b=a;b.name="second";QString error;
         QVERIFY(database_.saveAutomationTool(t,{a,b},&t.id,&error));
+        auto cleanupTool = qScopeGuard([this, id = t.id] { database_.deleteAutomationTool(id); });
         AutomationPage page(&database_);page.resize(1180,760);page.show();page.loadAll(t.id);
         QVERIFY(page.stateSection_->isHidden());QVERIFY(!page.stateReadsInFlight_.contains(t.id));QVERIFY(!page.stateErrors_.contains(t.id));
         auto commands=database_.toolCommands(t.id);const int first=commands[0].id,second=commands[1].id;
@@ -69,12 +70,28 @@ private slots:
         auto saved=database_.toolCommands(t.id);QCOMPARE(saved[0].id,second);QCOMPARE(saved[1].id,first);QVERIFY(!saved[1].enabled);
         AppDatabase::AutomationTool stored;QVERIFY(page.findTool(t.id,&stored));QVERIFY(stored.customized);
         page.loadToolDetails(t.id);page.runCommand(page.commandList_->item(1));QVERIFY(!page.runRecords_.contains(t.id));
-        page.runCommand(page.commandList_->item(0));QTRY_VERIFY_WITH_TIMEOUT(!page.runRecords_.value(t.id).running,5000);QVERIFY(!page.runRecords_.value(t.id).failed);
+        page.runCommand(page.commandList_->item(0));
+        auto *toolItem = page.tree_->currentItem();
+        QCOMPARE(toolItem->text(1), QStringLiteral("运行中"));
+        const auto runningIcon = toolItem->icon(0).cacheKey();
+        page.appendRunOutput(t.id, QStringLiteral("progress\n"));
+        page.renderRunRecord();
+        QCOMPARE(toolItem->icon(0).cacheKey(), runningIcon);
+        QTRY_VERIFY_WITH_TIMEOUT(!page.runRecords_.value(t.id).running, 5000);
+        QVERIFY(!page.runRecords_.value(t.id).failed);
+        {
+            const auto restoreTheme = qScopeGuard([] { UiTheme::apply(*qApp, QStringLiteral("mist")); });
+            UiTheme::apply(*qApp, QStringLiteral("paper"));
+            QCoreApplication::processEvents();
+            QCOMPARE(page.runStatus_->font().weight(), QFont::DemiBold);
+            const auto icon = toolItem->icon(0).pixmap(32,32).toImage();
+            QCOMPARE(icon.pixelColor(16,16), QColor(UiTheme::Muted));
+        }
         QVERIFY(sql("CREATE TRIGGER reject_custom BEFORE INSERT ON tool_commands WHEN NEW.name='reject' BEGIN SELECT RAISE(ABORT,'injected'); END"));
         saved[0].name="reject";t.name="should rollback";QVERIFY(!database_.saveAutomationTool(t,saved,nullptr,&error));
         QCOMPARE(database_.toolCommands(t.id)[0].name,QString("second"));QVERIFY(sql("DROP TRIGGER reject_custom"));
         TestSupport::capture(page, "tool-desktop");page.resize(900,600);TestSupport::capture(page, "tool-compact");
-        QVERIFY(database_.deleteAutomationTool(t.id));
+        QVERIFY(database_.deleteAutomationTool(t.id)); cleanupTool.dismiss();
     }
     void sourceParsingIsAllOrNothing(){
         QList<CommandParameters::Option> options;QString error;
@@ -315,7 +332,7 @@ private slots:
         CliDiscovery::help(this,t,command,[&](bool ok,const QByteArray &bytes,const QString &error){done=true;success=ok;help=bytes;failure=error;});
         QTRY_VERIFY_WITH_TIMEOUT(done,15000);QVERIFY2(success,qPrintable(failure));QVERIFY(help.contains("List fixture items"));
     }
-    void cannlabRecommendedSetupOnly(){
+    void defaultDiscoveryImportsCommandsAndDisplaysDescriptions(){
         const QString directory=cliFixture_.path();
         auto t=tool("CANNLab");t.workingDirectory=directory;DiscoveryDialog dialog(t);dialog.show();
         QTRY_VERIFY(!dialog.findChild<QComboBox*>("discoveryEntry")->currentText().isEmpty());QTRY_VERIFY(dialog.save->isEnabled());TestSupport::capture(dialog, "cannlab-recommended");
@@ -325,7 +342,6 @@ private slots:
         QCOMPARE(menu.arguments,(QStringList{"-m","cannlab","menu"}));QCOMPARE(dialog.environment().value("PYTHONUTF8").toString(),QString("1"));
         QString error;QVERIFY2(database_.saveAutomationTool(t,dialog.selected(),&t.id,&error),qPrintable(error));
         AutomationPage page(&database_);page.resize(1180,760);page.show();page.loadAll(t.id);QCoreApplication::processEvents();
-        QCOMPARE(page.findChild<QPushButton*>("registerTool")->text(),QStringLiteral("接入工具"));QCOMPARE(dialog.windowTitle(),QStringLiteral("接入工具"));
         const auto saved=database_.toolCommands(t.id);
         for(int i=0;i<saved.size();++i){
             QVERIFY2(!saved[i].description.trimmed().isEmpty(),qPrintable(saved[i].name));
@@ -352,12 +368,20 @@ private slots:
         const QString directory=cliFixture_.path();
         auto t=tool("CANNLab");t.workingDirectory=directory;DiscoveryDialog dialog(t);dialog.show();
         auto *entry=dialog.findChild<QComboBox*>("discoveryEntry");QTRY_VERIFY(!entry->currentText().isEmpty());
-        auto *customize=dialog.findChild<QPushButton*>("customizeDiscovery");customize->click();auto *read=dialog.findChild<QPushButton*>("readCommandHelp");read->click();
+        auto *customize=dialog.findChild<QPushButton*>("customizeDiscovery");
+        const auto closedIcon = customize->icon().pixmap(20,20).toImage();
+        customize->click();
+        QCOMPARE(customize->toolTip(), QStringLiteral("收起自行挑选与调整"));
+        QCOMPARE(customize->accessibleName(), customize->toolTip());
+        QVERIFY(closedIcon != customize->icon().pixmap(20,20).toImage());
+        auto *read=dialog.findChild<QPushButton*>("readCommandHelp");read->click();
         auto *list=dialog.findChild<QTreeWidget*>("discoveredCommands");QTRY_COMPARE_WITH_TIMEOUT(list->topLevelItemCount(),8,15000);list->topLevelItem(0)->setCheckState(0,Qt::Checked);
         entry->setCurrentText("orchestrate-nonexistent-entry");QCOMPARE(list->topLevelItemCount(),0);QVERIFY(dialog.selected().isEmpty());QVERIFY(!dialog.save->isEnabled());
         read->click();QTRY_VERIFY(!dialog.error->isHidden());QVERIFY(!dialog.save->isEnabled());QCOMPARE(dialog.result(),int(QDialog::Rejected));
         TestSupport::capture(dialog, "directory-entry-error");
-        customize->click();QVERIFY(dialog.save->isEnabled());dialog.save->click();QTRY_VERIFY(!dialog.error->isHidden());QCOMPARE(dialog.result(),int(QDialog::Rejected));QVERIFY(dialog.selected().isEmpty());
+        customize->click();
+        QCOMPARE(customize->toolTip(), QStringLiteral("展开自行挑选与调整"));
+        QVERIFY(dialog.save->isEnabled());dialog.save->click();QTRY_VERIFY(!dialog.error->isHidden());QCOMPARE(dialog.result(),int(QDialog::Rejected));QVERIFY(dialog.selected().isEmpty());
         dialog.reject();
         AutomationPage page(&database_);page.resize(900,600);page.show();for(int i=0;i<page.tree_->topLevelItemCount();++i)if(page.tree_->topLevelItem(i)->data(0,Qt::UserRole).toInt()==0)page.tree_->setCurrentItem(page.tree_->topLevelItem(i));page.showEmptyDetails(0);QVERIFY(page.emptyMessage_->text().contains(QStringLiteral("接入工具")));TestSupport::capture(page, "tool-empty");
     }
@@ -375,13 +399,11 @@ private slots:
         int sameDirectory=0;for(const auto &candidate:database_.automationTools())if(candidate.workingDirectory==directory)++sameDirectory;QCOMPARE(sameDirectory,1);
         QVERIFY(database_.deleteAutomationTool(t.id));
     }
-    void cannlabDirectoryAndHelpOnly(){
+    void customDiscoveryReadsSelectedCommandParameters(){
         const QString directory=cliFixture_.path();
         auto t=tool("CANNLab");t.workingDirectory=directory;
-        bool done=false;QJsonObject inventory;
-        FileAccess::request(this,"describe-tool",directory,[&](bool ok,const QByteArray &bytes,const QString &error){QVERIFY2(ok,qPrintable(error));inventory=QJsonDocument::fromJson(bytes).object();done=true;});QTRY_VERIFY(done);
-        const auto entries=CliDiscovery::entries(inventory,directory);QVERIFY(!entries.isEmpty());QCOMPARE(entries[0].arguments,(QStringList{"-m","cannlab"}));
         DiscoveryDialog dialog(t);dialog.show();auto *entry=dialog.findChild<QComboBox*>("discoveryEntry");QTRY_VERIFY(!entry->currentText().isEmpty());
+        QCOMPARE(QProcess::splitCommand(entry->currentText()).mid(1), (QStringList{"-m", "cannlab"}));
         dialog.findChild<QPushButton*>("customizeDiscovery")->click();
         dialog.findChild<QPushButton*>("readCommandHelp")->click();auto *list=dialog.findChild<QTreeWidget*>("discoveredCommands");QTRY_COMPARE_WITH_TIMEOUT(list->topLevelItemCount(),8,15000);
         TestSupport::capture(dialog, "cannlab-discovery");

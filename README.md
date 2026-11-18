@@ -2,7 +2,7 @@
 
 面向 Windows 的轻量桌面工作台，把日历、项目、工具和剪贴板放在一起。使用 Qt Widgets 与 SQLite，数据保存在程序目录，无需账号或云服务。
 
-**v4.0.0 是首个正式版。** [下载便携包](https://github.com/VelvetEvening/Orchestrate/releases/latest) · [版本变化](CHANGELOG.md)
+[下载正式版便携包](https://github.com/VelvetEvening/Orchestrate/releases/latest) · [v4.1.0 更新说明](CHANGELOG.md)
 
 ## 功能
 
@@ -18,9 +18,9 @@
 
 ## 开始使用
 
-1. 下载 `Orchestrate-v4.0.0-windows-x64.zip`，完整解压到可写目录，运行 `Orchestrate.exe`。
+1. 下载 Windows x64 便携包，完整解压到可写目录，运行 `Orchestrate.exe`。
 2. 在侧栏选择模块。工具通过“接入工具”选择目录或 JSON 声明；WSL、SSH 和外部工具需自行准备运行环境。
-3. 关闭主窗口默认留在托盘，`Alt+X` 唤起；完全退出请用托盘菜单。开机自启和剪贴板监听默认关闭，可在设置中开启。
+3. 关闭主窗口后默认留在托盘，按 `Alt+X` 唤起，或从托盘菜单完全退出。开机自启和剪贴板监听默认关闭，监听开关在“剪贴板 → 设置”。
 
 程序本身无需安装 Qt、Python 或 TeX。保持整包文件完整；升级、备份和迁移见[数据与更新](docs/data-and-updates.md)。
 
@@ -29,5 +29,3 @@
 - [工具接入协议](docs/automation-tool-contract-v1.md) · [可运行样例](docs/examples/tool-adapter/README.md)
 - [构建与发布](app/README.md) · [测试说明](app/tests/README.md)
 - [架构与边界](docs/architecture.md) · [界面设计约定](DESIGN.md)
-
-正式版本从 v4.0.0 起记入 `CHANGELOG.md`。内测历史已归档到仓库外；旧源码克隆建议重新克隆，便携版仍可通过原更新入口升级。

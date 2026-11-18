@@ -94,25 +94,11 @@ CalendarPage::CalendarPage(AppDatabase *database,
     auto *calendarCard = makeSurface(this, "index");
     calendarCard->setObjectName(QStringLiteral("workspaceIndex"));
     auto *calendarLayout = new QVBoxLayout(calendarCard);
-    calendarLayout->setContentsMargins(24, 22, 24, 24);
-    calendarLayout->setSpacing(10);
-    auto *calendarHeader = new QHBoxLayout;
-    calendarHeader->addWidget(makeCardTitle(QStringLiteral("日历"), calendarCard),1);
-    auto *diaryLegend = new QLabel(QStringLiteral("■ 日记"),calendarCard);
-    diaryLegend->setObjectName(QStringLiteral("diaryLegend"));
-    auto *reminderLegend = new QLabel(QStringLiteral("▲ 提醒"),calendarCard);
-    reminderLegend->setObjectName(QStringLiteral("reminderLegend"));
-    calendarHeader->addWidget(diaryLegend);
-    calendarHeader->addSpacing(10);
-    calendarHeader->addWidget(reminderLegend);
-    calendarLayout->addLayout(calendarHeader);
+    UiTheme::setLayoutMetrics(calendarLayout, {24, 22, 24, 24}, 10);
+    calendarLayout->addWidget(makeCardTitle(QStringLiteral("日历"), calendarCard));
 
     calendar_ = new WorkspaceCalendar(calendarCard);
-    QPalette calendarPalette = calendar_->palette();
-    calendarPalette.setColor(QPalette::Highlight, QColor(UiTheme::Selection));
-    calendarPalette.setColor(QPalette::HighlightedText, QColor(UiTheme::Accent));
-    calendar_->setPalette(calendarPalette);
-    calendar_->setGridVisible(false);
+    calendar_->setObjectName(QStringLiteral("workspaceCalendar"));
     calendar_->setVerticalHeaderFormat(QCalendarWidget::NoVerticalHeader);
     calendar_->setFirstDayOfWeek(Qt::Monday);
     calendar_->setSelectedDate(QDate::currentDate());
@@ -121,8 +107,7 @@ CalendarPage::CalendarPage(AppDatabase *database,
 
     auto *detailsCard = makeSurface(this, "content");
     auto *detailsLayout = new QVBoxLayout(detailsCard);
-    detailsLayout->setContentsMargins(24, 22, 24, 24);
-    detailsLayout->setSpacing(10);
+    UiTheme::setLayoutMetrics(detailsLayout, {24, 22, 24, 24}, 10);
 
     auto *reminderHeader = new QHBoxLayout;
     reminderHeader->addWidget(makeCardTitle(QStringLiteral("提醒事项"), detailsCard),1);
@@ -131,6 +116,7 @@ CalendarPage::CalendarPage(AppDatabase *database,
     reminderHeader->addWidget(selectedDateLabel_);
     detailsLayout->addLayout(reminderHeader);
     reminderList_ = new QListWidget(detailsCard);
+    reminderList_->setProperty("themeForegroundColumn", 0);
     reminderList_->setObjectName(QStringLiteral("reminderList"));
     reminderList_->setAlternatingRowColors(false);
     reminderList_->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -547,7 +533,6 @@ void CalendarPage::refreshDiaryList()
     }
     for (const AppDatabase::DiaryEntry &entry : entries) {
         auto *item = new QListWidgetItem(summaryText(entry.title,entry.content), diaryList_);
-        item->setSizeHint(QSize(0,42));
         item->setData(Qt::UserRole, entry.id);
         item->setToolTip(QStringLiteral("创建：%1\n更新：%2")
                              .arg(entry.createdAt.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")),
@@ -722,7 +707,6 @@ void CalendarPage::refreshDiaryCollection()
             +entry.createdAt.toLocalTime().toString(QStringLiteral("HH:mm"))+QStringLiteral("   ·   ")
             +summaryText(entry.title,entry.content);
         auto *item=new QListWidgetItem(text,collectionList_);
-        item->setSizeHint(QSize(0,48));
         item->setData(Qt::UserRole,entry.id);
         item->setToolTip(text);
         if (entry.id==selected) collectionList_->setCurrentItem(item);

@@ -86,9 +86,6 @@ inline QStringList users(const QByteArray &bytes)
     return names;
 }
 
-using PosixRegistration::registrationScript;
-using PosixRegistration::registrationResult;
-
 using CaptureCallback = ProcessCapture::CaptureCallback;
 inline void capture(QObject *context, const QStringList &args, CaptureCallback callback,
                     int timeoutMs = 30000, QProcess *process = nullptr)

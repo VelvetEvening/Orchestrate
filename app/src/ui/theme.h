@@ -2,44 +2,48 @@
 
 #include <QColor>
 #include <QIcon>
+#include <QMargins>
 #include <QString>
 
 class QApplication;
+class QCalendarWidget;
+class QLayout;
 class QWidget;
 
 namespace UiTheme {
 // Shared by the stylesheet, custom calendar/drag painting and status badges.
-inline constexpr auto Background = "#f7f9fa";
-inline constexpr auto Sidebar = "#eff3f4";
-inline constexpr auto IndexSurface = "#f7f9fa";
-inline constexpr auto Surface = "#ffffff";
-inline constexpr auto Text = "#2f3b48";
-inline constexpr auto Muted = "#5e6c78";
-inline constexpr auto Border = "#dfe6ea";
-inline constexpr auto ControlBorder = "#c6d0dd";
-inline constexpr auto Accent = "#365f8c";
-inline constexpr auto Selection = "#dfe9f2";
-inline constexpr auto Hover = "#edf2f5";
-inline constexpr auto Focus = "#6f8fb6";
-inline constexpr auto PrimaryHover = "#d2e0ee";
-inline constexpr auto PrimaryPressed = "#c4d6e7";
-inline constexpr auto NavHover = "#e5ebee";
-inline constexpr auto ScrollHandle = "#bdc8d3";
-inline constexpr auto ScrollHandleHover = "#97a8b9";
-inline constexpr auto Progress = "#c7d7ed";
-inline constexpr auto Success = "#386b50";
-inline constexpr auto SuccessBackground = "#edf5ef";
-inline constexpr auto Warning = "#87611e";
-inline constexpr auto WarningBackground = "#faf3e5";
-inline constexpr auto Danger = "#a64545";
-inline constexpr auto DangerBackground = "#fbefef";
-inline constexpr auto DangerHoverBorder = "#e6c5c5";
-inline constexpr auto Disabled = "#919ba9";
+inline const char *Background = "#f7f9fa";
+inline const char *Sidebar = "#eff3f4";
+inline const char *IndexSurface = "#f7f9fa";
+inline const char *Surface = "#ffffff";
+inline const char *Text = "#2f3b48";
+inline const char *Muted = "#5e6c78";
+inline const char *Border = "#dfe6ea";
+inline const char *ControlBorder = "#b3bfcd";
+inline const char *Accent = "#365f8c";
+inline const char *Selection = "#dfe9f2";
+inline const char *Hover = "#edf2f5";
+inline const char *Focus = "#6f8fb6";
+// Calendar record markers are informational, not success/warning status.
+inline const char *DiaryMarker = "#648098";
+inline const char *ReminderMarker = "#887789";
+inline constexpr const char *Success = "#386b50";
+inline constexpr const char *SuccessBackground = "#edf5ef";
+inline constexpr const char *Warning = "#87611e";
+inline constexpr const char *WarningBackground = "#faf3e5";
+inline constexpr const char *Danger = "#a64545";
+inline constexpr const char *DangerBackground = "#fbefef";
+inline constexpr const char *DangerHoverBorder = "#e6c5c5";
+inline constexpr const char *Disabled = "#919ba9";
 
+enum class Preset { Mist, Paper, Precision };
+Preset preset();
+QString presetId();
+void apply(QApplication &app, const QString &id);
 void install(QApplication &app);
 QIcon icon(const QString &name);
 void setRole(QWidget *widget, const char *role);
 void setSurface(QWidget *widget, const char *surface);
-QString statusStyle(const QString &result);
-QColor statusColor(const QString &result);
+void setLayoutMetrics(QLayout *layout, const QMargins &margins, int spacing = -1);
+void applyCalendarPalette(QCalendarWidget *calendar);
 }

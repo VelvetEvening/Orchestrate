@@ -11,6 +11,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QCloseEvent>
 #include <QDesktopServices>
 #include <QFrame>
@@ -76,9 +77,13 @@ MainWindow::MainWindow(QWidget *parent, std::unique_ptr<AutoStart> autoStart)
         return;
     }
 
+    UiTheme::apply(*qApp, database_.setting(QStringLiteral("appearance_preset"), QStringLiteral("mist")));
+
     globalShortcut_ = new GlobalShortcut(this);
     connect(globalShortcut_, &GlobalShortcut::activated, this, &MainWindow::showMainWindow);
     buildUi();
+    sidebarCollapsed_ = database_.setting(QStringLiteral("sidebar_collapsed"), QStringLiteral("false")) == QStringLiteral("true");
+    updateSidebarAppearance();
 #ifdef Q_OS_WIN
     if (QApplication::platformName() == QStringLiteral("windows")) {
         // Dedicate the caption to window controls while Qt keeps the window
@@ -119,10 +124,7 @@ void MainWindow::buildUi()
     headerLayout->setSpacing(12);
     sidebarToggleButton_ = new QPushButton(header);
     sidebarToggleButton_->setObjectName(QStringLiteral("sidebarToggle"));
-    sidebarToggleButton_->setIcon(UiTheme::icon(QStringLiteral("panel-left")));
     sidebarToggleButton_->setIconSize(QSize(18, 18));
-    sidebarToggleButton_->setToolTip(QStringLiteral("收起侧边栏"));
-    sidebarToggleButton_->setAccessibleName(QStringLiteral("收起侧边栏"));
     sidebarToggleButton_->setCursor(Qt::PointingHandCursor);
     headerLayout->addWidget(sidebarToggleButton_);
     headerLayout->addStretch(1);
@@ -134,7 +136,6 @@ void MainWindow::buildUi()
     bodyLayout->setSpacing(0);
     sidebar_ = new QFrame(root);
     sidebar_->setObjectName(QStringLiteral("sidebar"));
-    sidebar_->setFixedWidth(ExpandedSidebarWidth);
     buildNavigation(sidebar_);
     bodyLayout->addWidget(sidebar_);
 
@@ -148,9 +149,9 @@ void MainWindow::buildUi()
 
 void MainWindow::buildNavigation(QWidget *parent)
 {
-    sidebarLayout_ = new QVBoxLayout(parent);
-    sidebarLayout_->setContentsMargins(14, 16, 14, 16);
-    sidebarLayout_->setSpacing(6);
+    auto *layout = new QVBoxLayout(parent);
+    layout->setContentsMargins(14, 16, 14, 16);
+    layout->setSpacing(6);
 
     const QStringList labels {
         QStringLiteral("日历"),
@@ -161,7 +162,7 @@ void MainWindow::buildNavigation(QWidget *parent)
     };
 
     const QStringList icons {
-        QStringLiteral("calendar"), QStringLiteral("folder"), QStringLiteral("workflow"),
+        QStringLiteral("calendar"), QStringLiteral("folder"), QStringLiteral("toolbox"),
         QStringLiteral("clipboard"), QStringLiteral("settings")
     };
 
@@ -176,9 +177,9 @@ void MainWindow::buildNavigation(QWidget *parent)
         button->setToolTip(labels.at(i));
         button->setCursor(Qt::PointingHandCursor);
         button->setAccessibleName(labels.at(i));
-        if (i == labels.size() - 1) sidebarLayout_->addStretch(1);
+        if (i == labels.size() - 1) layout->addStretch(1);
         navigationButtons_.append(button);
-        sidebarLayout_->addWidget(button);
+        layout->addWidget(button);
 
         connect(button, &QPushButton::clicked, this, [this, i] {
             switchToPage(i);
@@ -189,7 +190,18 @@ void MainWindow::buildNavigation(QWidget *parent)
 
 void MainWindow::toggleSidebar()
 {
-    sidebarCollapsed_ = !sidebarCollapsed_;
+    const bool collapsed = !sidebarCollapsed_;
+    QString error;
+    if (!database_.setSetting(QStringLiteral("sidebar_collapsed"), collapsed ? QStringLiteral("true") : QStringLiteral("false"), &error)) {
+        QMessageBox::warning(this, QStringLiteral("无法保存侧边栏设置"), error);
+        return;
+    }
+    sidebarCollapsed_ = collapsed;
+    updateSidebarAppearance();
+}
+
+void MainWindow::updateSidebarAppearance()
+{
     if (sidebar_ == nullptr) {
         return;
     }
@@ -198,22 +210,13 @@ void MainWindow::toggleSidebar()
 
     for (QPushButton *button : navigationButtons_) {
         button->setText(sidebarCollapsed_ ? QString() : button->property("expandedText").toString());
-        if (button->property("updateTag").toString().isEmpty())
-            button->setToolTip(button->property("expandedText").toString());
-        button->setStyleSheet(sidebarCollapsed_
-                                  ? QStringLiteral("text-align: center; padding: 10px 0;")
-                                  : QString());
+        UiTheme::setRole(button, sidebarCollapsed_ ? "collapsedNav" : "");
     }
 
-    sidebarToggleButton_->setAccessibleName(sidebarCollapsed_ ? QStringLiteral("展开侧边栏") : QStringLiteral("收起侧边栏"));
-    sidebarToggleButton_->setToolTip(sidebarCollapsed_ ? QStringLiteral("展开侧边栏")
-                                                       : QStringLiteral("收起侧边栏"));
-}
-
-void MainWindow::buildPages()
-{
-    // This method is kept separate so the page shell can grow without changing the
-    // navigation/tray wiring.
+    sidebarToggleButton_->setIcon(UiTheme::icon(sidebarCollapsed_ ? QStringLiteral("panel-left-expand") : QStringLiteral("panel-left-collapse")));
+    const QString action = sidebarCollapsed_ ? QStringLiteral("展开侧边栏") : QStringLiteral("收起侧边栏");
+    sidebarToggleButton_->setAccessibleName(action);
+    sidebarToggleButton_->setToolTip(action);
 }
 
 void MainWindow::buildTray()
@@ -286,8 +289,7 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
 
         auto *settingsCard = makeSection(settingsPage);
         auto *settingsCardLayout = new QVBoxLayout(settingsCard);
-        settingsCardLayout->setContentsMargins(24, 22, 24, 24);
-        settingsCardLayout->setSpacing(12);
+        UiTheme::setLayoutMetrics(settingsCardLayout, {24, 22, 24, 24}, 12);
 
         auto *runtimeTitle = new QLabel(QStringLiteral("运行与托盘"), settingsCard);
         runtimeTitle->setObjectName(QStringLiteral("cardTitle"));
@@ -349,9 +351,42 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
 
 
         settingsLayout->addWidget(settingsCard);
+        auto *appearanceCard = makeSection(settingsPage);
+        auto *appearanceRow = new QHBoxLayout(appearanceCard);
+        UiTheme::setLayoutMetrics(appearanceRow, {24, 22, 24, 24});
+        appearanceRow->setSpacing(24);
+        auto *appearanceTitle = new QLabel(QStringLiteral("风格切换"), appearanceCard);
+        appearanceTitle->setObjectName(QStringLiteral("cardTitle"));
+        appearanceRow->addWidget(appearanceTitle, 0, Qt::AlignVCenter);
+        appearanceRow->addStretch(1);
+        auto *themeChoice = new QComboBox(appearanceCard);
+        themeChoice->setObjectName(QStringLiteral("appearancePreset"));
+        themeChoice->setAccessibleName(QStringLiteral("界面风格"));
+        themeChoice->addItem(QStringLiteral("云白 × 雾蓝"), QStringLiteral("mist"));
+        themeChoice->addItem(QStringLiteral("暖白 × 陶褐"), QStringLiteral("paper"));
+        themeChoice->addItem(QStringLiteral("冷灰 × 墨蓝（紧凑）"), QStringLiteral("precision"));
+        themeChoice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        themeChoice->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        themeChoice->setCurrentIndex(themeChoice->findData(UiTheme::presetId()));
+        appearanceTitle->setBuddy(themeChoice);
+        appearanceRow->addWidget(themeChoice, 0, Qt::AlignVCenter);
+        connect(themeChoice, &QComboBox::currentIndexChanged, this, [this, themeChoice](int index) {
+            const QString previous = UiTheme::presetId();
+            const QString selected = themeChoice->itemData(index).toString();
+            QString error;
+            if (!database_.setSetting(QStringLiteral("appearance_preset"), selected, &error)) {
+                const QSignalBlocker blocker(themeChoice);
+                themeChoice->setCurrentIndex(themeChoice->findData(previous));
+                QMessageBox::warning(this, QStringLiteral("无法保存外观设置"), error);
+                return;
+            }
+            UiTheme::apply(*qApp, selected);
+        });
+
+        settingsLayout->addWidget(appearanceCard);
         auto *update = new UpdateWidget(settingsPage);
         UiTheme::setSurface(update, "section");
-        update->layout()->setContentsMargins(24, 22, 24, 24);
+        UiTheme::setLayoutMetrics(update->layout(), {24, 22, 24, 24}, update->layout()->spacing());
         connect(update, &UpdateWidget::installRequested, this, &MainWindow::installUpdate);
         connect(update, &UpdateWidget::updateAvailableChanged, this, &MainWindow::setAvailableUpdate);
         connect(update, &UpdateWidget::updateNotificationRequested, this, [this](const QString &tag) {
@@ -396,7 +431,6 @@ void MainWindow::setAvailableUpdate(const QString &tag)
     auto *settings = navigationButtons_.at(4);
     const auto text = tag.isEmpty() ? QStringLiteral("设置") : QStringLiteral("设置 · 有更新");
     settings->setProperty("expandedText", text);
-    settings->setProperty("updateTag", tag);
     settings->setText(sidebarCollapsed_ ? QString() : text);
     settings->setToolTip(tag.isEmpty() ? text : QStringLiteral("设置：有新版本 %1").arg(tag));
     settings->setAccessibleName(settings->toolTip());

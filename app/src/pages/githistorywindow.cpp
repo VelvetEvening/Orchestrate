@@ -40,7 +40,7 @@ void tableStyle(QTableView *table) {
 struct Edge { int from; int to; bool upper; int color; };
 struct GraphRow { int lane = 0; int color = 0; QList<Edge> edges; };
 QColor laneColor(int lane) {
-    static const char *colors[]{UiTheme::Accent, UiTheme::Success, UiTheme::Warning, "#805889", "#32747b", UiTheme::Danger};
+    const char *colors[]{UiTheme::Accent, UiTheme::Success, UiTheme::Warning, "#805889", "#32747b", UiTheme::Danger};
     return QColor(colors[lane % 6]);
 }
 }
@@ -186,6 +186,7 @@ GitHistoryWindow::GitHistoryWindow(const QString &projectName, const RepositoryT
     compareRefresh_ = new QPushButton(QStringLiteral("刷新对比"),comparisonPage); compareRefresh_->setObjectName(QStringLiteral("gitCompareRefresh"));
     compareToolbar->addWidget(remote_); compareToolbar->addWidget(branchSearch_,1); compareToolbar->addWidget(differences_); compareToolbar->addWidget(compareRefresh_); comparisonLayout->addLayout(compareToolbar);
     branches_ = new QTableWidget(0,4,comparisonPage); branches_->setObjectName(QStringLiteral("gitBranchComparison")); tableStyle(branches_);
+    branches_->setProperty("themeForegroundColumn", 1);
     branches_->setToolTip(QStringLiteral("同名分支按最新提交编号比较；不一致不表示领先或落后。"));
     branches_->setHorizontalHeaderLabels({QStringLiteral("分支"),QStringLiteral("状态"),QStringLiteral("本地提交"),QStringLiteral("远端提交")});
     branches_->horizontalHeader()->setSectionResizeMode(0,QHeaderView::Stretch); branches_->setColumnWidth(1,150); branches_->setColumnWidth(2,200); branches_->setColumnWidth(3,200); comparisonLayout->addWidget(branches_,1);

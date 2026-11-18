@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Orchestrate VERSION 4.0.0 LANGUAGES CXX)
+project(Orchestrate VERSION 4.1.0 LANGUAGES CXX)
 
 configure_file(src/version.h.in generated/version.h @ONLY)
 
@@ -112,7 +112,6 @@ add_library(OrchestrateApplication STATIC
     src/pages/collaborationrecorddialog.h
     src/pages/automationpage.cpp
     src/pages/automationpage.h
-    src/automation/manifestimport.cpp src/automation/manifestimport.h
 )
 target_link_libraries(OrchestrateApplication PUBLIC
     OrchestrateData OrchestrateAutomation OrchestrateText OrchestrateShortcut OrchestrateAutoStart

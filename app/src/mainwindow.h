@@ -15,7 +15,6 @@ class QMenu;
 class QPushButton;
 class QStackedWidget;
 class QSystemTrayIcon;
-class QVBoxLayout;
 
 class MainWindow final : public QMainWindow
 {
@@ -38,10 +37,10 @@ private:
     bool savePendingChanges();
     void buildUi();
     void buildNavigation(QWidget *parent);
-    void buildPages();
     void buildTray();
     void switchToPage(int index, bool confirmLeave = true);
     void toggleSidebar();
+    void updateSidebarAppearance();
     void quitApplication();
     void installUpdate();
     void refreshAutoStartSettings(const QString &error = QString());
@@ -54,7 +53,6 @@ private:
     QPushButton *systemStartupButton_ = nullptr;
     QFrame *sidebar_ = nullptr;
     GlobalShortcut *globalShortcut_ = nullptr;
-    QVBoxLayout *sidebarLayout_ = nullptr;
     QPushButton *sidebarToggleButton_ = nullptr;
     QStackedWidget *pageStack_ = nullptr;
     QSystemTrayIcon *trayIcon_ = nullptr;

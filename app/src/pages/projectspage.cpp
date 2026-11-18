@@ -99,7 +99,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     auto *listCard = surface(splitter, "index");
     listCard->setObjectName(QStringLiteral("workspaceIndex"));
     auto *left = new QVBoxLayout(listCard);
-    left->setContentsMargins(16,22,16,24);
+    UiTheme::setLayoutMetrics(left, {16,22,16,24}, 6);
     projectStatusTabs_ = new QTabBar(listCard);
     projectStatusTabs_->setObjectName(QStringLiteral("projectStatusTabs"));
     projectStatusTabs_->setAccessibleName(QStringLiteral("项目状态筛选"));
@@ -144,9 +144,8 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     create->setObjectName(QStringLiteral("primaryButton"));
     left->addWidget(create);
     details_ = surface(splitter, "content");
-    detailsLayout_ = new QVBoxLayout(details_);
-    detailsLayout_->setContentsMargins(24,22,24,24);
-    detailsLayout_->setSpacing(12);
+    auto *detailsLayout = new QVBoxLayout(details_);
+    UiTheme::setLayoutMetrics(detailsLayout, {24,22,24,24}, 12);
     auto *header = new QHBoxLayout;
     projectTitle_ = label(QString(), QStringLiteral("objectTitle"), details_);
     projectTitle_->setWordWrap(true);
@@ -163,26 +162,18 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     auto *createFolder = new QPushButton(QStringLiteral("新建文件夹"), details_);
     createFolder->setObjectName(QStringLiteral("createRecordFolder"));
     header->addWidget(createFolder);
-    detailsLayout_->addLayout(header);
+    detailsLayout->addLayout(header);
 
     auto *recordsPanel_ = new QWidget(details_);
     recordsPanel_->setObjectName(QStringLiteral("recordsPanel"));
     auto *records = new QVBoxLayout(recordsPanel_);
-    records->setContentsMargins(0,0,0,0);
-    records->setSpacing(10);
-    auto *searchRow = new QHBoxLayout;
-    searchRow->setSpacing(10);
+    UiTheme::setLayoutMetrics(records, {0,0,0,0}, 10);
     search_ = new QLineEdit(recordsPanel_);
     search_->setObjectName(QStringLiteral("recordSearch"));
     search_->setPlaceholderText(QStringLiteral("搜索标题、摘要或文件夹"));
     search_->setAccessibleName(QStringLiteral("搜索协作记录"));
     search_->setClearButtonEnabled(true);
-    searchRow->addWidget(search_,1);
-    auto *add = new QPushButton(QStringLiteral("添加记录"), recordsPanel_);
-    add->setObjectName(QStringLiteral("addWorkRecordButton"));
-    UiTheme::setRole(add, "primary");
-    searchRow->addWidget(add);
-    records->addLayout(searchRow);
+    records->addWidget(search_);
     auto *orderedRecords = new SiblingOrderTree(recordsPanel_);
     workList_ = orderedRecords;
     orderedRecords->saveOrder = [this](QTreeWidgetItem *item, const QList<int> &ids) {
@@ -231,13 +222,11 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     recordHint_->setWordWrap(true);
 
     records->addWidget(recordHint_);
-    auto *actions = new QHBoxLayout;
-    deleteWorkButton_ = new QPushButton(QStringLiteral("删除"), recordsPanel_);
-    UiTheme::setRole(deleteWorkButton_, "danger");
-    actions->addWidget(deleteWorkButton_);
-    actions->addStretch();
-    records->addLayout(actions);
-    detailsLayout_->addWidget(recordsPanel_,1);
+    auto *add = new QPushButton(QStringLiteral("添加记录"), recordsPanel_);
+    add->setObjectName(QStringLiteral("addWorkRecordButton"));
+    UiTheme::setRole(add, "primary");
+    records->addWidget(add, 0, Qt::AlignLeft);
+    detailsLayout->addWidget(recordsPanel_,1);
     splitter->addWidget(listCard);
     splitter->addWidget(details_);
     splitter->setSizes({230,650});
@@ -259,12 +248,10 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     });
     connect(add, &QPushButton::clicked, this, [this]{ recordDialog(true); });
     connect(createFolder, &QPushButton::clicked, this, [this]{ folderDialog(true); });
-    connect(deleteWorkButton_, &QPushButton::clicked, this, &ProjectsPage::deleteWorkRecord);
     connect(workList_, &QTreeWidget::itemDoubleClicked, this, [this]{ recordDialog(false); });
-    connect(workList_, &QTreeWidget::itemSelectionChanged, this, &ProjectsPage::updateRecordActions);
     connect(workList_, &QTreeWidget::customContextMenuRequested, this, &ProjectsPage::showRecordContextMenu);
-    connect(workList_, &QTreeWidget::itemExpanded, this, [this]{ saveExpandedFolders(); updateRecordActions(); });
-    connect(workList_, &QTreeWidget::itemCollapsed, this, [this]{ saveExpandedFolders(); updateRecordActions(); });
+    connect(workList_, &QTreeWidget::itemExpanded, this, &ProjectsPage::saveExpandedFolders);
+    connect(workList_, &QTreeWidget::itemCollapsed, this, &ProjectsPage::saveExpandedFolders);
     connect(search_, &QLineEdit::textChanged, this, &ProjectsPage::filterRecords);
     connect(projectStatusTabs_, &QTabBar::currentChanged, this, [this](int index) {
         loadProjects(selectedProjectIds_[index]);
@@ -285,7 +272,6 @@ void ProjectsPage::loadProjects(int preferred)
     for (const auto &project : projects) {
         if (project.completed != completed) continue;
         auto *item = new QListWidgetItem(project.name, projectList_);
-        item->setSizeHint(QSize(0,44));
         item->setData(Qt::UserRole,project.id);
         item->setData(SiblingOrderScopeRole, QStringLiteral("projects"));
         item->setData(Qt::UserRole + 1, project.directory);
@@ -523,7 +509,6 @@ void ProjectsPage::refreshWorkRecords()
     const QSignalBlocker blocker(workList_);
     workList_->clear();
     recordsProjectId_ = current_.id;
-    deleteWorkButton_->setEnabled(false);
     recordHint_->hide();
     EmptyViewHint::update(workList_, QString());
     if (current_.id<=0) return;
@@ -545,7 +530,6 @@ void ProjectsPage::refreshWorkRecords()
         item->setIcon(0,folder.starred ? starredIcon : folderIcon);
         item->setData(0,Qt::AccessibleTextRole,folder.starred
             ? folder.name + QStringLiteral("，重点文件夹，已置顶") : folder.name);
-        item->setSizeHint(0,QSize(0,44));
         item->setToolTip(0,folder.name + (folder.starred
             ? QStringLiteral("\n重点文件夹 · 已置顶\n右键取消重点标记、重命名或删除文件夹")
             : QStringLiteral("\n右键标记重点并置顶、重命名或删除文件夹")));
@@ -558,7 +542,6 @@ void ProjectsPage::refreshWorkRecords()
         auto *folder = folderItems.value(record.folderId);
         auto *item = folder ? new QTreeWidgetItem(folder) : new QTreeWidgetItem(workList_);
         item->setText(0,recordTitle(record));
-        item->setSizeHint(0,QSize(0,44));
         item->setData(0,Qt::UserRole,record.id);
         item->setData(0,FolderRole,false);
         item->setData(0,SiblingOrderScopeRole,QStringLiteral("records.%1").arg(record.folderId));
@@ -618,15 +601,6 @@ void ProjectsPage::filterRecords()
     // the visible row count stays the same. Refresh their accessible mapping.
     workList_->doItemsLayout();
     resetTreeAccessibility(workList_);
-    updateRecordActions();
-}
-
-void ProjectsPage::updateRecordActions()
-{
-    const auto *item = workList_->currentItem();
-    const bool selected = item && !item->data(0,FolderRole).toBool() && !item->isHidden()
-        && (!item->parent() || (!item->parent()->isHidden() && item->parent()->isExpanded()));
-    deleteWorkButton_->setEnabled(selected);
 }
 
 int ProjectsPage::selectedFolderId() const

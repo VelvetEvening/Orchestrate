@@ -116,7 +116,7 @@ void ContentWorkspace::present(const QString &key, QDialog *page, QWidget *sourc
     auto *layout = new QVBoxLayout(entry->frame);
     layout->setContentsMargins(0,0,0,0); layout->setSpacing(0);
     auto *header = new QWidget(entry->frame); header->setObjectName(QStringLiteral("contentHeader"));
-    auto *row = new QHBoxLayout(header); row->setContentsMargins(20,10,20,10); row->setSpacing(10);
+    auto *row = new QHBoxLayout(header); UiTheme::setLayoutMetrics(row, {20,10,20,10}, 10);
     entry->back = new QPushButton(UiTheme::icon(QStringLiteral("chevron-left")), QStringLiteral("返回"), header);
     entry->back->setObjectName(QStringLiteral("contentBack"));
     entry->back->setToolTip(dynamic_cast<ContentLeaveGuard *>(page)

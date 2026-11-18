@@ -25,6 +25,7 @@ signals:
     void mathStatusChanged(const QString &status);
     void sourceModeRequested();
 protected:
+    void changeEvent(QEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     void inputMethodEvent(QInputMethodEvent *event) override;
     void insertFromMimeData(const QMimeData *data) override;
