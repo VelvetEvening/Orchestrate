@@ -2,7 +2,7 @@
 
 面向 Windows 的轻量桌面工作台，把日历、项目、工具和剪贴板放在一起。使用 Qt Widgets 与 SQLite，数据保存在程序目录，无需账号或云服务。
 
-[下载正式版便携包](https://github.com/VelvetEvening/Orchestrate/releases/latest) · [v4.1.0 更新说明（待发布）](CHANGELOG.md#v410)
+[下载正式版便携包](https://github.com/VelvetEvening/Orchestrate/releases/latest) · [v4.1.0 更新说明](CHANGELOG.md)
 
 ## 功能
 
