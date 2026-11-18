@@ -29,8 +29,8 @@ ctest --test-dir app/build-qt --output-on-failure --no-tests=error
 3. 从仓库根目录打包，按安装位置覆盖 `QtRoot`、`MinGWRoot`、`CMakeExe`、`NinjaExe`、`QtSourceDir`：
 
    ```powershell
-   ./app/package.ps1 -ReleaseTag v4.0.0
-   python app/tests/verify_package.py 4.0.0 9
+   ./app/package.ps1 -ReleaseTag v4.1.0
+   python app/tests/verify_package.py 4.1.0 9
    ```
 
 4. 确认 CI、包验收及必要的原生交互检查通过，为已验收提交打标签，发布 ZIP 与 `.zip.sha256`。Release 说明取自同版本的 `CHANGELOG.md` 条目。

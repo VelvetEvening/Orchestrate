@@ -1,6 +1,6 @@
 # 工具接入协议 v1
 
-适用于 Orchestrate v4.0.0。工具自行管理业务、依赖、凭证、调度和日志；客户端负责接入、启动命令、参数表单与状态展示。[可运行样例](examples/tool-adapter/README.md)可直接复制。
+工具自行管理业务、依赖、凭证、调度和日志。Orchestrate 负责接入、启动命令、显示参数表单和运行状态。[可运行样例](examples/tool-adapter/README.md)
 
 ## 接入与声明
 

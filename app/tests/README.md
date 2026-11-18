@@ -41,4 +41,4 @@ Remove-Item Env:ORCHESTRATE_TEST_STRESS
 - 日志位于 `app/build-qt/Testing/Temporary/` 和各套件的 `results.txt`。CI 失败时上传日志。
 - 真实 WSL 用例分别通过 `ORCHESTRATE_WSL_TEST_DISTRO`、`ORCHESTRATE_TEST_WSL` 显式选择发行版；offscreen 下的原生标题栏检查跳过。套件通过不代表这些现场场景已执行。
 
-发布包另用 `python app/tests/verify_package.py 4.0.0 9` 验收；真实输入法、托盘、多屏和远程认证按相关改动补充检查。
+发布包的验收命令见[构建与发布](../README.md#发布)。真实输入法、托盘、多屏和远程认证按相关改动补充检查。
