@@ -817,9 +817,9 @@ bool AppDatabase::saveClipboardItem(ClipboardItem *item, QString *errorMessage)
     return ClipboardRepository(connectionName_).saveClipboardItem(item, errorMessage);
 }
 
-bool AppDatabase::captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage, int editingItemId, const QList<int> &editingItemIds)
+bool AppDatabase::captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage, const QList<int> &editingItemIds)
 {
-    return ClipboardRepository(connectionName_).captureClipboardItem(item, historyLimit, errorMessage, editingItemId, editingItemIds);
+    return ClipboardRepository(connectionName_).captureClipboardItem(item, historyLimit, errorMessage, editingItemIds);
 }
 
 bool AppDatabase::moveClipboardItems(const QList<int> &ids, int tabId, int folderId, QString *errorMessage)

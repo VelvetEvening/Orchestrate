@@ -23,8 +23,9 @@ public:
     bool addClipboardFolder(int tabId, const QString &name, int *id = nullptr, QString *errorMessage = nullptr);
     bool renameClipboardFolder(int id, const QString &name, QString *errorMessage = nullptr);
     bool deleteClipboardFolder(int id, QString *errorMessage = nullptr);
-    bool saveClipboardItem(ClipboardItem *item, QString *errorMessage = nullptr);
-    bool captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage = nullptr, int editingItemId = 0, const QList<int> &editingItemIds = {});
+    enum class InsertAt { Front, Back };
+    bool saveClipboardItem(ClipboardItem *item, QString *errorMessage = nullptr, InsertAt insertAt = InsertAt::Back);
+    bool captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage = nullptr, const QList<int> &editingItemIds = {});
     bool moveClipboardItems(const QList<int> &ids, int tabId, int folderId, QString *errorMessage = nullptr);
     bool deleteClipboardItems(const QList<int> &ids, QString *errorMessage = nullptr);
     bool reorderClipboardTabs(const QList<int> &ids, QString *errorMessage = nullptr);

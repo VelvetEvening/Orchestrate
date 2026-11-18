@@ -184,6 +184,8 @@ private slots:
         db.reset();
         db = std::make_unique<AppDatabase>();
         QVERIFY2(db->open(&error), qPrintable(error));
+        QVERIFY2(sql("SELECT id FROM clipboard_items INDEXED BY clipboard_auto_fingerprint "
+                     "WHERE tab_id=1 AND folder_id IS NULL AND automatic=1 LIMIT 0"), qPrintable(error));
 
         auto repeat = item("A");
         QVERIFY(sql("CREATE TRIGGER block_promotion BEFORE UPDATE OF position ON clipboard_items "
@@ -245,6 +247,30 @@ private slots:
         QVERIFY(sql("CREATE TRIGGER fail_trim BEFORE DELETE ON clipboard_items BEGIN SELECT RAISE(ABORT,'cleanup failure'); END"));
         auto failed=item("must roll back insertion too"); QVERIFY(!db->captureClipboardItem(&failed,100,&error)); QCOMPARE(failed.id,0);
         QList<int> after; for(const auto &entry:db->clipboardItems(1,0)) after.append(entry.id); QCOMPARE(after,order);
+    }
+
+    void captureSurvivesWhenAllOlderRowsAreBeingEdited() {
+        QList<int> editing;
+        for (int i = 0; i < 100; ++i) {
+            auto entry = item(QStringLiteral("draft %1").arg(i));
+            QVERIFY(db->captureClipboardItem(&entry, 100, &error));
+            editing.append(entry.id);
+        }
+        QVERIFY(sql("CREATE TRIGGER reject_extra_move BEFORE UPDATE OF position ON clipboard_items "
+                    "BEGIN SELECT RAISE(ABORT,'new items should already be at the front'); END"));
+        auto newest = item("new while all older items are protected");
+        QVERIFY2(db->captureClipboardItem(&newest, 100, &error, editing), qPrintable(error));
+        const auto history = db->clipboardItems(1, 0);
+        QCOMPARE(history.size(), 101);
+        QCOMPARE(history.first().id, newest.id);
+
+        const int released = editing.takeFirst();
+        auto next = item("new after one editor closes");
+        QVERIFY2(db->captureClipboardItem(&next, 100, &error, editing), qPrintable(error));
+        QCOMPARE(db->clipboardItems(1, 0).size(), 100);
+        QCOMPARE(db->clipboardItems(1, 0).first().id, next.id);
+        QVERIFY(!db->clipboardItem(released).id);
+        QVERIFY(!db->clipboardItem(newest.id).id);
     }
 
     void editorSurvivesRetentionAndReleasesProtection() {

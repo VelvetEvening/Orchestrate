@@ -103,16 +103,20 @@ bool ClipboardRepository::renameClipboardFolder(int id, const QString &name, QSt
     return query.numRowsAffected()==1 || fail(errorMessage, QStringLiteral("文件夹已不存在。"));
 }
 
-bool ClipboardRepository::saveClipboardItem(ClipboardItem *item, QString *errorMessage)
+bool ClipboardRepository::saveClipboardItem(ClipboardItem *item, QString *errorMessage, InsertAt insertAt)
 {
     if (!item || item->payload.isEmpty() || item->payload.size()>24*1024*1024 || item->title.size()>200
         || item->fingerprint.size()!=32 || !QStringList{"text","html","image","files"}.contains(item->kind))
         return fail(errorMessage, QStringLiteral("条目内容无效或超过容量限制。"));
     QSqlQuery query(QSqlDatabase::database(connectionName_));
     const bool creating=item->id==0;
+    const QVariant folderId = item->folderId > 0 ? QVariant(item->folderId) : QVariant();
     if (creating) {
-        query.prepare(QStringLiteral("INSERT INTO clipboard_items(tab_id,folder_id,title,text,kind,payload,fingerprint,automatic,position,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,(SELECT COALESCE(MAX(position),-1)+1 FROM clipboard_items WHERE tab_id=? AND COALESCE(folder_id,0)=?),?,?)"));
-        query.addBindValue(item->tabId); query.addBindValue(item->folderId>0 ? QVariant(item->folderId) : QVariant());
+        const QString position = insertAt == InsertAt::Front ? QStringLiteral("MIN(position)-1") : QStringLiteral("MAX(position)+1");
+        query.prepare(QStringLiteral(
+            "INSERT INTO clipboard_items(tab_id,folder_id,title,text,kind,payload,fingerprint,automatic,position,created_at,updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,(SELECT COALESCE(%1,0) FROM clipboard_items WHERE tab_id=? AND folder_id IS ?),?,?)").arg(position));
+        query.addBindValue(item->tabId); query.addBindValue(folderId);
     } else {
         query.prepare(QStringLiteral("UPDATE clipboard_items SET title=?,text=?,kind=?,payload=?,fingerprint=?,automatic=0,updated_at=? WHERE id=?"));
     }
@@ -120,7 +124,8 @@ bool ClipboardRepository::saveClipboardItem(ClipboardItem *item, QString *errorM
     query.addBindValue(item->payload); query.addBindValue(item->fingerprint);
     const auto timestamp=nowIso();
     if (creating) {
-        query.addBindValue(item->automatic ? 1 : 0); query.addBindValue(item->tabId); query.addBindValue(item->folderId);
+        query.addBindValue(item->automatic ? 1 : 0); query.addBindValue(item->tabId);
+        query.addBindValue(folderId);
         query.addBindValue(timestamp); query.addBindValue(timestamp);
     } else { query.addBindValue(timestamp); query.addBindValue(item->id); }
     if (!query.exec()) { setError(errorMessage, query); return false; }
@@ -130,7 +135,7 @@ bool ClipboardRepository::saveClipboardItem(ClipboardItem *item, QString *errorM
     return true;
 }
 
-bool ClipboardRepository::captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage, int editingItemId, const QList<int> &editingItemIds)
+bool ClipboardRepository::captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage, const QList<int> &editingItemIds)
 {
     if (!item || item->id!=0) return fail(errorMessage, QStringLiteral("无法记录此剪贴板内容。"));
     auto database=QSqlDatabase::database(connectionName_);
@@ -142,26 +147,29 @@ bool ClipboardRepository::captureClipboardItem(ClipboardItem *item, int historyL
     match.addBindValue(item->fingerprint);
     if (!match.exec()) { setError(errorMessage,match); database.rollback(); return false; }
     ClipboardItem saved=*item; saved.tabId=1; saved.folderId=0; saved.automatic=true;
-    const bool existing = match.next();
-    if (existing) {
+    if (match.next()) {
         saved.id = match.value(0).toInt();
         saved.createdAt = QDateTime::fromString(match.value(1).toString(), Qt::ISODateWithMs);
     }
     match.finish();
-    if (!existing && !saveClipboardItem(&saved,errorMessage)) { database.rollback(); return false; }
-
-    QSqlQuery position(database);
-    position.prepare(QStringLiteral(
-        "UPDATE clipboard_items SET position=(SELECT MIN(position)-1 FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL) "
-        "WHERE id=? AND id<>(SELECT id FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL ORDER BY position,id DESC LIMIT 1)"));
-    position.addBindValue(saved.id);
-    if (!position.exec()) { setError(errorMessage,position); database.rollback(); return false; }
-    if (!existing) {
+    if (saved.id) {
+        QSqlQuery position(database);
+        position.prepare(QStringLiteral(
+            "UPDATE clipboard_items SET position=(SELECT MIN(position)-1 FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL) "
+            "WHERE id=? AND id<>(SELECT id FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL ORDER BY position,id DESC LIMIT 1)"));
+        position.addBindValue(saved.id);
+        if (!position.exec()) { setError(errorMessage,position); database.rollback(); return false; }
+    } else {
+        if (!saveClipboardItem(&saved,errorMessage,InsertAt::Front)) { database.rollback(); return false; }
         QSqlQuery trim(database);
-        // Retained drafts remain protected even while their module is hidden.
-        auto protectedIds=editingItemIds; protectedIds.append(editingItemId);
-        QStringList placeholders; for (int id:protectedIds) { Q_UNUSED(id); placeholders.append(QStringLiteral("?")); }
-        trim.prepare(QStringLiteral("DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1 AND id NOT IN (%1) ORDER BY position DESC,id ASC LIMIT (SELECT MAX(0,COUNT(*)-?) FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1))").arg(placeholders.join(',')));
+        // If every older row is being edited, defer the excess until a later capture.
+        auto protectedIds=editingItemIds; protectedIds.append(saved.id);
+        const QString placeholders = QStringList(protectedIds.size(), QStringLiteral("?")).join(',');
+        trim.prepare(QStringLiteral(
+            "DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items "
+            "WHERE tab_id=1 AND folder_id IS NULL AND automatic=1 AND id NOT IN (%1) "
+            "ORDER BY position DESC,id ASC LIMIT (SELECT MAX(0,COUNT(*)-?) FROM clipboard_items "
+            "WHERE tab_id=1 AND folder_id IS NULL AND automatic=1))").arg(placeholders));
         for (int id:protectedIds) trim.addBindValue(id);
         trim.addBindValue(qBound(100,historyLimit,10000));
         if (!trim.exec()) { setError(errorMessage,trim); database.rollback(); return false; }
