@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Orchestrate VERSION 4.1.0 LANGUAGES CXX)
+project(Orchestrate VERSION 4.1.1 LANGUAGES CXX)
 
 configure_file(src/version.h.in generated/version.h @ONLY)
 
@@ -102,6 +102,7 @@ target_include_directories(OrchestrateAutomation PUBLIC ${CMAKE_CURRENT_SOURCE_D
 
 # Compile the application implementation once for the executable and UI tests.
 add_library(OrchestrateApplication STATIC
+    src/platform/clipboardpaste.cpp src/platform/clipboardpaste.h
     src/mainwindow.cpp
     src/mainwindow.h
     src/pages/calendarpage.cpp

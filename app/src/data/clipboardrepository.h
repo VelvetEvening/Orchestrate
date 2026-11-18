@@ -26,6 +26,7 @@ public:
     enum class InsertAt { Front, Back };
     bool saveClipboardItem(ClipboardItem *item, QString *errorMessage = nullptr, InsertAt insertAt = InsertAt::Back);
     bool captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage = nullptr, const QList<int> &editingItemIds = {});
+    bool promoteClipboardHistoryItem(int id, QString *errorMessage);
     bool moveClipboardItems(const QList<int> &ids, int tabId, int folderId, QString *errorMessage = nullptr);
     bool deleteClipboardItems(const QList<int> &ids, QString *errorMessage = nullptr);
     bool reorderClipboardTabs(const QList<int> &ids, QString *errorMessage = nullptr);
@@ -33,6 +34,7 @@ public:
     bool reorderClipboardItems(int tabId, int folderId, const QList<int> &ids, QString *errorMessage = nullptr);
 
 private:
+    bool mergeTopTextCapture(ClipboardItem *item, const QList<int> &editingItemIds, QString *errorMessage);
     bool reorderClipboard(const QString &table, const QString &where, const QVariantList &bindings,
                           const QList<int> &ids, QString *errorMessage);
 };

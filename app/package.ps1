@@ -1,5 +1,5 @@
 param(
-    [string]$ReleaseTag = 'v4.1.0',
+    [string]$ReleaseTag,
     [string]$QtRoot = 'D:/CodeTools/Qt/Qt/6.11.2/mingw_64',
     [string]$MinGWRoot = 'D:/CodeTools/Qt/Qt/Tools/mingw1310_64',
     [string]$CMakeExe = 'D:/CodeTools/Qt/Qt/Tools/CMake_64/bin/cmake.exe',
@@ -41,6 +41,7 @@ $cmakeText = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'CMakeLists.txt')
 $versionMatch = [regex]::Match($cmakeText, 'project\(Orchestrate VERSION ([0-9]+\.[0-9]+\.[0-9]+)')
 if (-not $versionMatch.Success) { throw 'Cannot read application version from CMakeLists.txt.' }
 $version = $versionMatch.Groups[1].Value
+if (-not $PSBoundParameters.ContainsKey('ReleaseTag')) { $ReleaseTag = "v$version" }
 if ($ReleaseTag -notmatch '^v[0-9]+\.[0-9]+(?:\.[0-9]+)?$') { throw 'ReleaseTag must have the form v1.0 or v1.0.0.' }
 $tagVersion = $ReleaseTag.Substring(1)
 if ($tagVersion.Split('.').Count -eq 2) { $tagVersion += '.0' }

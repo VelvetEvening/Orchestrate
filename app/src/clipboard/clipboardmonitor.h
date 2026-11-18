@@ -13,7 +13,7 @@ public:
     int historyLimit() const { return historyLimit_; }
     bool setHistoryLimit(int limit, QString *error=nullptr);
     void protectEditingItem(int id, bool protect) { if (id>0) { if (protect) editingItems_.insert(id); else editingItems_.remove(id); } }
-    bool copyItem(int id, QString *error=nullptr);
+    bool copyItem(int id, QString *error=nullptr, quint32 *writtenSequence=nullptr);
 signals:
     void recorded();
     void captureError(const QString &message);
@@ -22,6 +22,7 @@ private:
     AppDatabase *database_;
     bool enabled_=false;
     bool writing_=false;
+    quint32 lastSequence_=0;
     int historyLimit_=500;
     QSet<int> editingItems_;
     QTimer timer_;

@@ -21,13 +21,10 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollBar>
-#include <QScopeGuard>
 #include <QShortcut>
 #include <QShowEvent>
 #include <QSignalBlocker>
 #include <QSpinBox>
-#include <QSplitter>
-#include <QStyle>
 #include <QTabBar>
 #include <QTimer>
 #include <QTreeWidgetItemIterator>
@@ -163,6 +160,20 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent)
     listening->setCheckable(true);
     listening->setChecked(monitor_->enabled());
     listening->setToolTip(QStringLiteral("开启后自动记录新复制的内容；关闭后仍可使用已保存的条目。"));
+    pasteOnUse_=settingsMenu->addAction(QStringLiteral("取用后粘贴到上一个窗口"));
+    pasteOnUse_->setObjectName("clipboardPasteOnUse");
+    pasteOnUse_->setCheckable(true);
+    pasteOnUse_->setChecked(database_->setting("clipboard.paste_on_use","false")=="true");
+    connect(pasteOnUse_,&QAction::toggled,this,[this](bool enabled) {
+        QString error;
+        if (!database_->setSetting("clipboard.paste_on_use",enabled ? "true" : "false",&error)) {
+            QSignalBlocker blocker(pasteOnUse_);
+            pasteOnUse_->setChecked(!enabled);
+            report(error);
+            return;
+        }
+        emit pasteOnUseChanged(enabled);
+    });
     settingsMenu->addSeparator();
     auto *history=settingsMenu->addAction(QStringLiteral("历史设置…"));
     settings->setMenu(settingsMenu);
@@ -267,6 +278,7 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent)
     refreshTabs(database_->setting("clipboard.tab","1").toInt());
 }
 
+bool ClipboardPage::pasteOnUse() const { return pasteOnUse_->isChecked(); }
 int ClipboardPage::tabId() const { return tabs_->tabData(tabs_->currentIndex()).toInt(); }
 QList<int> ClipboardPage::selectedIds() const
 {
@@ -386,16 +398,11 @@ void ClipboardPage::refreshItems()
         : QStringLiteral("没有找到匹配内容\n尝试更短的关键词，或清空搜索查看全部内容。"));
 }
 
-void ClipboardPage::updateActions()
-{
-    const auto ids=selectedIds(); const bool single=ids.size()==1;
-    edit_->setEnabled(single); remove_->setEnabled(!ids.isEmpty());
-}
-
 void ClipboardPage::updatePreview()
 {
-    updateActions(); previewImage_->hide(); previewText_->show();
     const auto ids=selectedIds();
+    edit_->setEnabled(ids.size()==1); remove_->setEnabled(!ids.isEmpty());
+    previewImage_->hide(); previewText_->show();
     previewPane_->setVisible(ids.size()==1);
     if (ids.size()!=1) {
         previewText_->clear(); return;
@@ -415,9 +422,11 @@ void ClipboardPage::copySelected()
 {
     const auto ids=selectedIds(); if (ids.size()!=1) return;
     QString error;
-    if (!monitor_->copyItem(ids.first(),&error)) { report(error); return; }
+    quint32 sequence=0;
+    if (!monitor_->copyItem(ids.first(),&error,&sequence)) { report(error); return; }
     status_->hide();
-    emit hideRequested();
+    dirty_=true;
+    emit hideRequested(pasteOnUse_->isChecked(),sequence);
 }
 
 void ClipboardPage::addTab()
@@ -478,7 +487,7 @@ void ClipboardPage::folderMenu(const QPoint &position)
 void ClipboardPage::itemMenu(const QPoint &position)
 {
     if (const auto *item=items_->itemAt(position); item && item->data(0,FolderRole).toBool()) { folderMenu(position); return; }
-    QMenu menu(this); auto *copy=menu.addAction(QStringLiteral("复制并收起")); auto *edit=menu.addAction(QStringLiteral("编辑"));
+    QMenu menu(this); auto *copy=menu.addAction(pasteOnUse_->isChecked() ? QStringLiteral("复制并粘贴到上一个窗口") : QStringLiteral("复制并收起")); auto *edit=menu.addAction(QStringLiteral("编辑"));
     auto *remove=menu.addAction(tabId()==1 ? QStringLiteral("删除") : QStringLiteral("删除…"));
     const auto ids=selectedIds(); copy->setEnabled(ids.size()==1); edit->setEnabled(ids.size()==1); remove->setEnabled(!ids.isEmpty());
     const auto *action=menu.exec(items_->viewport()->mapToGlobal(position));
@@ -501,7 +510,7 @@ void ClipboardPage::editItem(bool creating)
     const QString key=creating ? QStringLiteral("clipboard/new/%1/%2").arg(item.tabId).arg(item.folderId)
         : QStringLiteral("clipboard/item/%1").arg(item.id);
     if (workspace && workspace->activate(key,this)) return;
-    auto *dialog=new DraftDialog(this); editor_=dialog;
+    auto *dialog=new DraftDialog(this);
     dialog->setObjectName(QStringLiteral("clipboardEditor"));
     dialog->setWindowTitle(creating ? QStringLiteral("新建剪贴板条目") : QStringLiteral("编辑剪贴板条目"));
     dialog->resize(640,470);
@@ -517,15 +526,19 @@ void ClipboardPage::editItem(bool creating)
     header->addLayout(titleLayout,1);
     header->addWidget(dialog->createSaveStatus(QStringLiteral("clipboardEditorError")),1);
     layout->addLayout(header);
-    const bool editable=creating || item.kind=="text";
+    const bool editable=creating || item.kind=="text" || item.kind=="html";
     auto *body=new TextLayoutGuard::Edit(dialog); body->setObjectName(QStringLiteral("clipboardItemBody"));
     body->setReadOnly(!editable); TextLayoutGuard::setPlainText(body,editable ? item.text : item.text.left(200000));
     body->setPlaceholderText(QStringLiteral("填写要保存的文本…"));
     auto saved=std::make_shared<AppDatabase::ClipboardItem>(item);
     auto savedBody=std::make_shared<QString>(body->toPlainText());
-    if (!editable) {
-        auto *formatRow=new QHBoxLayout;
-        auto *hint=label(QStringLiteral("此条目保留原始格式，可修改标题。需要修改正文时，可另存为纯文本条目。"),"muted",dialog);
+    QWidget *formatOptions=nullptr;
+    if (!creating && item.kind!="text") {
+        formatOptions=new QWidget(dialog);
+        auto *formatRow=new QHBoxLayout(formatOptions);
+        formatRow->setContentsMargins(0,0,0,0);
+        auto *hint=label(editable ? QStringLiteral("修改正文后，原条目将保存为纯文本。只改标题会保留原格式。")
+                                  : QStringLiteral("可修改标题。需要编辑文字时，可另存为纯文本条目。"),"muted",formatOptions);
         hint->setWordWrap(true); formatRow->addWidget(hint,1);
         if (!item.text.isEmpty()) {
             auto *asText=new QPushButton(QStringLiteral("另存为纯文本"),dialog); asText->setAutoDefault(false);
@@ -533,7 +546,9 @@ void ClipboardPage::editItem(bool creating)
             connect(asText,&QPushButton::clicked,dialog,[=,this] {
                 AppDatabase::ClipboardItem copy; copy.tabId=saved->tabId; copy.folderId=saved->folderId;
                 copy.title=title->text().trimmed(); QString error;
-                if (!ClipboardContent::plainText(saved->text,&copy,&error) || !database_->saveClipboardItem(&copy,&error)) {
+                const auto draft = body->toPlainText();
+                const auto &text = editable && draft!=*savedBody ? draft : saved->text;
+                if (!ClipboardContent::plainText(text,&copy,&error) || !database_->saveClipboardItem(&copy,&error)) {
                     dialog->showSaveError(error); return;
                 }
                 if (dialog->dirty && dialog->dirty()) dialog->updateSaveStatus();
@@ -541,7 +556,7 @@ void ClipboardPage::editItem(bool creating)
                 refreshItems();
             });
         }
-        layout->addLayout(formatRow);
+        layout->addWidget(formatOptions);
     }
     layout->addWidget(body,1);
     dialog->dirty=[=] { return title->text()!=saved->title || (editable && body->toPlainText()!=*savedBody); };
@@ -563,6 +578,7 @@ void ClipboardPage::editItem(bool creating)
             && !ClipboardContent::plainText(body->toPlainText(),&updated,&error)) { dialog->showSaveError(error); return false; }
         if (!database_->saveClipboardItem(&updated,&error)) { dialog->showSaveError(error); return false; }
         *saved=updated; *savedBody=body->toPlainText(); title->setText(saved->title);
+        if (formatOptions && saved->kind=="text") formatOptions->hide();
         if (workspace) workspace->rekey(dialog->property("contentKey").toString(),QStringLiteral("clipboard/item/%1").arg(saved->id));
         dialog->setWindowTitle(QStringLiteral("编辑剪贴板条目")); dialog->showSavedStatus();
         refreshItems();
@@ -573,12 +589,6 @@ void ClipboardPage::editItem(bool creating)
     validate();
     if (workspace) workspace->present(key,dialog,this);
     else { dialog->exec(); delete dialog; }
-}
-
-bool ClipboardPage::savePendingChanges()
-{
-    if (editor_ && editor_->isVisible()) editor_->reject();
-    return !editor_ || !editor_->isVisible();
 }
 
 void ClipboardPage::deleteSelected()

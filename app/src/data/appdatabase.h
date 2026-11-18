@@ -248,6 +248,7 @@ public:
     bool deleteClipboardFolder(int id, QString *errorMessage = nullptr);
     bool saveClipboardItem(ClipboardItem *item, QString *errorMessage = nullptr);
     bool captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage = nullptr, const QList<int> &editingItemIds = {});
+    bool promoteClipboardHistoryItem(int id, QString *errorMessage = nullptr);
     bool moveClipboardItems(const QList<int> &ids, int tabId, int folderId, QString *errorMessage = nullptr);
     bool deleteClipboardItems(const QList<int> &ids, QString *errorMessage = nullptr);
     bool reorderClipboardTabs(const QList<int> &ids, QString *errorMessage = nullptr);

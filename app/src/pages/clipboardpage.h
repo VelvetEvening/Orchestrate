@@ -2,10 +2,9 @@
 #include "data/appdatabase.h"
 #include "widgets/siblingorderview.h"
 #include <QWidget>
-#include <QPointer>
 
 class ClipboardMonitor;
-class QDialog;
+class QAction;
 class QLabel;
 class QLineEdit;
 class QPlainTextEdit;
@@ -17,9 +16,11 @@ class ClipboardPage final : public QWidget {
     Q_OBJECT
 public:
     explicit ClipboardPage(AppDatabase *database, QWidget *parent=nullptr);
-    bool savePendingChanges();
+    bool pasteOnUse() const;
+    void report(const QString &message);
 signals:
-    void hideRequested();
+    void pasteOnUseChanged(bool enabled);
+    void hideRequested(bool pasteToPreviousWindow, quint32 clipboardSequence);
 protected:
     void showEvent(QShowEvent *event) override;
 private:
@@ -30,7 +31,6 @@ private:
     void saveExpandedFolders();
     void selectFolder(int id);
     void updatePreview();
-    void updateActions();
     void editItem(bool creating);
     void copySelected();
     void deleteSelected();
@@ -40,9 +40,9 @@ private:
     void folderMenu(const QPoint &position);
     void itemMenu(const QPoint &position);
     void historySettings();
-    void report(const QString &message);
     AppDatabase *database_;
     ClipboardMonitor *monitor_;
+    QAction *pasteOnUse_;
     QTabBar *tabs_;
     SiblingOrderTree *items_;
     QLineEdit *search_;
@@ -56,5 +56,4 @@ private:
     bool dirty_=true;
     int displayedTabId_=0;
     QString displayedSearch_;
-    QPointer<QDialog> editor_;
 };

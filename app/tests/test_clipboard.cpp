@@ -176,18 +176,59 @@ private slots:
         QCOMPARE(tree->topLevelItemCount(), 2);
     }
 
+    void consecutiveTextCopies_data() {
+        QTest::addColumn<QString>("firstHtml");
+        QTest::addColumn<QString>("secondHtml");
+        QTest::newRow("plain-plain") << QString() << QString();
+        QTest::newRow("rich-plain") << QString("<b>A</b>") << QString();
+        QTest::newRow("plain-rich") << QString() << QString("<i>A</i>");
+        QTest::newRow("rich-rich") << QString("<b>A</b>") << QString("<i>A</i>");
+    }
+
+    void consecutiveTextCopies() {
+        QFETCH(QString, firstHtml);
+        QFETCH(QString, secondHtml);
+        ClipboardMonitor monitor(db.get());
+        QVERIFY(monitor.setEnabled(true, &error));
+        QSignalSpy recorded(&monitor, &ClipboardMonitor::recorded);
+        auto copy = [](const QString &html) {
+            auto *mime = new QMimeData;
+            mime->setText("A");
+            if (!html.isEmpty()) mime->setHtml(html);
+            QApplication::clipboard()->setMimeData(mime);
+        };
+        copy(firstHtml);
+        QTRY_COMPARE(recorded.size(), 1);
+        const auto initial = db->clipboardItems(1, 0);
+        QCOMPARE(initial.size(), 1);
+        const auto original = initial.first();
+        copy(secondHtml);
+        QTRY_COMPARE(recorded.size(), 2);
+        const auto history = db->clipboardItems(1, 0);
+        QCOMPARE(history.size(), 1);
+        QCOMPARE(history.first().id, original.id);
+        const auto saved = db->clipboardItem(original.id);
+        QVERIFY(saved.automatic);
+        QCOMPARE(saved.createdAt, original.createdAt);
+        QVERIFY2(monitor.copyItem(saved.id, &error), qPrintable(error));
+        QCOMPARE(QApplication::clipboard()->text(), QString("A"));
+        QCOMPARE(QApplication::clipboard()->mimeData()->html(), secondHtml.isEmpty() ? firstHtml : secondHtml);
+    }
+
     void existingHistoryReusesFirstMatchingRowAfterRestart() {
         auto first = item("A"), otherA = item("A"), b = item("B");
         QVERIFY(db->captureClipboardItem(&first, 100, &error));
         otherA.automatic = true;
         QVERIFY(db->saveClipboardItem(&otherA, &error)); // A duplicate from an older history.
         QVERIFY(db->captureClipboardItem(&b, 100, &error));
-        QVERIFY(sql("DROP INDEX clipboard_auto_fingerprint"));
+        QVERIFY(sql("DROP INDEX clipboard_history_fingerprint"));
+        QVERIFY(sql("CREATE INDEX clipboard_auto_fingerprint ON clipboard_items(fingerprint,position,id DESC) "
+                    "WHERE tab_id=1 AND folder_id IS NULL AND automatic=1"));
         db.reset();
         db = std::make_unique<AppDatabase>();
         QVERIFY2(db->open(&error), qPrintable(error));
-        QVERIFY2(sql("SELECT id FROM clipboard_items INDEXED BY clipboard_auto_fingerprint "
-                     "WHERE tab_id=1 AND folder_id IS NULL AND automatic=1 LIMIT 0"), qPrintable(error));
+        QVERIFY2(sql("SELECT id FROM clipboard_items INDEXED BY clipboard_history_fingerprint "
+                     "WHERE tab_id=1 AND folder_id IS NULL LIMIT 0"), qPrintable(error));
 
         auto repeat = item("A");
         QVERIFY(sql("CREATE TRIGGER block_promotion BEFORE UPDATE OF position ON clipboard_items "
@@ -206,6 +247,45 @@ private slots:
         QCOMPARE(history.at(2).id, otherA.id);
     }
 
+    void textMergeOnlyUsesTheTopAfterAnExactMiss() {
+        QMimeData mime;
+        mime.setText("A");
+        mime.setHtml("<b>A</b>");
+        AppDatabase::ClipboardItem rich;
+        QVERIFY(ClipboardContent::read(&mime, &rich, &error));
+        auto plain = item("A"), other = item("B");
+        QVERIFY(db->captureClipboardItem(&plain, 100, &error));
+        QVERIFY(db->captureClipboardItem(&other, 100, &error));
+        QVERIFY(db->captureClipboardItem(&rich, 100, &error));
+        QCOMPARE(db->clipboardItems(1, 0).size(), 3);
+        auto repeat = item("A");
+        QVERIFY(db->captureClipboardItem(&repeat, 100, &error));
+        QCOMPARE(repeat.id, plain.id);
+        QCOMPARE(db->clipboardItems(1, 0).first().id, plain.id);
+        QCOMPARE(db->clipboardItem(rich.id).payload, rich.payload);
+    }
+
+    void textMergeProtectsDraftsAndRollsBackOnFailure() {
+        auto plain = item("A");
+        QVERIFY(db->captureClipboardItem(&plain, 100, &error));
+        QMimeData mime;
+        mime.setText("A");
+        mime.setHtml("<b>A</b>");
+        AppDatabase::ClipboardItem rich;
+        QVERIFY(ClipboardContent::read(&mime, &rich, &error));
+        QVERIFY(sql("CREATE TRIGGER fail_merge BEFORE UPDATE OF payload ON clipboard_items "
+                    "BEGIN SELECT RAISE(ABORT,'test merge failure'); END"));
+        QVERIFY(!db->captureClipboardItem(&rich, 100, &error));
+        QCOMPARE(rich.id, 0);
+        QCOMPARE(db->clipboardItems(1, 0).size(), 1);
+        QCOMPARE(db->clipboardItem(plain.id).payload, plain.payload);
+
+        QVERIFY2(db->captureClipboardItem(&rich, 100, &error, {plain.id}), qPrintable(error));
+        QVERIFY(rich.id != plain.id);
+        QCOMPARE(db->clipboardItems(1, 0).size(), 2);
+        QCOMPARE(db->clipboardItem(plain.id).payload, plain.payload);
+    }
+
     void automaticRetentionProtectsCuratedContent() {
         auto curated=item("手动保留"); QVERIFY(db->saveClipboardItem(&curated,&error));
         int customTab=0; QVERIFY(db->addClipboardTab("长期保留",&customTab,&error));
@@ -220,7 +300,12 @@ private slots:
         QCOMPARE(db->clipboardItems(customTab,0).size(),2);
         QCOMPARE(db->clipboardItem(custom.id).text,custom.text); QCOMPARE(db->clipboardItem(transferred.id).text,transferred.text);
         auto same=item("自动 105"); QVERIFY(db->captureClipboardItem(&same,100,&error)); QCOMPARE(db->clipboardItems(1,0).size(),101);
-        for (const auto &archived : {curated, moved, transferred}) {
+        auto manualCopy = item(curated.text);
+        QVERIFY(db->captureClipboardItem(&manualCopy, 100, &error));
+        QCOMPARE(manualCopy.id, curated.id);
+        QVERIFY(!manualCopy.automatic);
+        QCOMPARE(db->clipboardItems(1,0).last().id, curated.id);
+        for (const auto &archived : {moved, transferred}) {
             auto recopy = item(archived.text);
             QVERIFY(db->captureClipboardItem(&recopy, 100, &error));
             QVERIFY(recopy.id != archived.id);
@@ -315,6 +400,90 @@ private slots:
         QVERIFY(!db->clipboardItem(cancelled).id); QCOMPARE(db->clipboardItem(ids.first()).text,QString("edited and retained"));
     }
 
+    void bitmapAndPlainTextShareOneItemWithoutLosingDifferentImages() {
+        AppDatabase::ClipboardItem red, blue;
+        for (auto *imageItem : {&red, &blue}) {
+            QImage image(8, 8, QImage::Format_RGB32);
+            image.fill(imageItem==&red ? Qt::red : Qt::blue);
+            QMimeData mime; mime.setImageData(image); mime.setText("same caption");
+            QVERIFY(ClipboardContent::read(&mime,imageItem,&error));
+        }
+        auto plain = item("same caption");
+        QVERIFY(db->captureClipboardItem(&plain,100,&error));
+        QVERIFY(db->captureClipboardItem(&red,100,&error));
+        QCOMPARE(red.id,plain.id);
+        auto repeat = item("same caption");
+        QVERIFY(db->captureClipboardItem(&repeat,100,&error));
+        QCOMPARE(repeat.id,red.id);
+        QCOMPARE(repeat.fingerprint,red.fingerprint);
+        QCOMPARE(db->clipboardItems(1,0).size(),1);
+        ClipboardMonitor monitor(db.get());
+        QVERIFY(monitor.copyItem(red.id,&error));
+        QCOMPARE(QApplication::clipboard()->text(),plain.text);
+        QCOMPARE(qvariant_cast<QImage>(QApplication::clipboard()->mimeData()->imageData()).pixelColor(0,0),QColor(Qt::red));
+        QVERIFY(db->captureClipboardItem(&blue,100,&error));
+        QVERIFY(blue.id!=red.id);
+        QCOMPARE(db->clipboardItems(1,0).size(),2);
+        QCOMPARE(db->clipboardItem(red.id).fingerprint,red.fingerprint);
+    }
+
+    void automaticCaptureFiltersPrivateAndBlankButCanRecopyAfterDeletion() {
+        ClipboardMonitor monitor(db.get());
+        QVERIFY(monitor.setEnabled(true,&error));
+        QSignalSpy recorded(&monitor,&ClipboardMonitor::recorded);
+        const QString history = QStringLiteral("application/x-qt-windows-mime;value=\"CanIncludeInClipboardHistory\"");
+        auto copy = [&](const QString &text, const QString &format = {}, QByteArray value = {}) {
+            auto *mime = new QMimeData;
+            mime->setText(text);
+            if (!format.isEmpty()) mime->setData(format,value);
+            QApplication::clipboard()->setMimeData(mime);
+        };
+        copy("synthetic test",history,QByteArray(4,'\0'));
+        QTest::qWait(90);
+        copy("synthetic test","Clipboard Viewer Ignore");
+        QTest::qWait(90);
+        copy(" \n\t ");
+        QTest::qWait(90);
+        QCOMPARE(recorded.size(),0);
+        QCOMPARE(db->clipboardItems(1,0).size(),0);
+        const QString code = "  x()\n";
+        copy(code,history,QByteArray::fromHex("01000000"));
+        QTRY_COMPARE(recorded.size(),1);
+        const int old = db->clipboardItems(1,0).first().id;
+        QCOMPARE(db->clipboardItem(old).text,code);
+        QVERIFY(db->deleteClipboardItems({old},&error));
+        copy(code,history,QByteArray::fromHex("01000000"));
+        QTRY_COMPARE(recorded.size(),2);
+        QCOMPARE(db->clipboardItems(1,0).size(),1);
+        QVERIFY(db->clipboardItems(1,0).first().id!=old);
+    }
+
+    void takeHistoryItemRespectsSelectionOrderAndPastePreference() {
+        auto a=item("A"), b=item("B"), manual=item("M");
+        QVERIFY(db->saveClipboardItem(&manual,&error));
+        QVERIFY(db->captureClipboardItem(&a,100,&error));
+        QVERIFY(db->captureClipboardItem(&b,100,&error));
+        ClipboardPage page(db.get()); page.show();
+        auto *tree=page.findChild<QTreeWidget *>("clipboardItems");
+        auto *paste=page.findChild<QAction *>("clipboardPasteOnUse");
+        QVERIFY(tree && paste && !paste->isChecked());
+        QSignalSpy hidden(&page,&ClipboardPage::hideRequested);
+        select(tree,a.id); node(tree,b.id)->setSelected(true);
+        tree->setFocus(); QTest::keyClick(tree,Qt::Key_Return);
+        QCOMPARE(hidden.size(),0);
+        QCOMPARE(db->clipboardItems(1,0).first().id,b.id);
+        select(tree,a.id); QTest::keyClick(tree,Qt::Key_Return);
+        QCOMPARE(hidden.size(),1); QCOMPARE(hidden.takeFirst().first().toBool(),false);
+        QCOMPARE(db->clipboardItems(1,0).first().id,a.id);
+        QCOMPARE(QApplication::clipboard()->text(),a.text);
+        paste->trigger();
+        QVERIFY(ClipboardPage(db.get()).findChild<QAction *>("clipboardPasteOnUse")->isChecked());
+        select(tree,manual.id); QTest::keyClick(tree,Qt::Key_Return);
+        QCOMPARE(hidden.size(),1); QCOMPARE(hidden.takeFirst().first().toBool(),true);
+        QCOMPARE(db->clipboardItems(1,0).last().id,manual.id);
+        QCOMPARE(QApplication::clipboard()->text(),manual.text);
+    }
+
     void monitorToggleSelfCopyAndFailure() {
         ClipboardMonitor monitor(db.get()); QSignalSpy recorded(&monitor,&ClipboardMonitor::recorded); QSignalSpy failures(&monitor,&ClipboardMonitor::captureError);
         QCOMPARE(monitor.historyLimit(),500);
@@ -379,8 +548,20 @@ private slots:
         QTRY_COMPARE(db->setting("clipboard.limit"), "700");
     }
 
+    void editorPreservesContentAndProtectsDrafts_data() {
+        QTest::addColumn<bool>("withHtml");
+        QTest::newRow("plain") << false;
+        QTest::newRow("html-wrapped-text") << true;
+    }
+
     void editorPreservesContentAndProtectsDrafts() {
-        auto entry=item("line one\r\nline two\r\n"); QVERIFY(db->saveClipboardItem(&entry,&error));
+        QFETCH(bool, withHtml);
+        auto entry=item("line one\r\nline two\r\n");
+        if (withHtml) {
+            QMimeData mime; mime.setText(entry.text); mime.setHtml("<div>line one<br>line two<br></div>");
+            QVERIFY(ClipboardContent::read(&mime,&entry,&error));
+        }
+        QVERIFY(db->saveClipboardItem(&entry,&error));
         ClipboardPage page(db.get()); page.resize(900,650); page.show();
         auto *items=page.findChild<QTreeWidget *>("clipboardItems"); select(items,entry.id);
         bool saved=false;
@@ -406,6 +587,49 @@ private slots:
         });
         page.findChild<QPushButton *>("clipboardEditItem")->click(); QVERIFY(protectedDraft); QVERIFY(failedSavePreserved);
         QCOMPARE(db->clipboardItem(entry.id).payload,entry.payload);
+
+        bool writable=false;
+        QTimer::singleShot(0,[&] {
+            auto *dialog=page.findChild<QDialog *>("clipboardEditor");
+            auto *body=dialog->findChild<QPlainTextEdit *>("clipboardItemBody");
+            writable=!body->isReadOnly();
+            body->setPlainText("  edited\nline two"); saveEditor(dialog); dialog->reject();
+        });
+        page.findChild<QPushButton *>("clipboardEditItem")->click(); QVERIFY(writable);
+        QCOMPARE(db->clipboardItems(1,0).size(),1);
+        const auto updated=db->clipboardItem(entry.id);
+        QCOMPARE(updated.createdAt,entry.createdAt);
+        QCOMPARE(updated.title,QString("只改标题"));
+        QCOMPARE(updated.kind,QString("text"));
+        ClipboardMonitor monitor(db.get()); QVERIFY(monitor.copyItem(entry.id,&error));
+        QCOMPARE(QApplication::clipboard()->text(),QString("  edited\nline two"));
+        QVERIFY(!QApplication::clipboard()->mimeData()->hasHtml());
+    }
+
+    void attachmentEditorKeepsOriginalPayload() {
+        QMimeData imageMime, fileMime;
+        QImage image(8,8,QImage::Format_RGB32); image.fill(Qt::green);
+        imageMime.setImageData(image); imageMime.setText("caption");
+        fileMime.setUrls({QUrl::fromLocalFile("C:/fixture.txt")});
+        for (const auto *mime : {&imageMime,&fileMime}) {
+            AppDatabase::ClipboardItem entry;
+            QVERIFY(ClipboardContent::read(mime,&entry,&error));
+            QVERIFY(db->saveClipboardItem(&entry,&error));
+            ClipboardPage page(db.get()); page.show();
+            select(page.findChild<QTreeWidget *>("clipboardItems"),entry.id);
+            bool readOnly=false;
+            QTimer::singleShot(0,&page,[&] {
+                auto *dialog=page.findChild<QDialog *>("clipboardEditor");
+                readOnly=dialog->findChild<QPlainTextEdit *>("clipboardItemBody")->isReadOnly();
+                dialog->findChild<QLineEdit *>("clipboardItemTitle")->setText("retained");
+                saveEditor(dialog); dialog->reject();
+            });
+            page.findChild<QPushButton *>("clipboardEditItem")->click();
+            QVERIFY(readOnly);
+            const auto saved=db->clipboardItem(entry.id);
+            QCOMPARE(saved.title,QString("retained"));
+            QCOMPARE(saved.payload,entry.payload);
+        }
     }
 
     void dragTransfersAndRollback() {

@@ -24,8 +24,9 @@ bool ensureClipboardFingerprintIndex(const QSqlDatabase &database, QString *erro
 {
     QSqlQuery query(database);
     if (query.exec(QStringLiteral(
-        "CREATE INDEX IF NOT EXISTS clipboard_auto_fingerprint ON clipboard_items(fingerprint,position,id DESC) "
-        "WHERE tab_id=1 AND folder_id IS NULL AND automatic=1"))) return true;
+        "CREATE INDEX IF NOT EXISTS clipboard_history_fingerprint ON clipboard_items(fingerprint,automatic,position,id DESC) "
+        "WHERE tab_id=1 AND folder_id IS NULL"))
+        && query.exec(QStringLiteral("DROP INDEX IF EXISTS clipboard_auto_fingerprint"))) return true;
     setError(errorMessage, query);
     return false;
 }
@@ -820,6 +821,11 @@ bool AppDatabase::saveClipboardItem(ClipboardItem *item, QString *errorMessage)
 bool AppDatabase::captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage, const QList<int> &editingItemIds)
 {
     return ClipboardRepository(connectionName_).captureClipboardItem(item, historyLimit, errorMessage, editingItemIds);
+}
+
+bool AppDatabase::promoteClipboardHistoryItem(int id, QString *errorMessage)
+{
+    return ClipboardRepository(connectionName_).promoteClipboardHistoryItem(id, errorMessage);
 }
 
 bool AppDatabase::moveClipboardItems(const QList<int> &ids, int tabId, int folderId, QString *errorMessage)

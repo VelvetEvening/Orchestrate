@@ -5,6 +5,14 @@
 
 using namespace RepositoryHelpers;
 
+namespace {
+bool validClipboardItem(const AppDatabase::ClipboardItem &item)
+{
+    return !item.payload.isEmpty() && item.payload.size()<=24*1024*1024 && item.title.size()<=200
+        && item.fingerprint.size()==32 && QStringList{"text","html","image","files"}.contains(item.kind);
+}
+}
+
 QList<AppDatabase::ClipboardTab> ClipboardRepository::clipboardTabs(QString *errorMessage) const
 {
     QList<ClipboardTab> result;
@@ -105,8 +113,7 @@ bool ClipboardRepository::renameClipboardFolder(int id, const QString &name, QSt
 
 bool ClipboardRepository::saveClipboardItem(ClipboardItem *item, QString *errorMessage, InsertAt insertAt)
 {
-    if (!item || item->payload.isEmpty() || item->payload.size()>24*1024*1024 || item->title.size()>200
-        || item->fingerprint.size()!=32 || !QStringList{"text","html","image","files"}.contains(item->kind))
+    if (!item || !validClipboardItem(*item))
         return fail(errorMessage, QStringLiteral("条目内容无效或超过容量限制。"));
     QSqlQuery query(QSqlDatabase::database(connectionName_));
     const bool creating=item->id==0;
@@ -135,31 +142,83 @@ bool ClipboardRepository::saveClipboardItem(ClipboardItem *item, QString *errorM
     return true;
 }
 
+bool ClipboardRepository::mergeTopTextCapture(ClipboardItem *item, const QList<int> &editingItemIds, QString *errorMessage)
+{
+    if (item->kind=="files" || item->text.isEmpty()) return true;
+
+    QSqlQuery top(QSqlDatabase::database(connectionName_));
+    top.prepare(QStringLiteral(
+        "SELECT id,created_at,kind FROM clipboard_items WHERE id=(SELECT id FROM clipboard_items "
+        "WHERE tab_id=1 AND folder_id IS NULL ORDER BY position,id DESC LIMIT 1) "
+        "AND automatic=1 AND kind IN ('text','html','image') AND text=?"));
+    top.addBindValue(item->text);
+    if (!top.exec()) { setError(errorMessage,top); return false; }
+    if (!top.next()) return true;
+    const int id = top.value(0).toInt();
+    const auto createdAt = QDateTime::fromString(top.value(1).toString(), Qt::ISODateWithMs);
+    const auto previousKind = top.value(2).toString();
+    top.finish();
+    if (editingItemIds.contains(id)) return true;
+
+    // Plain text can share either richer representation. Never overwrite a bitmap
+    // with another image or discard it in favour of an HTML representation.
+    if (item->kind=="text") {
+        *item = clipboardItem(id,errorMessage);
+        return item->id!=0;
+    }
+    if (previousKind!="text" && (previousKind!="html" || item->kind!="html")) return true;
+    QSqlQuery update(QSqlDatabase::database(connectionName_));
+    update.prepare(QStringLiteral(
+        "UPDATE clipboard_items SET kind=?,payload=?,fingerprint=?,updated_at=? WHERE id=?"));
+    update.addBindValue(item->kind);
+    update.addBindValue(item->payload);
+    update.addBindValue(item->fingerprint);
+    update.addBindValue(nowIso());
+    update.addBindValue(id);
+    if (!update.exec()) { setError(errorMessage,update); return false; }
+    item->id = id;
+    item->createdAt = createdAt;
+    return true;
+}
+
+bool ClipboardRepository::promoteClipboardHistoryItem(int id, QString *errorMessage)
+{
+    QSqlQuery position(QSqlDatabase::database(connectionName_));
+    position.prepare(QStringLiteral(
+        "UPDATE clipboard_items SET position=(SELECT MIN(position)-1 FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL) "
+        "WHERE id=? AND tab_id=1 AND folder_id IS NULL AND automatic=1 "
+        "AND id<>(SELECT id FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL ORDER BY position,id DESC LIMIT 1)"));
+    position.addBindValue(id);
+    if (position.exec()) return true;
+    setError(errorMessage,position);
+    return false;
+}
+
 bool ClipboardRepository::captureClipboardItem(ClipboardItem *item, int historyLimit, QString *errorMessage, const QList<int> &editingItemIds)
 {
-    if (!item || item->id!=0) return fail(errorMessage, QStringLiteral("无法记录此剪贴板内容。"));
+    if (!item || item->id!=0 || !validClipboardItem(*item)) return fail(errorMessage, QStringLiteral("无法记录此剪贴板内容。"));
     auto database=QSqlDatabase::database(connectionName_);
     if (!database.transaction()) return fail(errorMessage, database.lastError().text());
     QSqlQuery match(database);
     match.prepare(QStringLiteral(
-        "SELECT id,created_at FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL "
-        "AND automatic=1 AND fingerprint=? ORDER BY position,id DESC LIMIT 1"));
+        "SELECT id,created_at,automatic,title FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL "
+        "AND fingerprint=? ORDER BY automatic,position,id DESC LIMIT 1"));
     match.addBindValue(item->fingerprint);
     if (!match.exec()) { setError(errorMessage,match); database.rollback(); return false; }
     ClipboardItem saved=*item; saved.tabId=1; saved.folderId=0; saved.automatic=true;
     if (match.next()) {
         saved.id = match.value(0).toInt();
         saved.createdAt = QDateTime::fromString(match.value(1).toString(), Qt::ISODateWithMs);
+        saved.automatic = match.value(2).toBool();
+        saved.title = match.value(3).toString();
     }
     match.finish();
     if (saved.id) {
-        QSqlQuery position(database);
-        position.prepare(QStringLiteral(
-            "UPDATE clipboard_items SET position=(SELECT MIN(position)-1 FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL) "
-            "WHERE id=? AND id<>(SELECT id FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL ORDER BY position,id DESC LIMIT 1)"));
-        position.addBindValue(saved.id);
-        if (!position.exec()) { setError(errorMessage,position); database.rollback(); return false; }
-    } else {
+        if (saved.automatic && !promoteClipboardHistoryItem(saved.id,errorMessage)) { database.rollback(); return false; }
+    } else if (!mergeTopTextCapture(&saved,editingItemIds,errorMessage)) {
+        database.rollback(); return false;
+    }
+    if (!saved.id) {
         if (!saveClipboardItem(&saved,errorMessage,InsertAt::Front)) { database.rollback(); return false; }
         QSqlQuery trim(database);
         // If every older row is being edited, defer the excess until a later capture.

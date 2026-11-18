@@ -6,6 +6,7 @@
 #include "pages/projectspage.h"
 #include "pages/clipboardpage.h"
 #include "platform/globalshortcut.h"
+#include "platform/clipboardpaste.h"
 #include "update/updatewidget.h"
 
 #include <QAction>
@@ -279,7 +280,19 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
 
         auto *clipboardPage = new ClipboardPage(&database_, pageStack_);
         addWorkspace(clipboardPage,3);
-        connect(clipboardPage, &ClipboardPage::hideRequested, this, [this] { hide(); });
+        ClipboardPaste::setTrackingEnabled(clipboardPage->pasteOnUse());
+        connect(clipboardPage, &ClipboardPage::pasteOnUseChanged, this, &ClipboardPaste::setTrackingEnabled);
+        connect(clipboardPage, &ClipboardPage::hideRequested, this, [this,clipboardPage](bool paste, quint32 sequence) {
+            if (paste) {
+                ClipboardPaste::request(this,sequence,[this,clipboardPage] {
+                    const auto message = QStringLiteral("已复制。请在目标窗口手动粘贴。");
+                    clipboardPage->report(message);
+                    if (trayIcon_ && trayIcon_->isVisible() && QSystemTrayIcon::supportsMessages())
+                        trayIcon_->showMessage(QStringLiteral("剪贴板"),message,QSystemTrayIcon::Information,4000);
+                });
+            }
+            hide();
+        });
 
         auto *settingsPage = new QWidget(pageStack_);
         settingsPage->setObjectName(QStringLiteral("settingsPage"));
@@ -545,9 +558,6 @@ bool MainWindow::savePendingChanges()
 {
     for (auto *workspace : findChildren<ContentWorkspace *>()) {
         if (!workspace->closeAll()) return false;
-    }
-    for (auto *page : findChildren<ClipboardPage *>()) {
-        if (!page->savePendingChanges()) return false;
     }
     return true;
 }
