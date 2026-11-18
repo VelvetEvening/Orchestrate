@@ -108,13 +108,6 @@ QString jsonString(const QJsonObject &object, const QString &key, const QString 
     return value.isString() ? value.toString() : fallback;
 }
 
-QString shellQuote(const QString &value)
-{
-    QString quoted = value;
-    quoted.replace(QStringLiteral("'"), QStringLiteral("'\"'\"'"));
-    return QStringLiteral("'") + quoted + QStringLiteral("'");
-}
-
 QString displayArgument(const QString &value)
 {
     return value.contains(QLatin1Char(' ')) ? QStringLiteral("\"%1\"").arg(value) : value;
@@ -136,7 +129,23 @@ QString resultLabel(const QString &result, const QString &toolId = QString())
     return result.isEmpty() || result == QStringLiteral("unknown") ? QStringLiteral("未知") : result;
 }
 
-QString badgeStyle(const QString &result) { return UiTheme::statusStyle(result); }
+struct StatusAppearance {
+    const char *badgeRole;
+    const char *color;
+};
+
+StatusAppearance statusAppearance(const QString &result)
+{
+    if (result == QStringLiteral("success") || result == QStringLiteral("already"))
+        return {"badgeSuccess", UiTheme::Success};
+    if (result == QStringLiteral("failure"))
+        return {"badgeError", UiTheme::Danger};
+    if (result == QStringLiteral("running") || result == QStringLiteral("loading"))
+        return {"badgeActive", UiTheme::Accent};
+    if (result == QStringLiteral("none") || result == QStringLiteral("disabled") || result == QStringLiteral("skipped"))
+        return {"badgeMuted", UiTheme::Muted};
+    return {"badgeWarning", UiTheme::Warning};
+}
 
 QIcon statusDot(const QColor &color)
 {
@@ -377,6 +386,7 @@ AutomationPage::AutomationPage(AppDatabase *database, QWidget *parent)
     stateLayout->addLayout(stateHeader);
     auto *badgeRow = new QHBoxLayout;
     stateBadge_ = new QLabel(stateCard);
+    stateBadge_->setObjectName(QStringLiteral("stateBadge"));
     badgeRow->addWidget(stateBadge_);
     badgeRow->addStretch(1);
     stateLayout->addLayout(badgeRow);
@@ -721,7 +731,7 @@ void AutomationPage::loadAll(int preferredToolId)
         QFont font = item->font(0);
         font.setWeight(QFont::DemiBold);
         item->setFont(0, font);
-        item->setForeground(1, QColor(QString::fromLatin1(UiTheme::Muted)));
+        item->setForeground(1, QColor(UiTheme::Muted));
         item->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
         groupItems.insert(id, item);
     };
@@ -921,7 +931,7 @@ void AutomationPage::updateToolIcon(QTreeWidgetItem *item)
     } else {
         text = QStringLiteral("未读取");
     }
-    const QColor color = UiTheme::statusColor(result);
+    const QColor color(statusAppearance(result).color);
     item->setIcon(0, statusDot(color));
     item->setText(1, text);
     item->setForeground(1, color);
@@ -1427,7 +1437,7 @@ void AutomationPage::reloadManifest()
                 QStringLiteral("cat"), {QStringLiteral("--"), tool.registrationPath}), complete);
         else if (tool.targetType == QStringLiteral("ssh"))
             SshConnection::capture(this, tool.sshHost, tool.sshUser,
-                QStringLiteral("cat -- %1").arg(shellQuote(tool.registrationPath)), complete);
+                QStringLiteral("cat -- %1").arg(CommandLaunch::posixQuote(tool.registrationPath)), complete);
         else
             FileAccess::request(this, QStringLiteral("read"), tool.registrationPath, complete);
         return;
@@ -1517,8 +1527,7 @@ void AutomationPage::renderState(const QJsonObject &state)
     const QString summary = jsonString(state, QStringLiteral("summary"));
 
     stateBadge_->setText(QStringLiteral("● %1").arg(resultLabel(result, toolId)));
-    stateBadge_->setProperty("themeStatus", result);
-    stateBadge_->setStyleSheet(badgeStyle(result));
+    UiTheme::setRole(stateBadge_, statusAppearance(result).badgeRole);
     stateSummary_->setText(summary.isEmpty() ? QStringLiteral("状态文件没有提供摘要。") : summary);
     if (ToolState::expired(state))
         stateSummary_->setText(QStringLiteral("这份状态已超过工具声明的有效期，请刷新或检查工具。上次摘要：") + summary);
@@ -1541,10 +1550,8 @@ void AutomationPage::renderState(const QJsonObject &state)
         name->setMinimumWidth(96);
         rowLayout->addWidget(name);
         auto *itemBadge = new QLabel(resultLabel(itemResult, toolId), row);
-        itemBadge->setProperty("themeStatus", itemResult);
-        itemBadge->setProperty("themeStatusExtra", QStringLiteral("font-size: 12px; padding: 2px 9px; border-radius: 9px;"));
-        itemBadge->setStyleSheet(badgeStyle(itemResult)
-                                 + QStringLiteral("font-size: 12px; padding: 2px 9px; border-radius: 9px;"));
+        itemBadge->setObjectName(QStringLiteral("stateItemBadge"));
+        UiTheme::setRole(itemBadge, statusAppearance(itemResult).badgeRole);
         itemBadge->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         rowLayout->addWidget(itemBadge);
         auto *itemSummary = makeMuted(jsonString(itemObject, QStringLiteral("summary")), row);
@@ -1559,8 +1566,7 @@ void AutomationPage::renderState(const QJsonObject &state)
 void AutomationPage::renderStateMessage(const QString &badge, const QString &result, const QString &message)
 {
     stateBadge_->setText(QStringLiteral("● %1").arg(badge));
-    stateBadge_->setProperty("themeStatus", result);
-    stateBadge_->setStyleSheet(badgeStyle(result));
+    UiTheme::setRole(stateBadge_, statusAppearance(result).badgeRole);
     stateSummary_->setText(message);
     clearStateItems();
 }
@@ -1698,26 +1704,8 @@ void AutomationPage::updateCachedStateExpiry()
     }
 }
 
-QString AutomationPage::remoteCommandLine(const AppDatabase::AutomationTool &tool,
-                                          const QString &executable,
-                                          const QStringList &arguments) const
-{
-    QStringList commandParts;
-    commandParts << QStringLiteral("exec") << shellQuote(executable);
-    for (const QString &argument : arguments) {
-        commandParts << shellQuote(argument);
-    }
-    QString commandLine = commandParts.join(QLatin1Char(' '));
-    if (!tool.workingDirectory.isEmpty()) {
-        commandLine = QStringLiteral("cd %1 && %2")
-                          .arg(shellQuote(tool.workingDirectory), commandLine);
-    }
-    return commandLine;
-}
-
 void AutomationPage::renderRunRecord()
 {
-    if (selectedToolId_ > 0) updateToolIcon(selectedToolId_);
     // The bounded record is still captured while hidden. Lay it out on show.
     if (!isVisible()) { displayedOutputTool_ = -1; return; }
     if (!runRecords_.contains(selectedToolId_)) {
@@ -1771,6 +1759,7 @@ void AutomationPage::changeEvent(QEvent *event)
     // Status dots are cached pixmaps; redraw them from the existing state.
     for (int i = 0; i < tree_->topLevelItemCount(); ++i) {
         auto *group = tree_->topLevelItem(i);
+        group->setForeground(1, QColor(UiTheme::Muted));
         for (int j = 0; j < group->childCount(); ++j)
             updateToolIcon(group->child(j));
     }
@@ -1932,6 +1921,7 @@ void AutomationPage::runCommand(QListWidgetItem *item)
     record.running = true;
     record.status = QStringLiteral("运行中…");
     runRecords_.insert(toolId, record);
+    updateToolIcon(toolId);
     displayedOutputTool_ = -1;
     appendRunOutput(toolId, QStringLiteral("$ %1\n").arg(commandLine));
     runningProcesses_.insert(toolId, process);

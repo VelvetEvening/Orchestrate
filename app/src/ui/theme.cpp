@@ -17,7 +17,6 @@
 #include <QAbstractItemView>
 #include <QAbstractItemModel>
 #include <QSyntaxHighlighter>
-#include <QSet>
 
 #ifdef Q_OS_WIN
 #ifndef NOMINMAX
@@ -40,20 +39,18 @@ static void initializeUiResources()
 namespace {
 UiTheme::Preset activePreset = UiTheme::Preset::Mist;
 
-void recolorModel(QAbstractItemModel *model, const QColor &oldMuted, const QColor &oldAccent,
-                  const QModelIndex &parent = {})
+void refreshItemForegrounds(QAbstractItemView *view, const QColor &oldMuted, const QColor &oldAccent)
 {
-    for (int row = 0; row < model->rowCount(parent); ++row) {
-        for (int col = 0; col < model->columnCount(parent); ++col) {
-            const auto index = model->index(row, col, parent);
-            const auto value = index.data(Qt::ForegroundRole);
-            if (value.canConvert<QBrush>()) {
-                const auto color = value.value<QBrush>().color();
-                if (color == oldMuted) model->setData(index, QColor(UiTheme::Muted), Qt::ForegroundRole);
-                else if (color == oldAccent) model->setData(index, QColor(UiTheme::Accent), Qt::ForegroundRole);
-            }
-        }
-        recolorModel(model, oldMuted, oldAccent, model->index(row, 0, parent));
+    const auto column = view->property("themeForegroundColumn");
+    auto *model = view->model();
+    if (!column.isValid() || !model) return;
+    for (int row = 0; row < model->rowCount(); ++row) {
+        const auto index = model->index(row, column.toInt());
+        const auto value = index.data(Qt::ForegroundRole);
+        if (!value.canConvert<QBrush>()) continue;
+        const auto color = value.value<QBrush>().color();
+        if (color == oldMuted) model->setData(index, QColor(UiTheme::Muted), Qt::ForegroundRole);
+        else if (color == oldAccent) model->setData(index, QColor(UiTheme::Accent), Qt::ForegroundRole);
     }
 }
 
@@ -154,14 +151,8 @@ void UiTheme::apply(QApplication &app, const QString &id)
     Selection = paper ? "#f0e3d8" : compact ? "#dce8f3" : "#dfe9f2";
     Hover = paper ? "#f4ede7" : "#edf2f5";
     Focus = paper ? "#99755d" : "#6f8fb6";
-    PrimaryHover = paper ? "#ebdacc" : "#d2e0ee";
-    PrimaryPressed = paper ? "#e3ccbc" : "#c4d6e7";
-    NavHover = paper ? "#eae0d5" : "#e5ebee";
-    ScrollHandle = paper ? "#cdc0b4" : "#bdc8d3";
-    ScrollHandleHover = paper ? "#a49588" : "#97a8b9";
     DiaryMarker = paper ? "#986d54" : compact ? "#58758f" : "#648098";
     ReminderMarker = paper ? "#8a7786" : compact ? "#82708c" : "#887789";
-    Progress = paper ? "#e7d4c6" : "#c7d7ed";
     initializeUiResources();
     app.styleHints()->setColorScheme(Qt::ColorScheme::Light);
     QPalette palette;
@@ -201,60 +192,42 @@ void UiTheme::apply(QApplication &app, const QString &id)
             {"background", Background}, {"sidebar", Sidebar}, {"surface", Surface}, {"indexSurface", IndexSurface},
             {"text", Text}, {"muted", Muted}, {"border", Border}, {"controlBorder", ControlBorder},
             {"accent", Accent}, {"selection", Selection}, {"hover", Hover}, {"focus", Focus},
-            {"primaryHover", PrimaryHover}, {"primaryPressed", PrimaryPressed}, {"navHover", NavHover},
-            {"scrollHandle", ScrollHandle}, {"scrollHandleHover", ScrollHandleHover}, {"progress", Progress},
+            {"primaryHover", paper ? "#ebdacc" : "#d2e0ee"}, {"primaryPressed", paper ? "#e3ccbc" : "#c4d6e7"},
+            {"navHover", paper ? "#eae0d5" : "#e5ebee"}, {"progress", paper ? "#e7d4c6" : "#c7d7ed"},
+            {"scrollHandle", paper ? "#cdc0b4" : "#bdc8d3"}, {"scrollHandleHover", paper ? "#a49588" : "#97a8b9"},
             {"success", Success}, {"successBackground", SuccessBackground},
             {"warning", Warning}, {"warningBackground", WarningBackground},
             {"danger", Danger}, {"dangerBackground", DangerBackground},
-            {"dangerHoverBorder", DangerHoverBorder}, {"disabled", Disabled}
+            {"dangerHoverBorder", DangerHoverBorder}, {"disabled", Disabled},
+            {"controlPadding", compact ? "4px 9px" : paper ? "7px 12px" : "6px 11px"},
+            {"controlRadius", compact ? "4px" : "6px"},
+            {"inputPadding", compact ? "4px 8px" : "6px 9px"},
+            {"navPadding", compact ? "6px 10px" : "10px 12px"},
+            {"navRadius", compact ? "4px" : "7px"},
+            {"tabPadding", compact ? "4px 9px" : "7px 12px"},
+            {"calendarPadding", compact ? "4px" : "7px"},
+            {"calendarBottomInset", compact ? "5em" : "0px"},
+            {"toolItemPadding", compact ? "3px 5px" : paper ? "9px 7px" : "8px 5px"},
+            {"itemPadding", compact ? "3px 8px" : paper ? "9px 10px" : "7px 10px"},
+            {"recordMinHeight", compact ? "30px" : "42px"},
+            {"diaryMinHeight", compact ? "30px" : "40px"},
+            {"collectionMinHeight", compact ? "34px" : "46px"}
         };
         for (const auto &token : tokens)
             css.replace(QStringLiteral("@%1@").arg(QString::fromLatin1(token.first)), QString::fromLatin1(token.second));
-        css.replace(QStringLiteral("@controlPadding@"), compact ? QStringLiteral("4px 9px") : paper ? QStringLiteral("7px 12px") : QStringLiteral("6px 11px"));
-        css.replace(QStringLiteral("@controlRadius@"), compact ? QStringLiteral("4px") : QStringLiteral("6px"));
-        css.replace(QStringLiteral("@inputPadding@"), compact ? QStringLiteral("4px 8px") : QStringLiteral("6px 9px"));
-        css.replace(QStringLiteral("@navPadding@"), compact ? QStringLiteral("6px 10px") : QStringLiteral("10px 12px"));
-        css.replace(QStringLiteral("@navRadius@"), compact ? QStringLiteral("4px") : QStringLiteral("7px"));
-        css.replace(QStringLiteral("@tabPadding@"), compact ? QStringLiteral("4px 9px") : QStringLiteral("7px 12px"));
-        css.replace(QStringLiteral("@calendarPadding@"), compact ? QStringLiteral("4px") : QStringLiteral("7px"));
-        css.replace(QStringLiteral("@calendarBottomInset@"), compact ? QStringLiteral("5em") : QStringLiteral("0px"));
-        css.replace(QStringLiteral("@toolItemPadding@"), compact ? QStringLiteral("3px 5px") : paper ? QStringLiteral("9px 7px") : QStringLiteral("8px 5px"));
-        css.replace(QStringLiteral("@itemPadding@"), compact ? QStringLiteral("3px 8px") : paper ? QStringLiteral("9px 10px") : QStringLiteral("7px 10px"));
-        css.replace(QStringLiteral("@recordMinHeight@"), compact ? QStringLiteral("30px") : QStringLiteral("42px"));
-        css.replace(QStringLiteral("@diaryMinHeight@"), compact ? QStringLiteral("30px") : QStringLiteral("40px"));
-        css.replace(QStringLiteral("@collectionMinHeight@"), compact ? QStringLiteral("34px") : QStringLiteral("46px"));
         app.setStyleSheet(css);
     }
     if (!installed) {
         app.installEventFilter(new WindowTheme(&app));
         app.setProperty("orchestrateThemeInstalled", true);
     }
-    QSet<QAbstractItemModel *> refreshedModels;
     // Repaint existing windows without rebuilding pages or touching editor drafts.
     for (QWidget *widget : QApplication::allWidgets()) {
         if (widget->layout()) updateLayoutMetrics(widget->layout());
-        if (auto *calendar = qobject_cast<QCalendarWidget *>(widget)) {
-            auto calendarPalette = calendar->palette();
-            calendarPalette.setColor(QPalette::Highlight, QColor(Selection));
-            calendarPalette.setColor(QPalette::HighlightedText, QColor(Accent));
-            calendar->setPalette(calendarPalette);
-            QTextCharFormat header;
-            header.setForeground(QColor(Muted));
-            header.setBackground(QColor(IndexSurface));
-            calendar->setHeaderTextFormat(header);
-            calendar->setWeekdayTextFormat(Qt::Saturday, header);
-            calendar->setWeekdayTextFormat(Qt::Sunday, header);
-        }
-        if (widget->property("themeStatus").isValid())
-            widget->setStyleSheet(statusStyle(widget->property("themeStatus").toString()) + widget->property("themeStatusExtra").toString());
-        if (auto *view = qobject_cast<QAbstractItemView *>(widget)) {
-            auto *model = view->model();
-            // Only recolor explicit theme foregrounds, never replace model data.
-            if (model && !refreshedModels.contains(model)) {
-                refreshedModels.insert(model);
-                recolorModel(model, oldMuted, oldAccent);
-            }
-        }
+        if (auto *calendar = qobject_cast<QCalendarWidget *>(widget))
+            applyCalendarPalette(calendar);
+        if (auto *view = qobject_cast<QAbstractItemView *>(widget))
+            refreshItemForegrounds(view, oldMuted, oldAccent);
         if (auto *edit = qobject_cast<QPlainTextEdit *>(widget)) {
             for (auto *highlighter : edit->document()->findChildren<QSyntaxHighlighter *>())
                 highlighter->rehighlight();
@@ -297,21 +270,17 @@ void UiTheme::setLayoutMetrics(QLayout *layout, const QMargins &margins, int spa
     updateLayoutMetrics(layout);
 }
 
-QColor UiTheme::statusColor(const QString &result)
+void UiTheme::applyCalendarPalette(QCalendarWidget *calendar)
 {
-    if (result == QStringLiteral("success") || result == QStringLiteral("already")) return QColor(Success);
-    if (result == QStringLiteral("failure")) return QColor(Danger);
-    if (result == QStringLiteral("running") || result == QStringLiteral("loading")) return QColor(Accent);
-    if (result == QStringLiteral("none") || result == QStringLiteral("disabled") || result == QStringLiteral("skipped")) return QColor(Muted);
-    return QColor(Warning);
-}
+    auto palette = calendar->palette();
+    palette.setColor(QPalette::Highlight, QColor(Selection));
+    palette.setColor(QPalette::HighlightedText, QColor(Accent));
+    calendar->setPalette(palette);
 
-QString UiTheme::statusStyle(const QString &result)
-{
-    const QColor ink = statusColor(result);
-    const char *background = ink == QColor(Success) ? SuccessBackground
-        : ink == QColor(Danger) ? DangerBackground : ink == QColor(Accent) ? Selection
-        : ink == QColor(Muted) ? Hover : WarningBackground;
-    return QStringLiteral("color: %1; background: %2; border: none; border-radius: 5px; padding: 3px 9px; font-weight: 500;")
-        .arg(ink.name(), QString::fromLatin1(background));
+    QTextCharFormat header;
+    header.setForeground(QColor(Muted));
+    header.setBackground(QColor(IndexSurface));
+    calendar->setHeaderTextFormat(header);
+    calendar->setWeekdayTextFormat(Qt::Saturday, header);
+    calendar->setWeekdayTextFormat(Qt::Sunday, header);
 }

@@ -99,10 +99,6 @@ CalendarPage::CalendarPage(AppDatabase *database,
 
     calendar_ = new WorkspaceCalendar(calendarCard);
     calendar_->setObjectName(QStringLiteral("workspaceCalendar"));
-    QPalette calendarPalette = calendar_->palette();
-    calendarPalette.setColor(QPalette::Highlight, QColor(UiTheme::Selection));
-    calendarPalette.setColor(QPalette::HighlightedText, QColor(UiTheme::Accent));
-    calendar_->setPalette(calendarPalette);
     calendar_->setVerticalHeaderFormat(QCalendarWidget::NoVerticalHeader);
     calendar_->setFirstDayOfWeek(Qt::Monday);
     calendar_->setSelectedDate(QDate::currentDate());
@@ -120,6 +116,7 @@ CalendarPage::CalendarPage(AppDatabase *database,
     reminderHeader->addWidget(selectedDateLabel_);
     detailsLayout->addLayout(reminderHeader);
     reminderList_ = new QListWidget(detailsCard);
+    reminderList_->setProperty("themeForegroundColumn", 0);
     reminderList_->setObjectName(QStringLiteral("reminderList"));
     reminderList_->setAlternatingRowColors(false);
     reminderList_->setSelectionMode(QAbstractItemView::SingleSelection);

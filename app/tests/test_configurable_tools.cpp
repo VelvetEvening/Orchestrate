@@ -70,13 +70,21 @@ private slots:
         auto saved=database_.toolCommands(t.id);QCOMPARE(saved[0].id,second);QCOMPARE(saved[1].id,first);QVERIFY(!saved[1].enabled);
         AppDatabase::AutomationTool stored;QVERIFY(page.findTool(t.id,&stored));QVERIFY(stored.customized);
         page.loadToolDetails(t.id);page.runCommand(page.commandList_->item(1));QVERIFY(!page.runRecords_.contains(t.id));
-        page.runCommand(page.commandList_->item(0));QTRY_VERIFY_WITH_TIMEOUT(!page.runRecords_.value(t.id).running,5000);QVERIFY(!page.runRecords_.value(t.id).failed);
+        page.runCommand(page.commandList_->item(0));
+        auto *toolItem = page.tree_->currentItem();
+        QCOMPARE(toolItem->text(1), QStringLiteral("运行中"));
+        const auto runningIcon = toolItem->icon(0).cacheKey();
+        page.appendRunOutput(t.id, QStringLiteral("progress\n"));
+        page.renderRunRecord();
+        QCOMPARE(toolItem->icon(0).cacheKey(), runningIcon);
+        QTRY_VERIFY_WITH_TIMEOUT(!page.runRecords_.value(t.id).running, 5000);
+        QVERIFY(!page.runRecords_.value(t.id).failed);
         {
             const auto restoreTheme = qScopeGuard([] { UiTheme::apply(*qApp, QStringLiteral("mist")); });
             UiTheme::apply(*qApp, QStringLiteral("paper"));
             QCoreApplication::processEvents();
             QCOMPARE(page.runStatus_->font().weight(), QFont::DemiBold);
-            const auto icon = page.tree_->currentItem()->icon(0).pixmap(32,32).toImage();
+            const auto icon = toolItem->icon(0).pixmap(32,32).toImage();
             QCOMPARE(icon.pixelColor(16,16), QColor(UiTheme::Muted));
         }
         QVERIFY(sql("CREATE TRIGGER reject_custom BEFORE INSERT ON tool_commands WHEN NEW.name='reject' BEGIN SELECT RAISE(ABORT,'injected'); END"));

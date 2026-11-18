@@ -3,7 +3,6 @@
 #include <QCalendarWidget>
 #include <QPainter>
 #include <QSet>
-#include <QTextCharFormat>
 
 // Paint date cells independently of the native style's inactive selection.
 // QCalendarWidget still owns navigation, keyboard input and accessibility.
@@ -17,13 +16,7 @@ public:
         QFont dateFont = font();
         dateFont.setPointSize(11);
         setFont(dateFont);
-        QTextCharFormat header;
-        header.setForeground(QColor(UiTheme::Muted));
-        header.setBackground(QColor(UiTheme::IndexSurface));
-        setHeaderTextFormat(header);
-        setWeekdayTextFormat(Qt::Saturday, header);
-        setWeekdayTextFormat(Qt::Sunday, header);
-
+        UiTheme::applyCalendarPalette(this);
     }
     void setRecordDates(const QSet<QDate> &diaries, const QSet<QDate> &reminders)
     {

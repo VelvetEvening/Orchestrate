@@ -200,6 +200,11 @@ private slots:
                                      QStringLiteral("保留记录内容。"), folderId, &error), qPrintable(error));
         }
         // Create the views under a saved compact preference, then cycle their styles.
+        AppDatabase::Reminder done;
+        done.title = QStringLiteral("已完成的提醒");
+        done.remindAt = QDateTime::currentDateTime();
+        done.completed = true;
+        QVERIFY2(db.addReminder(done, nullptr, &error), qPrintable(error));
         QVERIFY(db.setSetting("appearance_preset", "precision"));
         MainWindow window; prepareWindow(window);
         QVERIFY(window.ready());
@@ -210,6 +215,10 @@ private slots:
         auto *projectList = projects->findChild<QListWidget *>("projectList");
         auto *workList = projects->findChild<QTreeWidget *>("workRecordList");
         auto *diaryList = calendar->findChild<QListWidget *>("diaryList");
+        auto *reminders = calendar->findChild<QListWidget *>("reminderList");
+        QVERIFY(reminders);
+        const auto completed = reminders->findItems(done.title, Qt::MatchContains);
+        QCOMPARE(completed.size(), 1);
         QVERIFY(projectList && workList && diaryList);
         QCOMPARE(workList->topLevelItemCount(), 3);
         auto *expanded = workList->topLevelItem(0);
@@ -226,6 +235,8 @@ private slots:
         QVERIFY(collectionList);
         collectionList->setCurrentRow(3);
         auto *selectedProject = projectList->currentItem();
+        const QColor customColor(UiTheme::Muted);
+        selectedProject->setForeground(customColor);
         auto *selectedDiary = diaryList->currentItem();
         auto *selectedCollection = collectionList->currentItem();
         const auto folderIndex = workList->model()->index(0, 0);
@@ -250,6 +261,8 @@ private slots:
         for (const auto &id : {QStringLiteral("precision"), QStringLiteral("mist"), QStringLiteral("paper"), QStringLiteral("precision")}) {
             choice->setCurrentIndex(choice->findData(id));
             QCoreApplication::processEvents();
+            QCOMPARE(completed.first()->foreground().color(), QColor(UiTheme::Muted));
+            QCOMPARE(selectedProject->foreground().color(), customColor);
             for (const auto &row : rows) {
                 QVERIFY(row.index.isValid());
                 const int height = row.view->visualRect(row.index).height();

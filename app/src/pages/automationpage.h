@@ -119,9 +119,6 @@ private:
     void clearStateItems();
 
     void runCommand(QListWidgetItem *item);
-    QString remoteCommandLine(const AppDatabase::AutomationTool &tool,
-                              const QString &executable,
-                              const QStringList &arguments) const;
     void renderRunRecord();
     void appendRunOutput(int toolId, const QString &text);
     static constexpr qsizetype maxRunOutputChars = 256 * 1024;

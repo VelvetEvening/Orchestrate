@@ -1,4 +1,4 @@
-/* Values are resolved from ui/theme.h. This stylesheet covers every window. */
+/* UiTheme::apply resolves the active preset's colors and spacing. */
 QWidget { color: @text@; selection-background-color: @selection@; selection-color: @accent@; }
 QMainWindow, QWidget#root, QWidget#settingsPage { background: @surface@; }
 QDialog, QMessageBox, QInputDialog { background: @surface@; }
@@ -14,24 +14,22 @@ QWidget[workspaceSurface="index"], QWidget[workspaceSurface="inset"] {
 QWidget[workspaceSurface="section"], QWidget#updateWidget[workspaceSurface="section"] {
     background: @surface@; border: none; border-bottom: 1px solid @border@; border-radius: 0;
 }
-QLabel#pageTitle, QLabel#contentTitle, QLabel#objectTitle { color: @text@; font-size: 20px; font-weight: 600; }
+QLabel#contentTitle, QLabel#objectTitle { color: @text@; font-size: 20px; font-weight: 600; }
 QLabel#cardTitle { color: @text@; font-size: 16px; font-weight: 600; }
 QLabel#toolName { color: @text@; font-size: 22px; font-weight: 600; }
 QLabel#emptyStateTitle { color: @text@; font-size: 18px; font-weight: 600; }
-QLabel#muted, QLabel#pageSubtitle, QLabel#sourceText, QLabel#fieldHelp,
-QLabel#recordLocation, QLabel#recordHint, QLabel#mathPreviewStatus,
-QLabel#autoStartStatus, QLabel#globalShortcutStatus, QLabel#recordSaveStatus,
-QLabel#outlineSaveError {
+QLabel#muted, QLabel#sourceText, QLabel#fieldHelp, QLabel#recordHint, QLabel#mathPreviewStatus,
+QLabel#autoStartStatus, QLabel#globalShortcutStatus, QLabel#recordSaveStatus {
     color: @muted@; font-size: 12px;
 }
 QLabel#emptyViewHint { color: @muted@; font-size: 13px; padding: 20px; }
 QLabel#emptyStateMessage { color: @muted@; font-size: 13px; }
 QLabel#selectedDate { color: @muted@; font-size: 13px; }
-QLabel[uiRole="error"], QLabel#clipboardStatus, QLabel#outlineSaveError[uiRole="error"], QLabel#recordSaveStatus[uiRole="error"] { color: @danger@; }
-QLabel[uiRole="success"], QLabel#outlineSaveError[uiRole="success"], QLabel#recordSaveStatus[uiRole="success"] { color: @success@; }
+QLabel[uiRole="error"], QLabel#clipboardStatus, QLabel#recordSaveStatus[uiRole="error"] { color: @danger@; }
+QLabel[uiRole="success"], QLabel#recordSaveStatus[uiRole="success"] { color: @success@; }
 QLabel[uiRole="warning"], QLabel#recordSaveStatus[uiRole="warning"] { color: @warning@; }
 QLabel[uiRole="accent"] { color: @accent@; }
-QFrame#card, QWidget#updateWidget {
+QWidget#updateWidget {
     background: @surface@; border: 1px solid @border@; border-radius: 10px;
 }
 QPushButton, QToolButton {
@@ -86,7 +84,6 @@ QLineEdit#recordSearch:focus, QLineEdit#clipboardSearch:focus { border-color: @f
 QPlainTextEdit#headingSource, QTextEdit#headingPreview { padding: 12px 14px; }
 QTextEdit#headingPreview { border-color: @border@; }
 QTextEdit#headingPreview:focus { border-color: @accent@; }
-QToolButton#markdownSourceMode:checked { background: @selection@; color: @accent@; border-color: @focus@; }
 QPlainTextEdit#clipboardPreview { background: @indexSurface@; border: none; border-radius: 0; padding: 12px; }
 QTreeWidget#clipboardItems, QPlainTextEdit#clipboardPreview, QPlainTextEdit#clipboardItemBody { font-size: 18pt; }
 QComboBox { padding-right: 28px; min-height: 20px; }
@@ -193,6 +190,13 @@ QLabel#tag { color: @accent@; background: @selection@; }
 QLabel#tagDanger { color: @danger@; background: @dangerBackground@; }
 QLabel#tagMuted { color: @muted@; background: @hover@; }
 QFrame#stateRow { background: @background@; border: none; border-radius: 0; }
+QLabel#stateBadge, QLabel#stateItemBadge { border: none; border-radius: 5px; padding: 3px 9px; font-weight: 500; }
+QLabel#stateItemBadge { font-size: 12px; padding: 2px 9px; border-radius: 9px; }
+QLabel[uiRole="badgeSuccess"] { color: @success@; background: @successBackground@; }
+QLabel[uiRole="badgeError"] { color: @danger@; background: @dangerBackground@; }
+QLabel[uiRole="badgeActive"] { color: @accent@; background: @selection@; }
+QLabel[uiRole="badgeMuted"] { color: @muted@; background: @hover@; }
+QLabel[uiRole="badgeWarning"] { color: @warning@; background: @warningBackground@; }
 QLabel#stateRowName, QLabel#commandContextTitle { font-weight: 600; }
 QFrame#runPanel { background: @background@; border: none; border-radius: 0; }
 QLabel#runTitle { color: @text@; font-weight: 600; }

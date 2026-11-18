@@ -6,6 +6,7 @@
 #include <QString>
 
 class QApplication;
+class QCalendarWidget;
 class QLayout;
 class QWidget;
 
@@ -23,12 +24,6 @@ inline const char *Accent = "#365f8c";
 inline const char *Selection = "#dfe9f2";
 inline const char *Hover = "#edf2f5";
 inline const char *Focus = "#6f8fb6";
-inline const char *PrimaryHover = "#d2e0ee";
-inline const char *PrimaryPressed = "#c4d6e7";
-inline const char *NavHover = "#e5ebee";
-inline const char *ScrollHandle = "#bdc8d3";
-inline const char *ScrollHandleHover = "#97a8b9";
-inline const char *Progress = "#c7d7ed";
 // Calendar record markers are informational, not success/warning status.
 inline const char *DiaryMarker = "#648098";
 inline const char *ReminderMarker = "#887789";
@@ -50,6 +45,5 @@ QIcon icon(const QString &name);
 void setRole(QWidget *widget, const char *role);
 void setSurface(QWidget *widget, const char *surface);
 void setLayoutMetrics(QLayout *layout, const QMargins &margins, int spacing = -1);
-QString statusStyle(const QString &result);
-QColor statusColor(const QString &result);
+void applyCalendarPalette(QCalendarWidget *calendar);
 }
