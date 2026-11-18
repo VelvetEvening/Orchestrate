@@ -229,12 +229,6 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     recordHint_->setWordWrap(true);
 
     records->addWidget(recordHint_);
-    auto *actions = new QHBoxLayout;
-    deleteWorkButton_ = new QPushButton(QStringLiteral("删除"), recordsPanel_);
-    UiTheme::setRole(deleteWorkButton_, "danger");
-    actions->addWidget(deleteWorkButton_);
-    actions->addStretch();
-    records->addLayout(actions);
     detailsLayout_->addWidget(recordsPanel_,1);
     splitter->addWidget(listCard);
     splitter->addWidget(details_);
@@ -257,12 +251,10 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     });
     connect(add, &QPushButton::clicked, this, [this]{ recordDialog(true); });
     connect(createFolder, &QPushButton::clicked, this, [this]{ folderDialog(true); });
-    connect(deleteWorkButton_, &QPushButton::clicked, this, &ProjectsPage::deleteWorkRecord);
     connect(workList_, &QTreeWidget::itemDoubleClicked, this, [this]{ recordDialog(false); });
-    connect(workList_, &QTreeWidget::itemSelectionChanged, this, &ProjectsPage::updateRecordActions);
     connect(workList_, &QTreeWidget::customContextMenuRequested, this, &ProjectsPage::showRecordContextMenu);
-    connect(workList_, &QTreeWidget::itemExpanded, this, [this]{ saveExpandedFolders(); updateRecordActions(); });
-    connect(workList_, &QTreeWidget::itemCollapsed, this, [this]{ saveExpandedFolders(); updateRecordActions(); });
+    connect(workList_, &QTreeWidget::itemExpanded, this, &ProjectsPage::saveExpandedFolders);
+    connect(workList_, &QTreeWidget::itemCollapsed, this, &ProjectsPage::saveExpandedFolders);
     connect(search_, &QLineEdit::textChanged, this, &ProjectsPage::filterRecords);
     connect(projectStatusTabs_, &QTabBar::currentChanged, this, [this](int index) {
         loadProjects(selectedProjectIds_[index]);
@@ -520,7 +512,6 @@ void ProjectsPage::refreshWorkRecords()
     const QSignalBlocker blocker(workList_);
     workList_->clear();
     recordsProjectId_ = current_.id;
-    deleteWorkButton_->setEnabled(false);
     recordHint_->hide();
     EmptyViewHint::update(workList_, QString());
     if (current_.id<=0) return;
@@ -613,15 +604,6 @@ void ProjectsPage::filterRecords()
     // the visible row count stays the same. Refresh their accessible mapping.
     workList_->doItemsLayout();
     resetTreeAccessibility(workList_);
-    updateRecordActions();
-}
-
-void ProjectsPage::updateRecordActions()
-{
-    const auto *item = workList_->currentItem();
-    const bool selected = item && !item->data(0,FolderRole).toBool() && !item->isHidden()
-        && (!item->parent() || (!item->parent()->isHidden() && item->parent()->isExpanded()));
-    deleteWorkButton_->setEnabled(selected);
 }
 
 int ProjectsPage::selectedFolderId() const

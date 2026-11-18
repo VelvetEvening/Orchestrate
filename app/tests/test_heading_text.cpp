@@ -2109,7 +2109,8 @@ private slots:
         QVERIFY(initialization->isExpanded());
         tree->setCurrentItem(initialization->child(0));
         initialization->setExpanded(false);
-        QVERIFY(!button(*page,QStringLiteral("删除"))->isEnabled());
+        for (auto *action : page->findChildren<QPushButton *>())
+            QVERIFY(action->text() != QStringLiteral("删除"));
         search->setText(QStringLiteral("初始化检查"));
         QVERIFY(initialization->isExpanded() && !initialization->isHidden());
         QVERIFY(folderByName(QStringLiteral("界面优化"))->isHidden());
@@ -2171,6 +2172,19 @@ private slots:
         for (const auto &record : database_->workRecords(project))
             if (record.title == QStringLiteral("初始化检查清单")) QCOMPARE(record.folderId,0);
         QVERIFY(!folderByName(QStringLiteral("界面优化")));
+        const auto matches = tree->findItems(QStringLiteral("初始化检查清单"), Qt::MatchExactly);
+        QCOMPARE(matches.size(), 1);
+        tree->setCurrentItem(folderByName(QStringLiteral("工作区初始化")));
+        interactMenu([&](QMenu &menu) {
+            interact(QStringLiteral("删除协作记录"), [&](QDialog &dialog) {
+                auto *confirmation = qobject_cast<QMessageBox *>(&dialog);
+                require(confirmation, "Missing record deletion confirmation");
+                confirmation->button(QMessageBox::Yes)->click();
+            }, [&]{ menuAction(menu, QStringLiteral("删除记录…"))->trigger(); });
+        }, [&]{ tree->customContextMenuRequested(tree->visualItemRect(matches.first()).center()); });
+        QCOMPARE(database_->workRecords(project).size(), 2);
+        for (const auto &record : database_->workRecords(project))
+            QVERIFY(record.title != QStringLiteral("初始化检查清单"));
         button(window,QStringLiteral("Git 历史"))->setFocus();
         QVERIFY(!page->findChild<HeadingTextEdit *>(QStringLiteral("projectOutline")));
     }

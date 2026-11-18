@@ -139,18 +139,18 @@ void UiTheme::apply(QApplication &app, const QString &id)
     activePreset = selected;
     const bool paper = activePreset == Preset::Paper;
     const bool compact = activePreset == Preset::Precision;
-    Background = paper ? "#f6f2ed" : compact ? "#f4f6f8" : "#f7f9fa";
-    Sidebar = paper ? "#eee7df" : compact ? "#e5ebf2" : "#eff3f4";
+    Background = paper ? "#f7f5f0" : compact ? "#f4f6f8" : "#f7f9fa";
+    Sidebar = paper ? "#f0ede7" : compact ? "#e5ebf2" : "#eff3f4";
     IndexSurface = compact ? "#edf1f6" : Background;
-    Surface = paper ? "#fcfaf6" : "#ffffff";
-    Text = paper ? "#3c3530" : compact ? "#253246" : "#2f3b48";
-    Muted = paper ? "#70665e" : compact ? "#536277" : "#5e6c78";
-    Border = paper ? "#e4dbd2" : compact ? "#d8e0e8" : "#dfe6ea";
-    ControlBorder = paper ? "#bdafa2" : compact ? "#a8b6c7" : "#b3bfcd";
+    Surface = paper ? "#fffdf8" : "#ffffff";
+    Text = paper ? "#383734" : compact ? "#253246" : "#2f3b48";
+    Muted = paper ? "#6e6a64" : compact ? "#536277" : "#5e6c78";
+    Border = paper ? "#e2ded6" : compact ? "#d8e0e8" : "#dfe6ea";
+    ControlBorder = paper ? "#b8b0a6" : compact ? "#a8b6c7" : "#b3bfcd";
     Accent = paper ? "#80523e" : compact ? "#244f78" : "#365f8c";
-    Selection = paper ? "#f0e3d8" : compact ? "#dce8f3" : "#dfe9f2";
-    Hover = paper ? "#f4ede7" : "#edf2f5";
-    Focus = paper ? "#99755d" : "#6f8fb6";
+    Selection = paper ? "#ece8e1" : compact ? "#dce8f3" : "#dfe9f2";
+    Hover = paper ? "#f3f0ea" : "#edf2f5";
+    Focus = paper ? "#96765f" : "#6f8fb6";
     DiaryMarker = paper ? "#986d54" : compact ? "#58758f" : "#648098";
     ReminderMarker = paper ? "#8a7786" : compact ? "#82708c" : "#887789";
     initializeUiResources();
@@ -192,9 +192,11 @@ void UiTheme::apply(QApplication &app, const QString &id)
             {"background", Background}, {"sidebar", Sidebar}, {"surface", Surface}, {"indexSurface", IndexSurface},
             {"text", Text}, {"muted", Muted}, {"border", Border}, {"controlBorder", ControlBorder},
             {"accent", Accent}, {"selection", Selection}, {"hover", Hover}, {"focus", Focus},
-            {"primaryHover", paper ? "#ebdacc" : "#d2e0ee"}, {"primaryPressed", paper ? "#e3ccbc" : "#c4d6e7"},
-            {"navHover", paper ? "#eae0d5" : "#e5ebee"}, {"progress", paper ? "#e7d4c6" : "#c7d7ed"},
-            {"scrollHandle", paper ? "#cdc0b4" : "#bdc8d3"}, {"scrollHandleHover", paper ? "#a49588" : "#97a8b9"},
+            {"primaryBackground", paper ? "#f4ebe2" : Selection}, {"primaryBorder", paper ? "#e2d5c8" : "transparent"},
+            {"primaryHover", paper ? "#ece0d5" : "#d2e0ee"}, {"primaryHoverBorder", paper ? "#b69a84" : Focus},
+            {"primaryPressed", paper ? "#e6d7c9" : "#c4d6e7"},
+            {"navHover", paper ? "#e9e5de" : "#e5ebee"}, {"progress", paper ? "#e2d5ca" : "#c7d7ed"},
+            {"scrollHandle", paper ? "#c8c1b8" : "#bdc8d3"}, {"scrollHandleHover", paper ? "#a39a8e" : "#97a8b9"},
             {"success", Success}, {"successBackground", SuccessBackground},
             {"warning", Warning}, {"warningBackground", WarningBackground},
             {"danger", Danger}, {"dangerBackground", DangerBackground},

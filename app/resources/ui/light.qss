@@ -51,10 +51,10 @@ QPushButton#gitHistoryButton:enabled:focus { border-color: @accent@; }
 QPushButton#gitHistoryButton:disabled { color: @disabled@; background: transparent; border-color: transparent; font-weight: 400; }
 QPushButton:disabled, QToolButton:disabled { color: @disabled@; background: @background@; border-color: @border@; }
 QPushButton#primaryButton, QPushButton[uiRole="primary"], QPushButton:default {
-    background: @selection@; color: @accent@; border-color: transparent; font-weight: 600;
+    background: @primaryBackground@; color: @accent@; border-color: @primaryBorder@; font-weight: 600;
 }
-QPushButton#primaryButton:hover, QPushButton[uiRole="primary"]:hover, QPushButton:default:hover { background: @primaryHover@; border-color: @focus@; }
-QPushButton#primaryButton:pressed, QPushButton[uiRole="primary"]:pressed { background: @primaryPressed@; }
+QPushButton#primaryButton:hover, QPushButton[uiRole="primary"]:hover, QPushButton:default:hover { background: @primaryHover@; border-color: @primaryHoverBorder@; }
+QPushButton#primaryButton:pressed, QPushButton[uiRole="primary"]:pressed, QPushButton:default:pressed { background: @primaryPressed@; border-color: @focus@; }
 QPushButton#primaryButton:focus:enabled, QPushButton[uiRole="primary"]:focus:enabled, QPushButton:default:focus:enabled { border-color: @accent@; }
 QPushButton#primaryButton:disabled, QPushButton[uiRole="primary"]:disabled, QPushButton:default:disabled { color: @disabled@; background: @background@; border-color: @border@; }
 QPushButton#dangerButton, QPushButton[uiRole="danger"], QPushButton#deleteProjectButton { color: @danger@; background: transparent; border-color: transparent; }

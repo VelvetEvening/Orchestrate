@@ -35,7 +35,6 @@ private:
     void refreshGitAvailability();
     void setGitAvailability(bool available, const QString &hint);
     void filterRecords();
-    void updateRecordActions();
     void showProjectContextMenu(const QPoint &position);
     void showRecordContextMenu(const QPoint &position);
     void folderDialog(bool creating);
@@ -60,6 +59,5 @@ private:
     QLabel *recordHint_;
     int recordsProjectId_ = 0;
     class QLineEdit *search_;
-    QPushButton *deleteWorkButton_;
     QHash<int, QPointer<GitHistoryWindow>> gitWindows_;
 };
