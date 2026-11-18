@@ -2055,6 +2055,11 @@ private slots:
         auto *projects=page->findChild<QListWidget *>("projectList");
         auto *search=page->findChild<QLineEdit *>("recordSearch");
         QVERIFY(tree && projects && search);
+        auto *add = page->findChild<QPushButton *>("addWorkRecordButton");
+        QVERIFY(add && add->isVisible());
+        QCOMPARE(add->x(), tree->x());
+        QVERIFY(add->y() > tree->geometry().bottom());
+        QCOMPARE(search->width(), tree->width());
         auto folderByName=[&](const QString &name) -> QTreeWidgetItem * {
             for (int i=0;i<tree->topLevelItemCount();++i)
                 if (tree->topLevelItem(i)->data(0,Qt::UserRole+1).toBool() && tree->topLevelItem(i)->text(0)==name) return tree->topLevelItem(i);

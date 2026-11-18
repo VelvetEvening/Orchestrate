@@ -168,19 +168,12 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     recordsPanel_->setObjectName(QStringLiteral("recordsPanel"));
     auto *records = new QVBoxLayout(recordsPanel_);
     UiTheme::setLayoutMetrics(records, {0,0,0,0}, 10);
-    auto *searchRow = new QHBoxLayout;
-    searchRow->setSpacing(10);
     search_ = new QLineEdit(recordsPanel_);
     search_->setObjectName(QStringLiteral("recordSearch"));
     search_->setPlaceholderText(QStringLiteral("搜索标题、摘要或文件夹"));
     search_->setAccessibleName(QStringLiteral("搜索协作记录"));
     search_->setClearButtonEnabled(true);
-    searchRow->addWidget(search_,1);
-    auto *add = new QPushButton(QStringLiteral("添加记录"), recordsPanel_);
-    add->setObjectName(QStringLiteral("addWorkRecordButton"));
-    UiTheme::setRole(add, "primary");
-    searchRow->addWidget(add);
-    records->addLayout(searchRow);
+    records->addWidget(search_);
     auto *orderedRecords = new SiblingOrderTree(recordsPanel_);
     workList_ = orderedRecords;
     orderedRecords->saveOrder = [this](QTreeWidgetItem *item, const QList<int> &ids) {
@@ -229,6 +222,10 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     recordHint_->setWordWrap(true);
 
     records->addWidget(recordHint_);
+    auto *add = new QPushButton(QStringLiteral("添加记录"), recordsPanel_);
+    add->setObjectName(QStringLiteral("addWorkRecordButton"));
+    UiTheme::setRole(add, "primary");
+    records->addWidget(add, 0, Qt::AlignLeft);
     detailsLayout_->addWidget(recordsPanel_,1);
     splitter->addWidget(listCard);
     splitter->addWidget(details_);
