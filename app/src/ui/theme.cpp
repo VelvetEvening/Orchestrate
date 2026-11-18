@@ -217,6 +217,7 @@ void UiTheme::apply(QApplication &app, const QString &id)
         css.replace(QStringLiteral("@navRadius@"), compact ? QStringLiteral("4px") : QStringLiteral("7px"));
         css.replace(QStringLiteral("@tabPadding@"), compact ? QStringLiteral("4px 9px") : QStringLiteral("7px 12px"));
         css.replace(QStringLiteral("@calendarPadding@"), compact ? QStringLiteral("4px") : QStringLiteral("7px"));
+        css.replace(QStringLiteral("@calendarBottomInset@"), compact ? QStringLiteral("5em") : QStringLiteral("0px"));
         css.replace(QStringLiteral("@toolItemPadding@"), compact ? QStringLiteral("3px 5px") : paper ? QStringLiteral("9px 7px") : QStringLiteral("8px 5px"));
         css.replace(QStringLiteral("@itemPadding@"), compact ? QStringLiteral("3px 8px") : paper ? QStringLiteral("9px 10px") : QStringLiteral("7px 10px"));
         css.replace(QStringLiteral("@recordMinHeight@"), compact ? QStringLiteral("30px") : QStringLiteral("42px"));

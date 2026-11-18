@@ -123,6 +123,7 @@ private slots:
         QVERIFY(!QFileInfo::exists(path) || QDir(path).removeRecursively()); seed();
     }
     void appearanceAndSidebarPreferencesRestore() {
+        int mistDateRowHeight = 0;
         for (const auto &id : {QStringLiteral("mist"), QStringLiteral("paper"), QStringLiteral("precision")}) {
             {
                 MainWindow window; prepareWindow(window);
@@ -132,8 +133,21 @@ private slots:
                 QVERIFY(choice && toggle);
                 choice->setCurrentIndex(choice->findData(id));
                 QVERIFY(!qApp->styleSheet().contains(QLatin1Char('@')));
-                window.findChildren<QPushButton *>("navButton").at(4)->click();
                 window.resize(980, 640);
+                QCoreApplication::processEvents();
+                auto *calendar = window.findChild<QCalendarWidget *>();
+                QVERIFY(calendar && calendar->isVisible());
+                auto *grid = calendar->findChild<QTableView *>();
+                QVERIFY(grid);
+                const int dateRowHeight = grid->rowHeight(grid->currentIndex().row());
+                if (id == QStringLiteral("mist")) mistDateRowHeight = dateRowHeight;
+                if (id == QStringLiteral("precision")) {
+                    QVERIFY(dateRowHeight >= 36 && dateRowHeight < mistDateRowHeight);
+                    const auto cell = grid->visualRect(grid->currentIndex());
+                    QCOMPARE(grid->indexAt(cell.bottomRight()), grid->currentIndex());
+                }
+                auto *settings = window.findChildren<QPushButton *>("navButton").at(4);
+                settings->click();
                 QCoreApplication::processEvents();
                 auto *section = choice->parentWidget();
                 QVERIFY(choice->isVisible());
@@ -142,7 +156,10 @@ private slots:
                 const int right = section->contentsRect().right() - section->layout()->contentsMargins().right();
                 QVERIFY(qAbs(choice->geometry().right() - right) <= 1);
                 const auto expandedIcon = toggle->icon().pixmap(24, 24).toImage();
+                const int expandedHeight = settings->height();
                 toggle->click();
+                QCoreApplication::processEvents();
+                QCOMPARE(settings->height(), expandedHeight);
                 QVERIFY(expandedIcon != toggle->icon().pixmap(24, 24).toImage());
             }
             {

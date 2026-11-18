@@ -61,6 +61,7 @@ private:
     void handleTreeSelection();
     void showTreeContextMenu(const QPoint &position);
     void updateToolIcon(int toolId);
+    void updateToolIcon(QTreeWidgetItem *item);
     QString ungroupedName() const;
     bool findTool(int toolId, AppDatabase::AutomationTool *tool) const;
 

@@ -38,7 +38,6 @@ private:
     bool savePendingChanges();
     void buildUi();
     void buildNavigation(QWidget *parent);
-    void buildPages();
     void buildTray();
     void switchToPage(int index, bool confirmLeave = true);
     void toggleSidebar();

@@ -213,21 +213,13 @@ void MainWindow::updateSidebarAppearance()
         button->setText(sidebarCollapsed_ ? QString() : button->property("expandedText").toString());
         if (button->property("updateTag").toString().isEmpty())
             button->setToolTip(button->property("expandedText").toString());
-        button->setStyleSheet(sidebarCollapsed_
-                                  ? QStringLiteral("text-align: center; padding: 10px 0;")
-                                  : QString());
+        UiTheme::setRole(button, sidebarCollapsed_ ? "collapsedNav" : "");
     }
 
     sidebarToggleButton_->setIcon(UiTheme::icon(sidebarCollapsed_ ? QStringLiteral("panel-left-expand") : QStringLiteral("panel-left-collapse")));
     sidebarToggleButton_->setAccessibleName(sidebarCollapsed_ ? QStringLiteral("展开侧边栏") : QStringLiteral("收起侧边栏"));
     sidebarToggleButton_->setToolTip(sidebarCollapsed_ ? QStringLiteral("展开侧边栏")
                                                        : QStringLiteral("收起侧边栏"));
-}
-
-void MainWindow::buildPages()
-{
-    // This method is kept separate so the page shell can grow without changing the
-    // navigation/tray wiring.
 }
 
 void MainWindow::buildTray()

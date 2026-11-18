@@ -67,6 +67,7 @@ namespace {
 
 constexpr int kGroupItem = 1;
 constexpr int kToolItem = 2;
+constexpr int kHasStateFileRole = Qt::UserRole + 2;
 const QString kUngroupedNameKey = QStringLiteral("automation.ungrouped_name");
 const QString kBuiltinGroupKey = QStringLiteral("automation.builtin_group_id");
 const QString kBuiltinGroupName = QStringLiteral("系统工具");
@@ -135,7 +136,6 @@ QString resultLabel(const QString &result, const QString &toolId = QString())
     return result.isEmpty() || result == QStringLiteral("unknown") ? QStringLiteral("未知") : result;
 }
 
-QColor resultColor(const QString &result) { return UiTheme::statusColor(result); }
 QString badgeStyle(const QString &result) { return UiTheme::statusStyle(result); }
 
 QIcon statusDot(const QColor &color)
@@ -148,23 +148,6 @@ QIcon statusDot(const QColor &color)
     painter.setBrush(color);
     painter.drawEllipse(QRectF(8, 8, 16, 16));
     return QIcon(pixmap);
-}
-
-void applyToolStatus(QTreeWidgetItem *item, const QJsonObject *state, const QString *error)
-{
-    QString text = QStringLiteral("未读取");
-    QColor color(QString::fromLatin1(UiTheme::Muted));
-    if (error != nullptr) {
-        text = QStringLiteral("读取失败");
-        color = QColor(QString::fromLatin1(UiTheme::Danger));
-    } else if (state != nullptr) {
-        const QString result = ToolState::displayResult(*state);
-        text = resultLabel(result, jsonString(*state, QStringLiteral("tool_id")));
-        color = resultColor(result);
-    }
-    item->setIcon(0, statusDot(color));
-    item->setText(1, text);
-    item->setForeground(1, color);
 }
 
 class CommandDescriptionLabel : public QLabel {
@@ -754,16 +737,14 @@ void AutomationPage::loadAll(int preferredToolId)
         item->setText(0, tool.name);
         item->setData(0, Qt::UserRole, tool.id);
         item->setData(0, Qt::UserRole + 1, kToolItem);
+        item->setData(0, kHasStateFileRole, !tool.statePath.isEmpty());
         item->setData(0, SiblingOrderScopeRole, QStringLiteral("tools.%1").arg(tool.groupId));
         item->setToolTip(0, tool.description.isEmpty() ? QString()
             : QStringLiteral("<qt>%1</qt>").arg(tool.description.toHtmlEscaped().replace(
                 QLatin1Char('\n'), QStringLiteral("<br>"))));
         item->setData(0, Qt::AccessibleDescriptionRole, tool.description);
         item->setTextAlignment(1, Qt::AlignRight | Qt::AlignVCenter);
-        applyToolStatus(item,
-                        stateCache_.contains(tool.id) ? &stateCache_[tool.id] : nullptr,
-                        stateErrors_.contains(tool.id) ? &stateErrors_[tool.id] : nullptr);
-        if (tool.statePath.isEmpty()) { item->setText(1, {}); item->setIcon(0,statusDot(resultColor("none"))); }
+        updateToolIcon(item);
         toolCounts[parent->data(0, Qt::UserRole).toInt()] += 1;
     }
     for (auto it = groupItems.cbegin(); it != groupItems.cend(); ++it) {
@@ -911,21 +892,39 @@ void AutomationPage::updateToolIcon(int toolId)
         for (int j = 0; j < group->childCount(); ++j) {
             QTreeWidgetItem *item = group->child(j);
             if (item->data(0, Qt::UserRole).toInt() == toolId) {
-                AppDatabase::AutomationTool tool;
-                if (findTool(toolId, &tool) && tool.statePath.isEmpty()) {
-                    const auto record = runRecords_.value(toolId);
-                    const QString result = record.running ? "running" : record.failed ? "failure" : "none";
-                    item->setIcon(0, statusDot(resultColor(result)));
-                    item->setText(1, record.running ? QStringLiteral("运行中") : QString());
-                    return;
-                }
-                applyToolStatus(item,
-                                stateCache_.contains(toolId) ? &stateCache_[toolId] : nullptr,
-                                stateErrors_.contains(toolId) ? &stateErrors_[toolId] : nullptr);
+                updateToolIcon(item);
                 return;
             }
         }
     }
+}
+
+void AutomationPage::updateToolIcon(QTreeWidgetItem *item)
+{
+    const int toolId = item->data(0, Qt::UserRole).toInt();
+    QString result = QStringLiteral("none");
+    QString text;
+    if (!item->data(0, kHasStateFileRole).toBool()) {
+        const auto record = runRecords_.value(toolId);
+        if (record.running) {
+            result = QStringLiteral("running");
+            text = resultLabel(result);
+        } else if (record.failed) {
+            result = QStringLiteral("failure");
+        }
+    } else if (stateErrors_.contains(toolId)) {
+        result = QStringLiteral("failure");
+        text = QStringLiteral("读取失败");
+    } else if (const auto state = stateCache_.constFind(toolId); state != stateCache_.cend()) {
+        result = ToolState::displayResult(state.value());
+        text = resultLabel(result, jsonString(state.value(), QStringLiteral("tool_id")));
+    } else {
+        text = QStringLiteral("未读取");
+    }
+    const QColor color = UiTheme::statusColor(result);
+    item->setIcon(0, statusDot(color));
+    item->setText(1, text);
+    item->setForeground(1, color);
 }
 
 void AutomationPage::showEmptyDetails(int groupId)
@@ -1773,7 +1772,7 @@ void AutomationPage::changeEvent(QEvent *event)
     for (int i = 0; i < tree_->topLevelItemCount(); ++i) {
         auto *group = tree_->topLevelItem(i);
         for (int j = 0; j < group->childCount(); ++j)
-            updateToolIcon(group->child(j)->data(0, Qt::UserRole).toInt());
+            updateToolIcon(group->child(j));
     }
 }
 

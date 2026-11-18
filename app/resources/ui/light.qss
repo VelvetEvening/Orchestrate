@@ -64,6 +64,7 @@ QPushButton#dangerButton:hover, QPushButton[uiRole="danger"]:hover, QPushButton#
 QPushButton#dangerButton:focus, QPushButton[uiRole="danger"]:focus, QPushButton#deleteProjectButton:focus { border-color: @danger@; }
 QPushButton[uiRole="danger"]:disabled, QPushButton#dangerButton:disabled { color: @disabled@; background: transparent; border-color: transparent; }
 QPushButton#navButton { background: transparent; border: 1px solid transparent; text-align: left; padding: @navPadding@; font-size: 14px; border-radius: @navRadius@; }
+QPushButton#navButton[uiRole="collapsedNav"] { text-align: center; padding-left: 0; padding-right: 0; }
 QPushButton#navButton:hover { background: @navHover@; }
 QPushButton#navButton:checked { background: @selection@; color: @accent@; border-color: @border@; font-weight: 600; }
 QPushButton#navButton:focus { border-color: @focus@; }
@@ -177,6 +178,7 @@ QCalendarWidget QToolButton#qt_calendar_monthbutton { color: @text@; font-size: 
 QCalendarWidget QSpinBox { min-width: 70px; }
 QCalendarWidget QToolButton#qt_calendar_yearbutton, QCalendarWidget QSpinBox#qt_calendar_yearedit { color: @text@; font-size: 15px; font-weight: 600; }
 QCalendarWidget QAbstractItemView { background: @indexSurface@; alternate-background-color: @indexSurface@; border: none; padding: 0; }
+QCalendarWidget#workspaceCalendar QTableView { padding-bottom: @calendarBottomInset@; }
 QListWidget#commandList { border: none; background: transparent; padding: 0; }
 QListWidget#commandList::item { border: none; border-bottom: 1px solid @border@; border-radius: 0; padding: 0; background: @surface@; }
 QListWidget#commandList::item:hover { background: @hover@; }

@@ -95,16 +95,14 @@ CalendarPage::CalendarPage(AppDatabase *database,
     calendarCard->setObjectName(QStringLiteral("workspaceIndex"));
     auto *calendarLayout = new QVBoxLayout(calendarCard);
     UiTheme::setLayoutMetrics(calendarLayout, {24, 22, 24, 24}, 10);
-    auto *calendarHeader = new QHBoxLayout;
-    calendarHeader->addWidget(makeCardTitle(QStringLiteral("日历"), calendarCard),1);
-    calendarLayout->addLayout(calendarHeader);
+    calendarLayout->addWidget(makeCardTitle(QStringLiteral("日历"), calendarCard));
 
     calendar_ = new WorkspaceCalendar(calendarCard);
+    calendar_->setObjectName(QStringLiteral("workspaceCalendar"));
     QPalette calendarPalette = calendar_->palette();
     calendarPalette.setColor(QPalette::Highlight, QColor(UiTheme::Selection));
     calendarPalette.setColor(QPalette::HighlightedText, QColor(UiTheme::Accent));
     calendar_->setPalette(calendarPalette);
-    calendar_->setGridVisible(false);
     calendar_->setVerticalHeaderFormat(QCalendarWidget::NoVerticalHeader);
     calendar_->setFirstDayOfWeek(Qt::Monday);
     calendar_->setSelectedDate(QDate::currentDate());
