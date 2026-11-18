@@ -31,6 +31,7 @@
 #include <QPushButton>
 #include <QScrollBar>
 #include <QStackedWidget>
+#include <QStyleOptionComboBox>
 #include <QStandardPaths>
 #include <QTableView>
 #include <QTest>
@@ -152,6 +153,12 @@ private slots:
                 auto *section = choice->parentWidget();
                 QVERIFY(choice->isVisible());
                 QVERIFY(section->rect().contains(choice->geometry()));
+                QStyleOptionComboBox option;
+                option.initFrom(choice);
+                option.currentText = choice->currentText();
+                const QRect textRect = choice->style()->subControlRect(
+                    QStyle::CC_ComboBox, &option, QStyle::SC_ComboBoxEditField, choice);
+                QVERIFY(textRect.width() >= choice->fontMetrics().horizontalAdvance(option.currentText));
                 QVERIFY(choice->x() > section->width() / 2);
                 const int right = section->contentsRect().right() - section->layout()->contentsMargins().right();
                 QVERIFY(qAbs(choice->geometry().right() - right) <= 1);

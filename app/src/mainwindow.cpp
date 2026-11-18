@@ -367,9 +367,9 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
         auto *themeChoice = new QComboBox(appearanceCard);
         themeChoice->setObjectName(QStringLiteral("appearancePreset"));
         themeChoice->setAccessibleName(QStringLiteral("界面风格"));
-        themeChoice->addItem(QStringLiteral("雾蓝秩序"), QStringLiteral("mist"));
+        themeChoice->addItem(QStringLiteral("云白 × 雾蓝"), QStringLiteral("mist"));
         themeChoice->addItem(QStringLiteral("暖白 × 陶褐"), QStringLiteral("paper"));
-        themeChoice->addItem(QStringLiteral("精密工作台"), QStringLiteral("precision"));
+        themeChoice->addItem(QStringLiteral("冷灰 × 墨蓝（紧凑）"), QStringLiteral("precision"));
         themeChoice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
         themeChoice->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         themeChoice->setCurrentIndex(themeChoice->findData(UiTheme::presetId()));
