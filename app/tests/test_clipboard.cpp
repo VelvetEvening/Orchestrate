@@ -150,6 +150,58 @@ private slots:
         QCOMPARE(db->clipboardItem(first.id).text,QString("first")); QVERIFY(!db->clipboardItem(first.id).automatic);
     }
 
+    void repeatedCopiesMoveTheSameHistoryRowsToTheTop() {
+        ClipboardPage page(db.get());
+        page.show();
+        auto *monitor = page.findChild<ClipboardMonitor *>();
+        auto *tree = page.findChild<QTreeWidget *>("clipboardItems");
+        QVERIFY(monitor && tree && monitor->setEnabled(true, &error));
+        QApplication::clipboard()->setText("A");
+        QTRY_COMPARE(tree->topLevelItemCount(), 1);
+        const int a = tree->topLevelItem(0)->data(0, Qt::UserRole).toInt();
+        QApplication::clipboard()->setText("B");
+        QTRY_COMPARE(tree->topLevelItemCount(), 2);
+        const int b = tree->topLevelItem(0)->data(0, Qt::UserRole).toInt();
+        QVERIFY(a != b);
+        const auto original = db->clipboardItem(a);
+        QApplication::clipboard()->setText("A");
+        QTRY_COMPARE(tree->topLevelItem(0)->data(0, Qt::UserRole).toInt(), a);
+        QCOMPARE(tree->topLevelItemCount(), 2);
+        QCOMPARE(db->clipboardItem(a).createdAt, original.createdAt);
+        QApplication::clipboard()->setText("B");
+        QTRY_COMPARE(tree->topLevelItem(0)->data(0, Qt::UserRole).toInt(), b);
+        QCOMPARE(tree->topLevelItem(1)->data(0, Qt::UserRole).toInt(), a);
+        QCOMPARE(tree->topLevelItemCount(), 2);
+    }
+
+    void existingHistoryReusesFirstMatchingRowAfterRestart() {
+        auto first = item("A"), otherA = item("A"), b = item("B");
+        QVERIFY(db->captureClipboardItem(&first, 100, &error));
+        otherA.automatic = true;
+        QVERIFY(db->saveClipboardItem(&otherA, &error)); // A duplicate from an older history.
+        QVERIFY(db->captureClipboardItem(&b, 100, &error));
+        QVERIFY(sql("DROP INDEX clipboard_auto_fingerprint"));
+        db.reset();
+        db = std::make_unique<AppDatabase>();
+        QVERIFY2(db->open(&error), qPrintable(error));
+
+        auto repeat = item("A");
+        QVERIFY(sql("CREATE TRIGGER block_promotion BEFORE UPDATE OF position ON clipboard_items "
+                    "BEGIN SELECT RAISE(ABORT,'test failure'); END"));
+        QVERIFY(!db->captureClipboardItem(&repeat, 100, &error));
+        QCOMPARE(repeat.id, 0);
+        QCOMPARE(db->clipboardItems(1, 0).first().id, b.id);
+        QVERIFY(sql("DROP TRIGGER block_promotion"));
+        QVERIFY(db->captureClipboardItem(&repeat, 100, &error));
+        QCOMPARE(repeat.id, first.id);
+        QCOMPARE(repeat.createdAt, first.createdAt);
+        const auto history = db->clipboardItems(1, 0);
+        QCOMPARE(history.size(), 3);
+        QCOMPARE(history.at(0).id, first.id);
+        QCOMPARE(history.at(1).id, b.id);
+        QCOMPARE(history.at(2).id, otherA.id);
+    }
+
     void automaticRetentionProtectsCuratedContent() {
         auto curated=item("手动保留"); QVERIFY(db->saveClipboardItem(&curated,&error));
         int customTab=0; QVERIFY(db->addClipboardTab("长期保留",&customTab,&error));
@@ -164,6 +216,13 @@ private slots:
         QCOMPARE(db->clipboardItems(customTab,0).size(),2);
         QCOMPARE(db->clipboardItem(custom.id).text,custom.text); QCOMPARE(db->clipboardItem(transferred.id).text,transferred.text);
         auto same=item("自动 105"); QVERIFY(db->captureClipboardItem(&same,100,&error)); QCOMPARE(db->clipboardItems(1,0).size(),101);
+        for (const auto &archived : {curated, moved, transferred}) {
+            auto recopy = item(archived.text);
+            QVERIFY(db->captureClipboardItem(&recopy, 100, &error));
+            QVERIFY(recopy.id != archived.id);
+            QCOMPARE(db->clipboardItems(1, 0).first().id, recopy.id);
+            QVERIFY(!db->clipboardItem(archived.id).automatic);
+        }
         auto failed=item("失败应回滚");
         QVERIFY(sql("CREATE TRIGGER fail_clipboard BEFORE INSERT ON clipboard_items BEGIN SELECT RAISE(ABORT,'test failure'); END"));
         QVERIFY(!db->captureClipboardItem(&failed,100,&error)); QCOMPARE(failed.id,0); QCOMPARE(db->clipboardItems(1,0).size(),101);
@@ -200,6 +259,9 @@ private slots:
             auto *body=dialog->findChild<QPlainTextEdit *>("clipboardItemBody"); body->setPlainText("edited and retained");
             QApplication::clipboard()->setText("copy during edit one"); QTest::qWait(180);
             survived=db->clipboardItem(ids.first()).id && !db->clipboardItem(ids.at(1)).id && db->clipboardItems(1,0).size()==100;
+            QApplication::clipboard()->setText("editing history 0"); QTest::qWait(180);
+            survived = survived && db->clipboardItems(1,0).first().id == ids.first()
+                && body->toPlainText() == QStringLiteral("edited and retained");
             sql("CREATE TRIGGER fail_edit_capacity BEFORE UPDATE ON clipboard_items WHEN OLD.id="+QString::number(ids.first())+" BEGIN SELECT RAISE(ABORT,'save failure'); END");
             saveEditor(dialog);
             QApplication::clipboard()->setText("copy during failed edit"); QTest::qWait(180);

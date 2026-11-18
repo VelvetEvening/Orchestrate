@@ -135,27 +135,37 @@ bool ClipboardRepository::captureClipboardItem(ClipboardItem *item, int historyL
     if (!item || item->id!=0) return fail(errorMessage, QStringLiteral("无法记录此剪贴板内容。"));
     auto database=QSqlDatabase::database(connectionName_);
     if (!database.transaction()) return fail(errorMessage, database.lastError().text());
-    QSqlQuery last(database);
-    last.prepare(QStringLiteral("SELECT id,fingerprint FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1 ORDER BY id DESC LIMIT 1"));
-    if (!last.exec()) { setError(errorMessage,last); database.rollback(); return false; }
-    if (last.next() && last.value(1).toByteArray()==item->fingerprint) {
-        item->id=last.value(0).toInt(); last.finish(); database.rollback(); return true;
-    }
-    last.finish();
+    QSqlQuery match(database);
+    match.prepare(QStringLiteral(
+        "SELECT id,created_at FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL "
+        "AND automatic=1 AND fingerprint=? ORDER BY position,id DESC LIMIT 1"));
+    match.addBindValue(item->fingerprint);
+    if (!match.exec()) { setError(errorMessage,match); database.rollback(); return false; }
     ClipboardItem saved=*item; saved.tabId=1; saved.folderId=0; saved.automatic=true;
-    if (!saveClipboardItem(&saved,errorMessage)) { database.rollback(); return false; }
+    const bool existing = match.next();
+    if (existing) {
+        saved.id = match.value(0).toInt();
+        saved.createdAt = QDateTime::fromString(match.value(1).toString(), Qt::ISODateWithMs);
+    }
+    match.finish();
+    if (!existing && !saveClipboardItem(&saved,errorMessage)) { database.rollback(); return false; }
+
     QSqlQuery position(database);
-    position.prepare(QStringLiteral("UPDATE clipboard_items SET position=(SELECT COALESCE(MIN(position),0)-1 FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL) WHERE id=?"));
+    position.prepare(QStringLiteral(
+        "UPDATE clipboard_items SET position=(SELECT MIN(position)-1 FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL) "
+        "WHERE id=? AND id<>(SELECT id FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL ORDER BY position,id DESC LIMIT 1)"));
     position.addBindValue(saved.id);
     if (!position.exec()) { setError(errorMessage,position); database.rollback(); return false; }
-    QSqlQuery trim(database);
-    // Retained drafts remain protected even while their module is hidden.
-    auto protectedIds=editingItemIds; protectedIds.append(editingItemId);
-    QStringList placeholders; for (int id:protectedIds) { Q_UNUSED(id); placeholders.append(QStringLiteral("?")); }
-    trim.prepare(QStringLiteral("DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1 AND id NOT IN (%1) ORDER BY position DESC,id ASC LIMIT (SELECT MAX(0,COUNT(*)-?) FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1))").arg(placeholders.join(',')));
-    for (int id:protectedIds) trim.addBindValue(id);
-    trim.addBindValue(qBound(100,historyLimit,10000));
-    if (!trim.exec()) { setError(errorMessage,trim); database.rollback(); return false; }
+    if (!existing) {
+        QSqlQuery trim(database);
+        // Retained drafts remain protected even while their module is hidden.
+        auto protectedIds=editingItemIds; protectedIds.append(editingItemId);
+        QStringList placeholders; for (int id:protectedIds) { Q_UNUSED(id); placeholders.append(QStringLiteral("?")); }
+        trim.prepare(QStringLiteral("DELETE FROM clipboard_items WHERE id IN (SELECT id FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1 AND id NOT IN (%1) ORDER BY position DESC,id ASC LIMIT (SELECT MAX(0,COUNT(*)-?) FROM clipboard_items WHERE tab_id=1 AND folder_id IS NULL AND automatic=1))").arg(placeholders.join(',')));
+        for (int id:protectedIds) trim.addBindValue(id);
+        trim.addBindValue(qBound(100,historyLimit,10000));
+        if (!trim.exec()) { setError(errorMessage,trim); database.rollback(); return false; }
+    }
     if (!database.commit()) { const auto e=database.lastError().text(); database.rollback(); return fail(errorMessage,e); }
     *item=saved;
     return true;

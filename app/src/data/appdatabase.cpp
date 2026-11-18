@@ -18,6 +18,17 @@ using RepositoryHelpers::setError;
 
 namespace {
 constexpr int CurrentSchemaVersion = 9;
+
+// A lookup index is compatible with existing v9 databases, including histories with duplicates.
+bool ensureClipboardFingerprintIndex(const QSqlDatabase &database, QString *errorMessage)
+{
+    QSqlQuery query(database);
+    if (query.exec(QStringLiteral(
+        "CREATE INDEX IF NOT EXISTS clipboard_auto_fingerprint ON clipboard_items(fingerprint,position,id DESC) "
+        "WHERE tab_id=1 AND folder_id IS NULL AND automatic=1"))) return true;
+    setError(errorMessage, query);
+    return false;
+}
 } // namespace
 
 AppDatabase::~AppDatabase()
@@ -102,7 +113,11 @@ bool AppDatabase::open(QString *errorMessage)
         database.close();
         return fail(errorMessage, QStringLiteral("数据库来自更新版本的 Orchestrate。请使用新版程序，或同时恢复旧版程序与数据库备份。"));
     }
-    if (version == CurrentSchemaVersion) return true;
+    if (version == CurrentSchemaVersion) {
+        if (ensureClipboardFingerprintIndex(database, errorMessage)) return true;
+        database.close();
+        return false;
+    }
 
     if (existingDatabase || QFileInfo(databasePath_).size() > 0) {
         const QString backupDirectory = QDir(portableDataDirectory).filePath(QStringLiteral("backups"));
@@ -204,6 +219,7 @@ bool AppDatabase::open(QString *errorMessage)
             if (!migration.exec(statement)) { setError(errorMessage, migration); migrated = false; break; }
         }
     }
+    if (migrated) migrated = ensureClipboardFingerprintIndex(database, errorMessage);
     if (!migrated || !setVersion.exec(QStringLiteral("PRAGMA user_version = %1").arg(CurrentSchemaVersion))) {
         if (errorMessage && errorMessage->isEmpty()) setError(errorMessage, setVersion);
         database.rollback();
