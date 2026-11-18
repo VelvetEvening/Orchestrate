@@ -178,7 +178,7 @@ protected:
     }
 };
 
-QWidget *makeCommandRow(const AppDatabase::ToolCommand &command, QStyle *, QWidget *parent)
+QWidget *makeCommandRow(const AppDatabase::ToolCommand &command, QWidget *parent)
 {
     auto *row = new QWidget(parent);
     row->setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -999,7 +999,7 @@ void AutomationPage::loadToolDetails(int toolId)
         hints << (command.enabled ? QStringLiteral("双击运行；右键编辑或停用") : QStringLiteral("已停用；右键可启用")) << parts.join(QLatin1Char(' '));
         item->setToolTip(QStringLiteral("<qt>%1</qt>").arg(hints.join(QStringLiteral("\n\n"))
             .toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br>"))));
-        QWidget *row = makeCommandRow(command, style(), commandList_);
+        QWidget *row = makeCommandRow(command, commandList_);
         row->ensurePolished();
         item->setSizeHint(QSize(0, row->sizeHint().height()));
         commandList_->setItemWidget(item, row);

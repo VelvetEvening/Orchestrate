@@ -136,7 +136,6 @@ void MainWindow::buildUi()
     bodyLayout->setSpacing(0);
     sidebar_ = new QFrame(root);
     sidebar_->setObjectName(QStringLiteral("sidebar"));
-    sidebar_->setFixedWidth(ExpandedSidebarWidth);
     buildNavigation(sidebar_);
     bodyLayout->addWidget(sidebar_);
 
@@ -150,9 +149,9 @@ void MainWindow::buildUi()
 
 void MainWindow::buildNavigation(QWidget *parent)
 {
-    sidebarLayout_ = new QVBoxLayout(parent);
-    sidebarLayout_->setContentsMargins(14, 16, 14, 16);
-    sidebarLayout_->setSpacing(6);
+    auto *layout = new QVBoxLayout(parent);
+    layout->setContentsMargins(14, 16, 14, 16);
+    layout->setSpacing(6);
 
     const QStringList labels {
         QStringLiteral("日历"),
@@ -178,9 +177,9 @@ void MainWindow::buildNavigation(QWidget *parent)
         button->setToolTip(labels.at(i));
         button->setCursor(Qt::PointingHandCursor);
         button->setAccessibleName(labels.at(i));
-        if (i == labels.size() - 1) sidebarLayout_->addStretch(1);
+        if (i == labels.size() - 1) layout->addStretch(1);
         navigationButtons_.append(button);
-        sidebarLayout_->addWidget(button);
+        layout->addWidget(button);
 
         connect(button, &QPushButton::clicked, this, [this, i] {
             switchToPage(i);
@@ -211,15 +210,13 @@ void MainWindow::updateSidebarAppearance()
 
     for (QPushButton *button : navigationButtons_) {
         button->setText(sidebarCollapsed_ ? QString() : button->property("expandedText").toString());
-        if (button->property("updateTag").toString().isEmpty())
-            button->setToolTip(button->property("expandedText").toString());
         UiTheme::setRole(button, sidebarCollapsed_ ? "collapsedNav" : "");
     }
 
     sidebarToggleButton_->setIcon(UiTheme::icon(sidebarCollapsed_ ? QStringLiteral("panel-left-expand") : QStringLiteral("panel-left-collapse")));
-    sidebarToggleButton_->setAccessibleName(sidebarCollapsed_ ? QStringLiteral("展开侧边栏") : QStringLiteral("收起侧边栏"));
-    sidebarToggleButton_->setToolTip(sidebarCollapsed_ ? QStringLiteral("展开侧边栏")
-                                                       : QStringLiteral("收起侧边栏"));
+    const QString action = sidebarCollapsed_ ? QStringLiteral("展开侧边栏") : QStringLiteral("收起侧边栏");
+    sidebarToggleButton_->setAccessibleName(action);
+    sidebarToggleButton_->setToolTip(action);
 }
 
 void MainWindow::buildTray()
@@ -355,10 +352,8 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
 
         settingsLayout->addWidget(settingsCard);
         auto *appearanceCard = makeSection(settingsPage);
-        auto *appearanceCardLayout = new QVBoxLayout(appearanceCard);
-        UiTheme::setLayoutMetrics(appearanceCardLayout, {24, 22, 24, 24});
-        auto *appearanceRow = new QHBoxLayout;
-        appearanceRow->setContentsMargins(0, 0, 0, 0);
+        auto *appearanceRow = new QHBoxLayout(appearanceCard);
+        UiTheme::setLayoutMetrics(appearanceRow, {24, 22, 24, 24});
         appearanceRow->setSpacing(24);
         auto *appearanceTitle = new QLabel(QStringLiteral("风格切换"), appearanceCard);
         appearanceTitle->setObjectName(QStringLiteral("cardTitle"));
@@ -375,7 +370,6 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
         themeChoice->setCurrentIndex(themeChoice->findData(UiTheme::presetId()));
         appearanceTitle->setBuddy(themeChoice);
         appearanceRow->addWidget(themeChoice, 0, Qt::AlignVCenter);
-        appearanceCardLayout->addLayout(appearanceRow);
         connect(themeChoice, &QComboBox::currentIndexChanged, this, [this, themeChoice](int index) {
             const QString previous = UiTheme::presetId();
             const QString selected = themeChoice->itemData(index).toString();
@@ -437,7 +431,6 @@ void MainWindow::setAvailableUpdate(const QString &tag)
     auto *settings = navigationButtons_.at(4);
     const auto text = tag.isEmpty() ? QStringLiteral("设置") : QStringLiteral("设置 · 有更新");
     settings->setProperty("expandedText", text);
-    settings->setProperty("updateTag", tag);
     settings->setText(sidebarCollapsed_ ? QString() : text);
     settings->setToolTip(tag.isEmpty() ? text : QStringLiteral("设置：有新版本 %1").arg(tag));
     settings->setAccessibleName(settings->toolTip());

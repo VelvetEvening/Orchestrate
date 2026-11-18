@@ -8,7 +8,6 @@ class QTreeWidget;
 class GitHistoryWindow;
 class QLabel;
 class QPushButton;
-class QVBoxLayout;
 class QDialog;
 class QTabBar;
 namespace Git { class Reader; }
@@ -54,7 +53,6 @@ private:
     QPushButton *gitHistoryButton_;
     Git::Reader *gitAvailabilityReader_;
     bool gitCheckPending_ = false;
-    QVBoxLayout *detailsLayout_;
     QTreeWidget *workList_;
     QLabel *recordHint_;
     int recordsProjectId_ = 0;

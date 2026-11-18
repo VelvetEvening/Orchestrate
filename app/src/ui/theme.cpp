@@ -8,7 +8,7 @@
 #include <QLayout>
 #include <QPalette>
 #include <QPlainTextEdit>
-#include <QPushButton>
+#include <QAbstractButton>
 #include <QStyle>
 #include <QStyleHints>
 #include <QWidget>

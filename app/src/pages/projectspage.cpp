@@ -144,8 +144,8 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     create->setObjectName(QStringLiteral("primaryButton"));
     left->addWidget(create);
     details_ = surface(splitter, "content");
-    detailsLayout_ = new QVBoxLayout(details_);
-    UiTheme::setLayoutMetrics(detailsLayout_, {24,22,24,24}, 12);
+    auto *detailsLayout = new QVBoxLayout(details_);
+    UiTheme::setLayoutMetrics(detailsLayout, {24,22,24,24}, 12);
     auto *header = new QHBoxLayout;
     projectTitle_ = label(QString(), QStringLiteral("objectTitle"), details_);
     projectTitle_->setWordWrap(true);
@@ -162,7 +162,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     auto *createFolder = new QPushButton(QStringLiteral("新建文件夹"), details_);
     createFolder->setObjectName(QStringLiteral("createRecordFolder"));
     header->addWidget(createFolder);
-    detailsLayout_->addLayout(header);
+    detailsLayout->addLayout(header);
 
     auto *recordsPanel_ = new QWidget(details_);
     recordsPanel_->setObjectName(QStringLiteral("recordsPanel"));
@@ -226,7 +226,7 @@ ProjectsPage::ProjectsPage(AppDatabase *database, QWidget *parent) : QWidget(par
     add->setObjectName(QStringLiteral("addWorkRecordButton"));
     UiTheme::setRole(add, "primary");
     records->addWidget(add, 0, Qt::AlignLeft);
-    detailsLayout_->addWidget(recordsPanel_,1);
+    detailsLayout->addWidget(recordsPanel_,1);
     splitter->addWidget(listCard);
     splitter->addWidget(details_);
     splitter->setSizes({230,650});
