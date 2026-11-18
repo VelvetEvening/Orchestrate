@@ -368,7 +368,7 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
         themeChoice->setObjectName(QStringLiteral("appearancePreset"));
         themeChoice->setAccessibleName(QStringLiteral("界面风格"));
         themeChoice->addItem(QStringLiteral("雾蓝秩序"), QStringLiteral("mist"));
-        themeChoice->addItem(QStringLiteral("纸感工作室"), QStringLiteral("paper"));
+        themeChoice->addItem(QStringLiteral("暖白 × 陶褐"), QStringLiteral("paper"));
         themeChoice->addItem(QStringLiteral("精密工作台"), QStringLiteral("precision"));
         themeChoice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
         themeChoice->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
