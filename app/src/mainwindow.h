@@ -37,6 +37,7 @@ private:
     bool savePendingChanges();
     void buildUi();
     void buildNavigation(QWidget *parent);
+    QFrame *makeAppearanceSection(QWidget *parent);
     void buildTray();
     void switchToPage(int index, bool confirmLeave = true);
     void toggleSidebar();

@@ -1,4 +1,4 @@
-/* UiTheme::apply resolves the active preset's colors and spacing. */
+/* UiTheme::apply resolves colors from the palette and spacing from the layout. */
 QWidget { color: @text@; selection-background-color: @selection@; selection-color: @accent@; }
 QMainWindow, QWidget#root, QWidget#settingsPage { background: @surface@; }
 QDialog, QMessageBox, QInputDialog { background: @surface@; }
@@ -89,7 +89,8 @@ QTextEdit#headingPreview:focus { border-color: @accent@; }
 QPlainTextEdit#clipboardPreview { background: @indexSurface@; border: none; border-radius: 0; padding: 12px; }
 QTreeWidget#clipboardItems, QPlainTextEdit#clipboardPreview, QPlainTextEdit#clipboardItemBody { font-size: 18pt; }
 QComboBox { padding-right: 28px; min-height: 20px; }
-QComboBox#appearancePreset { min-width: 10em; }
+QComboBox#appearancePalette { min-width: 7em; }
+QComboBox#appearanceLayout { min-width: 3em; }
 QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center right; width: 26px; border: none; }
 QComboBox::down-arrow { image: url(:/ui/icons/chevron-down.svg); width: 12px; height: 12px; }
 QComboBox QAbstractItemView { background: @surface@; border: 1px solid @controlBorder@; padding: 4px; selection-background-color: @selection@; selection-color: @accent@; }

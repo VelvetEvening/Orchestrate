@@ -35,7 +35,7 @@ protected:
         const bool today = inMonth && date == QDate::currentDate();
         const bool future = inMonth && date > QDate::currentDate();
         QColor foreground(inMonth ? (future ? UiTheme::Muted : UiTheme::Text) : UiTheme::Disabled);
-        const bool compact = UiTheme::preset() == UiTheme::Preset::Precision;
+        const bool compact = UiTheme::isCompact();
         const int side = qMax(0, qMin(compact ? 36 : 44, qMin(rect.width(), rect.height()) - 8));
         const QRectF tile(rect.center().x() - side / 2.0, rect.center().y() - side / 2.0, side, side);
         painter->setPen(Qt::NoPen);

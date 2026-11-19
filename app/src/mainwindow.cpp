@@ -46,6 +46,8 @@ namespace {
 
 constexpr int ExpandedSidebarWidth = 168;
 constexpr int CollapsedSidebarWidth = 72;
+const QString PaletteSetting = QStringLiteral("appearance_palette");
+const QString LayoutSetting = QStringLiteral("appearance_layout");
 
 QFrame *makeSection(QWidget *parent)
 {
@@ -78,7 +80,10 @@ MainWindow::MainWindow(QWidget *parent, std::unique_ptr<AutoStart> autoStart)
         return;
     }
 
-    UiTheme::apply(*qApp, database_.setting(QStringLiteral("appearance_preset"), QStringLiteral("mist")));
+    // Read each new preference independently so changing one preserves the other legacy choice.
+    const QString legacyPreset = database_.setting(QStringLiteral("appearance_preset"), QStringLiteral("mist"));
+    const QString legacyLayout = legacyPreset == QStringLiteral("precision") ? QStringLiteral("compact") : QStringLiteral("standard");
+    UiTheme::apply(*qApp, database_.setting(PaletteSetting, legacyPreset), database_.setting(LayoutSetting, legacyLayout));
 
     globalShortcut_ = new GlobalShortcut(this);
     connect(globalShortcut_, &GlobalShortcut::activated, this, &MainWindow::showMainWindow);
@@ -218,6 +223,53 @@ void MainWindow::updateSidebarAppearance()
     const QString action = sidebarCollapsed_ ? QStringLiteral("展开侧边栏") : QStringLiteral("收起侧边栏");
     sidebarToggleButton_->setAccessibleName(action);
     sidebarToggleButton_->setToolTip(action);
+}
+
+QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
+{
+    auto *section = makeSection(parent);
+    auto *row = new QHBoxLayout(section);
+    UiTheme::setLayoutMetrics(row, {24, 22, 24, 24}, 8);
+    auto *title = new QLabel(QStringLiteral("风格与布局"), section);
+    title->setObjectName(QStringLiteral("cardTitle"));
+    row->addWidget(title);
+    row->addStretch(1);
+
+    auto *palette = new QComboBox(section);
+    palette->setObjectName(QStringLiteral("appearancePalette"));
+    palette->addItem(QStringLiteral("云白 × 雾蓝"), QStringLiteral("mist"));
+    palette->addItem(QStringLiteral("暖白 × 陶褐"), QStringLiteral("paper"));
+    palette->addItem(QStringLiteral("冷灰 × 墨蓝"), QStringLiteral("precision"));
+
+    auto *layout = new QComboBox(section);
+    layout->setObjectName(QStringLiteral("appearanceLayout"));
+    layout->addItem(QStringLiteral("标准"), QStringLiteral("standard"));
+    layout->addItem(QStringLiteral("紧凑"), QStringLiteral("compact"));
+
+    const auto addChoice = [&](QComboBox *choice, const QString &label, const QString &key, QString (*currentId)()) {
+        auto *caption = new QLabel(label, section);
+        caption->setBuddy(choice);
+        choice->setAccessibleName(label);
+        choice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        choice->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        choice->setCurrentIndex(choice->findData(currentId()));
+        row->addWidget(caption);
+        row->addWidget(choice);
+        connect(choice, &QComboBox::currentIndexChanged, this, [this, choice, key, currentId, palette, layout] {
+            QString error;
+            if (!database_.setSetting(key, choice->currentData().toString(), &error)) {
+                const QSignalBlocker blocker(choice);
+                choice->setCurrentIndex(choice->findData(currentId()));
+                QMessageBox::warning(this, QStringLiteral("无法保存外观设置"), error);
+                return;
+            }
+            UiTheme::apply(*qApp, palette->currentData().toString(), layout->currentData().toString());
+        });
+    };
+    addChoice(palette, QStringLiteral("配色"), PaletteSetting, UiTheme::paletteId);
+    row->addSpacing(12);
+    addChoice(layout, QStringLiteral("布局"), LayoutSetting, UiTheme::layoutId);
+    return section;
 }
 
 void MainWindow::buildTray()
@@ -364,39 +416,7 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
 
 
         settingsLayout->addWidget(settingsCard);
-        auto *appearanceCard = makeSection(settingsPage);
-        auto *appearanceRow = new QHBoxLayout(appearanceCard);
-        UiTheme::setLayoutMetrics(appearanceRow, {24, 22, 24, 24});
-        appearanceRow->setSpacing(24);
-        auto *appearanceTitle = new QLabel(QStringLiteral("风格切换"), appearanceCard);
-        appearanceTitle->setObjectName(QStringLiteral("cardTitle"));
-        appearanceRow->addWidget(appearanceTitle, 0, Qt::AlignVCenter);
-        appearanceRow->addStretch(1);
-        auto *themeChoice = new QComboBox(appearanceCard);
-        themeChoice->setObjectName(QStringLiteral("appearancePreset"));
-        themeChoice->setAccessibleName(QStringLiteral("界面风格"));
-        themeChoice->addItem(QStringLiteral("云白 × 雾蓝"), QStringLiteral("mist"));
-        themeChoice->addItem(QStringLiteral("暖白 × 陶褐"), QStringLiteral("paper"));
-        themeChoice->addItem(QStringLiteral("冷灰 × 墨蓝（紧凑）"), QStringLiteral("precision"));
-        themeChoice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-        themeChoice->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-        themeChoice->setCurrentIndex(themeChoice->findData(UiTheme::presetId()));
-        appearanceTitle->setBuddy(themeChoice);
-        appearanceRow->addWidget(themeChoice, 0, Qt::AlignVCenter);
-        connect(themeChoice, &QComboBox::currentIndexChanged, this, [this, themeChoice](int index) {
-            const QString previous = UiTheme::presetId();
-            const QString selected = themeChoice->itemData(index).toString();
-            QString error;
-            if (!database_.setSetting(QStringLiteral("appearance_preset"), selected, &error)) {
-                const QSignalBlocker blocker(themeChoice);
-                themeChoice->setCurrentIndex(themeChoice->findData(previous));
-                QMessageBox::warning(this, QStringLiteral("无法保存外观设置"), error);
-                return;
-            }
-            UiTheme::apply(*qApp, selected);
-        });
-
-        settingsLayout->addWidget(appearanceCard);
+        settingsLayout->addWidget(makeAppearanceSection(settingsPage));
         auto *update = new UpdateWidget(settingsPage);
         UiTheme::setSurface(update, "section");
         UiTheme::setLayoutMetrics(update->layout(), {24, 22, 24, 24}, update->layout()->spacing());

@@ -36,10 +36,10 @@ inline constexpr const char *DangerBackground = "#fbefef";
 inline constexpr const char *DangerHoverBorder = "#e6c5c5";
 inline constexpr const char *Disabled = "#919ba9";
 
-enum class Preset { Mist, Paper, Precision };
-Preset preset();
-QString presetId();
-void apply(QApplication &app, const QString &id);
+QString paletteId();
+QString layoutId();
+bool isCompact();
+void apply(QApplication &app, const QString &paletteId, const QString &layoutId);
 void install(QApplication &app);
 QIcon icon(const QString &name);
 void setRole(QWidget *widget, const char *role);

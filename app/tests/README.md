@@ -27,7 +27,7 @@ Remove-Item Env:ORCHESTRATE_TEST_STRESS
 | --- | --- |
 | 工具声明是否合法 | `manifest_parser` 直接检查字段、路径和错误输入。 |
 | 用户如何接入和运行工具 | `automation_contract` 从“接入工具”按钮验证注册、执行和重读。SSH 使用本地模拟程序，WSL 可选择真实发行版。`configurable_tools` 验证目录识别、默认接入、自选命令和参数配置。 |
-| 切换主题和侧栏 | `workspace_navigation` 在同一窗口切换三种主题测量布局，另行重开窗口验证偏好恢复。`markdown_edit` 检查编辑器光标、字号和撤销记录。`heading_text` 检查日历符号。 |
+| 切换配色、布局和侧栏 | `workspace_navigation` 验证六种组合的控件与行高、旧版偏好兼容及重开窗口后的恢复。`markdown_edit` 检查编辑器光标、字号和撤销记录。`heading_text` 检查日历符号。 |
 | 草稿与窗口关闭 | `workspace_navigation` 按日记、提醒、剪贴板检查各自字段的保存与丢弃。主窗口关闭和收起到托盘共用一个草稿用例。剪贴板的设置菜单、容量与去重由 `clipboard` 验证。 |
 | 发现新版本 | `heading_text` 验证主窗口的侧栏提示和托盘入口。`update_checker` 验证更新说明的延迟加载、全文滚动、空说明和外部资源处理。 |
 

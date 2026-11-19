@@ -123,44 +123,61 @@ private slots:
         QVERIFY(QFileInfo(qApp->applicationDirPath()).fileName()=="workspace-navigation-test");
         QVERIFY(!QFileInfo::exists(path) || QDir(path).removeRecursively()); seed();
     }
+    void appearanceControlsFitAtCompactSize_data() {
+        QTest::addColumn<QString>("paletteId");
+        QTest::addColumn<QColor>("accent");
+        QTest::newRow("mist") << QStringLiteral("mist") << QColor("#365f8c");
+        QTest::newRow("paper") << QStringLiteral("paper") << QColor("#80523e");
+        QTest::newRow("precision") << QStringLiteral("precision") << QColor("#244f78");
+    }
     void appearanceControlsFitAtCompactSize() {
+        QFETCH(QString, paletteId);
+        QFETCH(QColor, accent);
         MainWindow window; prepareWindow(window);
         window.resize(980, 640);
-        auto *choice = window.findChild<QComboBox *>("appearancePreset");
+        auto *palette = window.findChild<QComboBox *>("appearancePalette");
+        auto *layout = window.findChild<QComboBox *>("appearanceLayout");
         auto *toggle = window.findChild<QPushButton *>("sidebarToggle");
         const auto navigation = window.findChildren<QPushButton *>("navButton");
         auto *settings = navigation.at(4);
-        QVERIFY(choice && toggle);
-        int mistDateRowHeight = 0;
-        for (const auto &id : {QStringLiteral("mist"), QStringLiteral("paper"), QStringLiteral("precision")}) {
-            choice->setCurrentIndex(choice->findData(id));
-            QVERIFY(!qApp->styleSheet().contains(QLatin1Char('@')));
-            QCoreApplication::processEvents();
-            auto *calendar = window.findChild<QCalendarWidget *>();
-            QVERIFY(calendar && calendar->isVisible());
-            auto *grid = calendar->findChild<QTableView *>();
-            QVERIFY(grid);
-            const int dateRowHeight = grid->rowHeight(grid->currentIndex().row());
-            if (id == QStringLiteral("mist")) mistDateRowHeight = dateRowHeight;
-            if (id == QStringLiteral("precision")) {
-                QVERIFY(dateRowHeight >= 36 && dateRowHeight < mistDateRowHeight);
-                const auto cell = grid->visualRect(grid->currentIndex());
-                QCOMPARE(grid->indexAt(cell.bottomRight()), grid->currentIndex());
-            }
+        QVERIFY(palette && layout && toggle);
+        QCOMPARE(palette->count(), 3);
+        QCOMPARE(layout->count(), 2);
+        QCOMPARE(palette->currentData().toString(), QStringLiteral("mist"));
+        QCOMPARE(layout->currentData().toString(), QStringLiteral("standard"));
+        settings->click();
+        palette->setCurrentIndex(palette->findData(paletteId));
+        int standardDateRowHeight = 0;
+        for (const auto &density : {QStringLiteral("standard"), QStringLiteral("compact")}) {
             settings->click();
+            palette->setFocus();
+            QTest::keyClick(palette, Qt::Key_Tab);
+            QCOMPARE(QApplication::focusWidget(), layout);
+            QTest::keyClick(layout, density == "compact" ? Qt::Key_End : Qt::Key_Home);
             QCoreApplication::processEvents();
-            auto *section = choice->parentWidget();
-            QVERIFY(choice->isVisible());
-            QVERIFY(section->rect().contains(choice->geometry()));
-            QStyleOptionComboBox option;
-            option.initFrom(choice);
-            option.currentText = choice->currentText();
-            const QRect textRect = choice->style()->subControlRect(
-                QStyle::CC_ComboBox, &option, QStyle::SC_ComboBoxEditField, choice);
-            QVERIFY(textRect.width() >= choice->fontMetrics().horizontalAdvance(option.currentText));
-            QVERIFY(choice->x() > section->width() / 2);
+            QCOMPARE(layout->currentData().toString(), density);
+            QCOMPARE(palette->currentData().toString(), paletteId);
+            QCOMPARE(UiTheme::layoutId(), density);
+            QCOMPARE(qApp->palette().color(QPalette::Link), accent);
+            QVERIFY(!qApp->styleSheet().contains(QLatin1Char('@')));
+
+            auto *section = layout->parentWidget();
+            for (auto *choice : {palette, layout}) {
+                QVERIFY(choice->isVisible());
+                QVERIFY(section->rect().contains(choice->geometry()));
+                QStyleOptionComboBox option;
+                option.initFrom(choice);
+                option.currentText = choice->currentText();
+                const QRect textRect = choice->style()->subControlRect(
+                    QStyle::CC_ComboBox, &option, QStyle::SC_ComboBoxEditField, choice);
+                QVERIFY(textRect.width() >= choice->fontMetrics().horizontalAdvance(option.currentText));
+            }
+            QVERIFY(palette->x() > section->width() / 2);
+            QVERIFY(palette->geometry().right() < layout->x());
             const int right = section->contentsRect().right() - section->layout()->contentsMargins().right();
-            QVERIFY(qAbs(choice->geometry().right() - right) <= 1);
+            QVERIFY(qAbs(layout->geometry().right() - right) <= 1);
+            capture(*section, QStringLiteral("appearance-%1-%2").arg(paletteId, density));
+
             const auto expandedIcon = toggle->icon().pixmap(24, 24).toImage();
             const int expandedHeight = settings->height();
             toggle->click();
@@ -169,31 +186,102 @@ private slots:
             QVERIFY(expandedIcon != toggle->icon().pixmap(24, 24).toImage());
             toggle->click();
             navigation.first()->click();
+            QCoreApplication::processEvents();
+            auto *calendar = window.findChild<QCalendarWidget *>();
+            QVERIFY(calendar && calendar->isVisible());
+            auto *grid = calendar->findChild<QTableView *>();
+            QVERIFY(grid);
+            const int dateRowHeight = grid->rowHeight(grid->currentIndex().row());
+            if (density == "standard") standardDateRowHeight = dateRowHeight;
+            else {
+                QVERIFY(dateRowHeight >= 36 && dateRowHeight < standardDateRowHeight);
+                const auto cell = grid->visualRect(grid->currentIndex());
+                QCOMPARE(grid->indexAt(cell.bottomRight()), grid->currentIndex());
+            }
         }
     }
     void appearanceAndSidebarPreferencesRestore() {
+        AppDatabase db;
+        QVERIFY(db.open());
+        QVERIFY(db.setSetting("appearance_preset", "precision"));
         {
             MainWindow window;
-            auto *choice = window.findChild<QComboBox *>("appearancePreset");
-            choice->setCurrentIndex(choice->findData("paper"));
+            auto *palette = window.findChild<QComboBox *>("appearancePalette");
+            auto *layout = window.findChild<QComboBox *>("appearanceLayout");
+            QVERIFY(palette && layout);
+            QCOMPARE(palette->currentData().toString(), QStringLiteral("precision"));
+            QCOMPARE(layout->currentData().toString(), QStringLiteral("compact"));
+            palette->setCurrentIndex(palette->findData("paper"));
             window.findChild<QPushButton *>("sidebarToggle")->click();
         }
         {
             MainWindow restored;
             QVERIFY(restored.ready());
-            QCOMPARE(UiTheme::presetId(), QStringLiteral("paper"));
-            QCOMPARE(restored.findChild<QComboBox *>("appearancePreset")->currentData().toString(), QStringLiteral("paper"));
+            QCOMPARE(restored.findChild<QComboBox *>("appearancePalette")->currentData().toString(), QStringLiteral("paper"));
+            auto *layout = restored.findChild<QComboBox *>("appearanceLayout");
+            QCOMPARE(layout->currentData().toString(), QStringLiteral("compact"));
             QCOMPARE(restored.findChild<QWidget *>("sidebar")->width(), 72);
             auto *toggle = restored.findChild<QPushButton *>("sidebarToggle");
             QCOMPARE(toggle->toolTip(), QStringLiteral("展开侧边栏"));
             QCOMPARE(toggle->accessibleName(), toggle->toolTip());
+            layout->setCurrentIndex(layout->findData("standard"));
         }
+        {
+            MainWindow restored;
+            QCOMPARE(restored.findChild<QComboBox *>("appearancePalette")->currentData().toString(), QStringLiteral("paper"));
+            QCOMPARE(restored.findChild<QComboBox *>("appearanceLayout")->currentData().toString(), QStringLiteral("standard"));
+        }
+    }
+    void legacyAppearanceDefaults_data() {
+        QTest::addColumn<QString>("legacy");
+        QTest::addColumn<QString>("expectedPalette");
+        QTest::newRow("mist") << QStringLiteral("mist") << QStringLiteral("mist");
+        QTest::newRow("paper") << QStringLiteral("paper") << QStringLiteral("paper");
+        QTest::newRow("unknown") << QStringLiteral("retired-preset") << QStringLiteral("mist");
+    }
+    void legacyAppearanceDefaults() {
+        QFETCH(QString, legacy);
+        QFETCH(QString, expectedPalette);
         AppDatabase db;
         QVERIFY(db.open());
-        QVERIFY(db.setSetting("appearance_preset", "retired-preset"));
-        MainWindow fallback;
-        QVERIFY(fallback.ready());
-        QCOMPARE(fallback.findChild<QComboBox *>("appearancePreset")->currentData().toString(), QStringLiteral("mist"));
+        QVERIFY(db.setSetting("appearance_preset", legacy));
+        {
+            MainWindow window;
+            QCOMPARE(UiTheme::paletteId(), expectedPalette);
+            QCOMPARE(UiTheme::layoutId(), QStringLiteral("standard"));
+            auto *layout = window.findChild<QComboBox *>("appearanceLayout");
+            layout->setCurrentIndex(layout->findData("compact"));
+        }
+        MainWindow restored;
+        QCOMPARE(UiTheme::paletteId(), expectedPalette);
+        QCOMPARE(UiTheme::layoutId(), QStringLiteral("compact"));
+    }
+    void appearanceSaveFailureRestoresSelection() {
+        AppDatabase db;
+        QVERIFY(db.open());
+        MainWindow window;
+        auto *palette = window.findChild<QComboBox *>("appearancePalette");
+        auto *layout = window.findChild<QComboBox *>("appearanceLayout");
+        QVERIFY(palette && layout);
+        palette->setCurrentIndex(palette->findData("paper"));
+        const QString connection = QStringLiteral("appearance-save-failure");
+        {
+            auto sql = QSqlDatabase::addDatabase("QSQLITE", connection);
+            sql.setDatabaseName(db.databasePath());
+            QVERIFY(sql.open());
+            QSqlQuery query(sql);
+            QVERIFY(query.exec("CREATE TRIGGER reject_layout BEFORE INSERT ON app_settings "
+                               "WHEN NEW.key = 'appearance_layout' BEGIN SELECT RAISE(ABORT, 'test failure'); END"));
+            QVERIFY(answerLeave(QMessageBox::Ok, [&] { layout->setCurrentIndex(layout->findData("compact")); }));
+            QCOMPARE(layout->currentData().toString(), QStringLiteral("standard"));
+            QCOMPARE(UiTheme::layoutId(), QStringLiteral("standard"));
+            QCOMPARE(palette->currentData().toString(), QStringLiteral("paper"));
+            QCOMPARE(db.setting("appearance_palette"), QStringLiteral("paper"));
+            QVERIFY(query.exec("DROP TRIGGER reject_layout"));
+        }
+        QSqlDatabase::removeDatabase(connection);
+        layout->setCurrentIndex(layout->findData("compact"));
+        QCOMPARE(db.setting("appearance_layout"), QStringLiteral("compact"));
     }
     void themeDensityPreservesWorkspaceState() {
         AppDatabase db;
@@ -215,10 +303,11 @@ private slots:
         QVERIFY(db.setSetting("appearance_preset", "precision"));
         MainWindow window; prepareWindow(window);
         QVERIFY(window.ready());
-        auto *choice = window.findChild<QComboBox *>("appearancePreset");
+        auto *palette = window.findChild<QComboBox *>("appearancePalette");
+        auto *layout = window.findChild<QComboBox *>("appearanceLayout");
         auto *projects = window.findChild<ProjectsPage *>();
         auto *calendar = window.findChild<CalendarPage *>();
-        QVERIFY(choice && projects && calendar);
+        QVERIFY(palette && layout && projects && calendar);
         auto *projectList = projects->findChild<QListWidget *>("projectList");
         auto *workList = projects->findChild<QTreeWidget *>("workRecordList");
         auto *diaryList = calendar->findChild<QListWidget *>("diaryList");
@@ -265,24 +354,33 @@ private slots:
         auto *navButton = window.findChildren<QPushButton *>("navButton").at(1);
         int normalButtonHeight = 0, normalSpacing = 0;
         QMargins normalMargins;
-        for (const auto &id : {QStringLiteral("precision"), QStringLiteral("mist"), QStringLiteral("paper"), QStringLiteral("precision")}) {
-            choice->setCurrentIndex(choice->findData(id));
+        const QList<QPair<QString, QString>> appearances {
+            {"precision", "compact"}, {"precision", "standard"}, {"mist", "standard"},
+            {"mist", "compact"}, {"paper", "compact"}, {"paper", "standard"}
+        };
+        for (const auto &[paletteId, layoutId] : appearances) {
+            const auto previousLayout = layout->currentData().toString();
+            palette->setCurrentIndex(palette->findData(paletteId));
+            QCOMPARE(layout->currentData().toString(), previousLayout);
+            QCOMPARE(UiTheme::layoutId(), previousLayout);
+            layout->setCurrentIndex(layout->findData(layoutId));
+            QCOMPARE(UiTheme::paletteId(), paletteId);
             QCoreApplication::processEvents();
             QCOMPARE(completed.first()->foreground().color(), QColor(UiTheme::Muted));
             QCOMPARE(selectedProject->foreground().color(), customColor);
             for (const auto &row : rows) {
                 QVERIFY(row.index.isValid());
                 const int height = row.view->visualRect(row.index).height();
-                if (id == QStringLiteral("precision"))
+                if (layoutId == QStringLiteral("compact"))
                     QVERIFY(height >= 24 && height < row.normalHeight);
                 else
                     QCOMPARE(height, row.normalHeight);
             }
-            if (id == QStringLiteral("mist")) {
+            if (layoutId == QStringLiteral("standard") && normalButtonHeight == 0) {
                 normalButtonHeight = navButton->height();
                 normalMargins = indexPane->layout()->contentsMargins();
                 normalSpacing = indexPane->layout()->spacing();
-            } else if (id == QStringLiteral("paper")) {
+            } else if (layoutId == QStringLiteral("standard")) {
                 QCOMPARE(navButton->height(), normalButtonHeight);
                 QCOMPARE(indexPane->layout()->contentsMargins(), normalMargins);
                 QCOMPARE(indexPane->layout()->spacing(), normalSpacing);

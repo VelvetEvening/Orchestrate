@@ -45,7 +45,7 @@ private slots:
         QFETCH(bool, reading);
         QFETCH(bool, sourceMode);
         QFETCH(qreal, pointSize);
-        UiTheme::apply(*qApp, QStringLiteral("mist"));
+        UiTheme::apply(*qApp, "mist", "standard");
         HeadingTextEdit editor;
         editor.resize(640, 480);
         editor.setPlainText(QStringLiteral("# 阅读标题\n\n正文阅读与未保存草稿。\n\n[主题链接](https://example.com)\n\n`行内代码`\n\n- 项目记录"));
@@ -70,8 +70,12 @@ private slots:
         source->setTextCursor(selection);
         view->setSourceCursor(position, anchor);
         QSignalSpy zoomChanges(&editor, &HeadingTextEdit::textPointSizeChanged);
-        for (const auto &id : {QStringLiteral("paper"), QStringLiteral("precision"), QStringLiteral("mist")}) {
-            UiTheme::apply(*qApp, id);
+        const QList<QPair<QString, QString>> appearances {
+            {"mist", "compact"}, {"paper", "compact"}, {"paper", "standard"},
+            {"precision", "standard"}, {"precision", "compact"}, {"mist", "standard"}
+        };
+        for (const auto &[palette, layout] : appearances) {
+            UiTheme::apply(*qApp, palette, layout);
             QCoreApplication::processEvents();
             QCOMPARE(source->font().pointSizeF(), pointSize);
             QCOMPARE(view->font().pointSizeF(), pointSize);

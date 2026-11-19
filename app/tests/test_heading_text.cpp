@@ -1835,16 +1835,19 @@ private slots:
 
     void calendarRecordSymbolsAndFutureDates_data()
     {
-        QTest::addColumn<QString>("preset");
-        QTest::newRow("mist") << QStringLiteral("mist");
-        QTest::newRow("paper") << QStringLiteral("paper");
-        QTest::newRow("precision") << QStringLiteral("precision");
+        QTest::addColumn<QString>("palette");
+        QTest::addColumn<QString>("layout");
+        for (const QString &palette : {QStringLiteral("mist"), QStringLiteral("paper"), QStringLiteral("precision")}) {
+            for (const QString &layout : {QStringLiteral("standard"), QStringLiteral("compact")})
+                QTest::addRow("%s-%s", qPrintable(palette), qPrintable(layout)) << palette << layout;
+        }
     }
     void calendarRecordSymbolsAndFutureDates()
     {
-        QFETCH(QString, preset);
-        UiTheme::apply(*qApp, preset);
-        const auto restoreTheme = qScopeGuard([] { UiTheme::apply(*qApp, QStringLiteral("mist")); });
+        QFETCH(QString, palette);
+        QFETCH(QString, layout);
+        UiTheme::apply(*qApp, palette, layout);
+        const auto restoreTheme = qScopeGuard([] { UiTheme::apply(*qApp, "mist", "standard"); });
         CalendarCellProbe probe;
         const QDate today=QDate::currentDate();
         probe.setCurrentPage(today.year(),today.month());
@@ -1859,7 +1862,7 @@ private slots:
         QVERIFY(countColor(both,QColor(UiTheme::IndexSurface))>200);
         QVERIFY(countColor(both,QColor(UiTheme::Muted))>0);
         // The diary is solid; the reminder ring leaves the index surface visible.
-        const int markerY = preset == QStringLiteral("precision") ? 46 : 50;
+        const int markerY = layout == QStringLiteral("compact") ? 46 : 50;
         QCOMPARE(both.pixelColor(33,markerY),QColor(UiTheme::DiaryMarker));
         QCOMPARE(both.pixelColor(45,markerY),QColor(UiTheme::IndexSurface));
         QVERIFY(both.pixelColor(47,markerY)!=QColor(UiTheme::IndexSurface));

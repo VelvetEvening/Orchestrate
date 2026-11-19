@@ -37,7 +37,8 @@ static void initializeUiResources()
 }
 
 namespace {
-UiTheme::Preset activePreset = UiTheme::Preset::Mist;
+QString activePalette = QStringLiteral("mist");
+bool compactLayout = false;
 
 void refreshItemForegrounds(QAbstractItemView *view, const QColor &oldMuted, const QColor &oldAccent)
 {
@@ -60,7 +61,7 @@ void updateLayoutMetrics(QLayout *layout)
     if (!normalMargins.isValid()) return;
     QMargins margins = normalMargins.value<QMargins>();
     int spacing = layout->property("themeSpacing").toInt();
-    if (UiTheme::preset() == UiTheme::Preset::Precision) {
+    if (compactLayout) {
         const auto compact = [](int value) {
             return value > 0 ? qMax(4, qRound(value / 6.0) * 4) : 0;
         };
@@ -117,43 +118,36 @@ public:
 };
 }
 
-UiTheme::Preset UiTheme::preset() { return activePreset; }
-QString UiTheme::presetId()
+namespace UiTheme {
+QString paletteId() { return activePalette; }
+bool isCompact() { return compactLayout; }
+QString layoutId()
 {
-    return activePreset == Preset::Paper ? QStringLiteral("paper")
-        : activePreset == Preset::Precision ? QStringLiteral("precision") : QStringLiteral("mist");
+    return compactLayout ? QStringLiteral("compact") : QStringLiteral("standard");
 }
 
-void UiTheme::install(QApplication &app)
+void install(QApplication &app)
 {
-    if (!app.property("orchestrateThemeInstalled").toBool()) apply(app, QStringLiteral("mist"));
+    if (!app.property("orchestrateThemeInstalled").toBool())
+        apply(app, QStringLiteral("mist"), QStringLiteral("standard"));
 }
 
-void UiTheme::apply(QApplication &app, const QString &id)
+static void applyPalette(QApplication &app, bool paper, bool precision)
 {
-    const auto selected = id == QStringLiteral("paper") ? Preset::Paper
-        : id == QStringLiteral("precision") ? Preset::Precision : Preset::Mist;
-    const bool installed = app.property("orchestrateThemeInstalled").toBool();
-    if (installed && selected == activePreset) return;
-    const QColor oldMuted(Muted), oldAccent(Accent);
-    activePreset = selected;
-    const bool paper = activePreset == Preset::Paper;
-    const bool compact = activePreset == Preset::Precision;
-    Background = paper ? "#f7f5f0" : compact ? "#f4f6f8" : "#f7f9fa";
-    Sidebar = paper ? "#f0ede7" : compact ? "#e5ebf2" : "#eff3f4";
-    IndexSurface = compact ? "#edf1f6" : Background;
+    Background = paper ? "#f7f5f0" : precision ? "#f4f6f8" : "#f7f9fa";
+    Sidebar = paper ? "#f0ede7" : precision ? "#e5ebf2" : "#eff3f4";
+    IndexSurface = precision ? "#edf1f6" : Background;
     Surface = paper ? "#fffdf8" : "#ffffff";
-    Text = paper ? "#383734" : compact ? "#253246" : "#2f3b48";
-    Muted = paper ? "#6e6a64" : compact ? "#536277" : "#5e6c78";
-    Border = paper ? "#e2ded6" : compact ? "#d8e0e8" : "#dfe6ea";
-    ControlBorder = paper ? "#b8b0a6" : compact ? "#a8b6c7" : "#b3bfcd";
-    Accent = paper ? "#80523e" : compact ? "#244f78" : "#365f8c";
-    Selection = paper ? "#ece8e1" : compact ? "#dce8f3" : "#dfe9f2";
+    Text = paper ? "#383734" : precision ? "#253246" : "#2f3b48";
+    Muted = paper ? "#6e6a64" : precision ? "#536277" : "#5e6c78";
+    Border = paper ? "#e2ded6" : precision ? "#d8e0e8" : "#dfe6ea";
+    ControlBorder = paper ? "#b8b0a6" : precision ? "#a8b6c7" : "#b3bfcd";
+    Accent = paper ? "#80523e" : precision ? "#244f78" : "#365f8c";
+    Selection = paper ? "#ece8e1" : precision ? "#dce8f3" : "#dfe9f2";
     Hover = paper ? "#f3f0ea" : "#edf2f5";
     Focus = paper ? "#96765f" : "#6f8fb6";
-    DiaryMarker = paper ? "#986d54" : compact ? "#58758f" : "#648098";
-    ReminderMarker = paper ? "#8a7786" : compact ? "#82708c" : "#887789";
-    initializeUiResources();
+    DiaryMarker = paper ? "#986d54" : precision ? "#58758f" : "#648098";
+    ReminderMarker = paper ? "#8a7786" : precision ? "#82708c" : "#887789";
     app.styleHints()->setColorScheme(Qt::ColorScheme::Light);
     QPalette palette;
     for (auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
@@ -178,6 +172,24 @@ void UiTheme::apply(QApplication &app, const QString &id)
         palette.setColor(group, QPalette::Dark, QColor(Muted));
     }
     app.setPalette(palette);
+}
+
+void apply(QApplication &app, const QString &paletteId, const QString &layoutId)
+{
+    const bool paper = paletteId == QStringLiteral("paper");
+    const bool precision = paletteId == QStringLiteral("precision");
+    const QString selected = paper || precision ? paletteId : QStringLiteral("mist");
+    const bool compact = layoutId == QStringLiteral("compact");
+    const bool installed = app.property("orchestrateThemeInstalled").toBool();
+    const bool paletteChanged = !installed || selected != activePalette;
+    const bool layoutChanged = !installed || compact != compactLayout;
+    if (!paletteChanged && !layoutChanged) return;
+
+    const QColor oldMuted(Muted), oldAccent(Accent);
+    activePalette = selected;
+    compactLayout = compact;
+    initializeUiResources();
+    if (paletteChanged) applyPalette(app, paper, precision);
     if (!installed) {
         QFont font = app.font();
         if (QFontDatabase::hasFamily(QStringLiteral("Microsoft YaHei UI")))
@@ -201,7 +213,7 @@ void UiTheme::apply(QApplication &app, const QString &id)
             {"warning", Warning}, {"warningBackground", WarningBackground},
             {"danger", Danger}, {"dangerBackground", DangerBackground},
             {"dangerHoverBorder", DangerHoverBorder}, {"disabled", Disabled},
-            {"controlPadding", compact ? "4px 9px" : paper ? "7px 12px" : "6px 11px"},
+            {"controlPadding", compact ? "4px 9px" : "6px 11px"},
             {"controlRadius", compact ? "4px" : "6px"},
             {"inputPadding", compact ? "4px 8px" : "6px 9px"},
             {"navPadding", compact ? "6px 10px" : "10px 12px"},
@@ -209,8 +221,8 @@ void UiTheme::apply(QApplication &app, const QString &id)
             {"tabPadding", compact ? "4px 9px" : "7px 12px"},
             {"calendarPadding", compact ? "4px" : "7px"},
             {"calendarBottomInset", compact ? "5em" : "0px"},
-            {"toolItemPadding", compact ? "3px 5px" : paper ? "9px 7px" : "8px 5px"},
-            {"itemPadding", compact ? "3px 8px" : paper ? "9px 10px" : "7px 10px"},
+            {"toolItemPadding", compact ? "3px 5px" : "8px 5px"},
+            {"itemPadding", compact ? "3px 8px" : "7px 10px"},
             {"recordMinHeight", compact ? "30px" : "42px"},
             {"diaryMinHeight", compact ? "30px" : "40px"},
             {"collectionMinHeight", compact ? "34px" : "46px"}
@@ -225,7 +237,9 @@ void UiTheme::apply(QApplication &app, const QString &id)
     }
     // Repaint existing windows without rebuilding pages or touching editor drafts.
     for (QWidget *widget : QApplication::allWidgets()) {
-        if (widget->layout()) updateLayoutMetrics(widget->layout());
+        if (layoutChanged && widget->layout()) updateLayoutMetrics(widget->layout());
+        widget->update();
+        if (!paletteChanged) continue;
         if (auto *calendar = qobject_cast<QCalendarWidget *>(widget))
             applyCalendarPalette(calendar);
         if (auto *view = qobject_cast<QAbstractItemView *>(widget))
@@ -234,19 +248,18 @@ void UiTheme::apply(QApplication &app, const QString &id)
             for (auto *highlighter : edit->document()->findChildren<QSyntaxHighlighter *>())
                 highlighter->rehighlight();
         }
-        widget->update();
         if (widget->isWindow() && widget->isVisible()
             && (widget->windowType() == Qt::Window || widget->windowType() == Qt::Dialog)) lightCaption(widget);
     }
 }
 
-QIcon UiTheme::icon(const QString &name)
+QIcon icon(const QString &name)
 {
     initializeUiResources();
     return QIcon(QStringLiteral(":/ui/icons/%1.svg").arg(name));
 }
 
-void UiTheme::setRole(QWidget *widget, const char *role)
+void setRole(QWidget *widget, const char *role)
 {
     const auto value = QString::fromLatin1(role);
     if (widget->property("uiRole").toString() == value) return;
@@ -256,7 +269,7 @@ void UiTheme::setRole(QWidget *widget, const char *role)
     widget->update();
 }
 
-void UiTheme::setSurface(QWidget *widget, const char *surface)
+void setSurface(QWidget *widget, const char *surface)
 {
     widget->setAttribute(Qt::WA_StyledBackground, true);
     widget->setProperty("workspaceSurface", QString::fromLatin1(surface));
@@ -265,14 +278,14 @@ void UiTheme::setSurface(QWidget *widget, const char *surface)
     widget->update();
 }
 
-void UiTheme::setLayoutMetrics(QLayout *layout, const QMargins &margins, int spacing)
+void setLayoutMetrics(QLayout *layout, const QMargins &margins, int spacing)
 {
     layout->setProperty("themeMargins", QVariant::fromValue(margins));
     layout->setProperty("themeSpacing", spacing);
     updateLayoutMetrics(layout);
 }
 
-void UiTheme::applyCalendarPalette(QCalendarWidget *calendar)
+void applyCalendarPalette(QCalendarWidget *calendar)
 {
     auto palette = calendar->palette();
     palette.setColor(QPalette::Highlight, QColor(Selection));
@@ -286,3 +299,4 @@ void UiTheme::applyCalendarPalette(QCalendarWidget *calendar)
     calendar->setWeekdayTextFormat(Qt::Saturday, header);
     calendar->setWeekdayTextFormat(Qt::Sunday, header);
 }
+} // namespace UiTheme
