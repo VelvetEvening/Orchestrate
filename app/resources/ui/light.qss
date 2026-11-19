@@ -184,6 +184,8 @@ QCalendarWidget QWidget#qt_calendar_navigationbar { background: @indexSurface@; 
 QCalendarWidget QToolButton { border: 1px solid transparent; background: @indexSurface@; padding: @calendarPadding@; font-size: 14px; }
 QCalendarWidget QToolButton:hover { background: @hover@; }
 QCalendarWidget QToolButton:focus { border-color: @focus@; }
+QCalendarWidget QToolButton#qt_calendar_prevmonth { qproperty-icon: url(@icons@/chevron-left.svg); }
+QCalendarWidget QToolButton#qt_calendar_nextmonth { qproperty-icon: url(@icons@/chevron-right.svg); }
 QCalendarWidget QToolButton#qt_calendar_monthbutton { color: @text@; font-size: 18px; font-weight: 600; }
 QCalendarWidget QSpinBox { min-width: 70px; }
 QCalendarWidget QToolButton#qt_calendar_yearbutton, QCalendarWidget QSpinBox#qt_calendar_yearedit { color: @text@; font-size: 15px; font-weight: 600; }
