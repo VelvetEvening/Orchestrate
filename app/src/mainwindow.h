@@ -34,6 +34,7 @@ protected:
 #endif
 
 private:
+    void toggleMainWindow();
     bool savePendingChanges();
     void buildUi();
     void buildNavigation(QWidget *parent);

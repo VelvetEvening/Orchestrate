@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include "platform/globalshortcut.h"
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QToolButton>
 #include <QCloseEvent>
@@ -1208,8 +1209,8 @@ private slots:
             QVERIFY(window.findChild<QLabel *>(QStringLiteral("updateStatus")));
             window.resize(980, 640);
             QCoreApplication::processEvents();
-            auto *retry = button(window, QStringLiteral("重试注册 Alt+X"));
-            QVERIFY(retry->mapTo(&window, retry->rect().bottomRight()).y() < window.height());
+            auto *apply = window.findChild<QPushButton *>("globalShortcutApply");
+            QVERIFY(apply && apply->mapTo(&window, apply->rect().bottomRight()).y() < window.height());
             capture(window, QStringLiteral("settings-autostart-compact"));
         }
         MainWindow restored(nullptr, backend());
@@ -1343,6 +1344,58 @@ private slots:
         QVERIFY(close.isAccepted());
     }
 
+    void shortcutTogglesWindowAndKeepsDraft()
+    {
+        QVERIFY(database_->setSetting("global_shortcut_enabled", "false"));
+        MainWindow window;
+        auto *shortcut = window.findChild<GlobalShortcut *>();
+        auto *closeToTray = window.findChild<QCheckBox *>("closeToTrayCheck");
+        auto *tray = window.findChild<QSystemTrayIcon *>();
+        QVERIFY(shortcut && closeToTray && tray && tray->contextMenu());
+        closeToTray->setChecked(false);
+        auto *showAction = tray->contextMenu()->actions().first();
+        auto toggle = [&] { emit shortcut->activated(); };
+        toggle();
+        QTRY_VERIFY(window.isActiveWindow());
+        button(window, QStringLiteral("添加日记"))->click();
+        auto *title = window.findChild<QLineEdit *>("diaryTitle");
+        QVERIFY(title && title->isVisible());
+        title->setFocus();
+        QTRY_VERIFY(title->hasFocus());
+        QTest::keyClicks(title, "unfinished");
+        title->setCursorPosition(3);
+        toggle();
+        QVERIFY(!window.isVisible());
+        QVERIFY(!QApplication::activeModalWidget());
+        QWidget other;
+        other.show();
+        other.activateWindow();
+        QTRY_VERIFY(other.isActiveWindow());
+        toggle();
+        QTRY_VERIFY(title->hasFocus());
+        QCOMPARE(title->text(), QStringLiteral("unfinished"));
+        QCOMPARE(title->cursorPosition(), 3);
+        QVERIFY(title->isUndoAvailable());
+        showAction->trigger();
+        QVERIFY(window.mainWindowVisible());
+
+        other.activateWindow();
+        QTRY_VERIFY(other.isActiveWindow());
+        toggle();
+        QTRY_VERIFY(window.isActiveWindow());
+        QVERIFY(window.mainWindowVisible());
+        window.showMinimized();
+        toggle();
+        QTRY_VERIFY(window.isActiveWindow() && window.mainWindowVisible());
+
+        QDialog prompt(&window);
+        prompt.setModal(true);
+        prompt.show();
+        QTRY_COMPARE(QApplication::activeModalWidget(), &prompt);
+        toggle();
+        QVERIFY(prompt.isVisible() && window.isVisible());
+    }
+
     void shortcutPreferenceAndIsolation()
     {
         {
@@ -1361,19 +1414,136 @@ private slots:
             QCOMPARE(result, qintptr(123));
             check->setChecked(false);
             QVERIFY(label->text().contains(QStringLiteral("已禁用")));
-            QVERIFY(!button(window, QStringLiteral("重试注册 Alt+X"))->isEnabled());
+            QVERIFY(!window.findChild<QPushButton *>("globalShortcutApply")->isEnabled());
         }
         {
             MainWindow window;
             auto *check = window.findChild<QCheckBox *>(QStringLiteral("globalShortcutCheck"));
             QVERIFY(check && !check->isChecked());
             check->setChecked(true);
-            QVERIFY(button(window, QStringLiteral("重试注册 Alt+X"))->isEnabled());
-            button(window, QStringLiteral("重试注册 Alt+X"))->click();
+            auto *retry = window.findChild<QPushButton *>("globalShortcutApply");
+            QVERIFY(retry && retry->isEnabled());
+            QCOMPARE(retry->text(), QStringLiteral("重试注册"));
+            retry->click();
             QVERIFY(!window.findChild<GlobalShortcut *>()->isRegistered());
         }
         MainWindow restored;
         QVERIFY(restored.findChild<QCheckBox *>(QStringLiteral("globalShortcutCheck"))->isChecked());
+    }
+
+    void customShortcutSettings()
+    {
+        QVERIFY(database_->setSetting("global_shortcut_enabled", "false"));
+        {
+            MainWindow window;
+            window.show();
+            button(window, QStringLiteral("设置"))->click();
+            auto *modifier = window.findChild<QButtonGroup *>("globalShortcutModifier");
+            auto *letter = window.findChild<QLineEdit *>("globalShortcutLetter");
+            auto *apply = window.findChild<QPushButton *>("globalShortcutApply");
+            auto *warning = window.findChild<QLabel *>("globalShortcutWarning");
+            auto *status = window.findChild<QLabel *>("globalShortcutStatus");
+            QVERIFY(modifier && letter && apply && warning && status);
+            QCOMPARE(modifier->buttons().size(), 2);
+            QCOMPARE(modifier->checkedId(), int(Qt::AltModifier));
+            QCOMPARE(letter->text(), QStringLiteral("X"));
+            QVERIFY(!apply->isEnabled());
+            modifier->button(int(Qt::ControlModifier))->click();
+            letter->setText("C");
+            QVERIFY(warning->isVisible() && warning->text().contains(QStringLiteral("复制")));
+            letter->setText("V");
+            QVERIFY(warning->text().contains(QStringLiteral("右键")));
+            QVERIFY(database_->setting("global_shortcut_binding").isEmpty());
+            QVERIFY(status->text().contains("Alt+X"));
+            QVERIFY(apply->isEnabled());
+            apply->click();
+            QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Ctrl+V"));
+            QVERIFY(status->text().contains("Ctrl+V") && status->text().contains(QStringLiteral("已禁用")));
+            QVERIFY(!apply->isEnabled());
+            capture(*apply->parentWidget(), QStringLiteral("settings-global-shortcut"));
+        }
+        MainWindow restored;
+        auto *enable = restored.findChild<QCheckBox *>("globalShortcutCheck");
+        auto *letter = restored.findChild<QLineEdit *>("globalShortcutLetter");
+        auto *modifier = restored.findChild<QButtonGroup *>("globalShortcutModifier");
+        auto *apply = restored.findChild<QPushButton *>("globalShortcutApply");
+        auto *status = restored.findChild<QLabel *>("globalShortcutStatus");
+        QVERIFY(enable && letter && modifier && apply && status);
+        QVERIFY(!enable->isChecked());
+        QCOMPARE(modifier->checkedId(), int(Qt::ControlModifier));
+        QCOMPARE(letter->text(), QStringLiteral("V"));
+        enable->setChecked(true);
+        QCOMPARE(database_->setting("global_shortcut_enabled"), QStringLiteral("true"));
+        QVERIFY(status->text().contains("Ctrl+V"));
+        modifier->button(int(Qt::AltModifier))->click();
+        letter->setText("J");
+        QVERIFY(restored.findChild<QLabel *>("globalShortcutWarning")->isHidden());
+        apply->click();
+        QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Alt+J"));
+        QVERIFY(status->text().contains("Alt+J"));
+    }
+
+    void shortcutLetterEntry()
+    {
+        QVERIFY(database_->setSetting("global_shortcut_enabled", "false"));
+        MainWindow window;
+        window.showMainWindow();
+        button(window, QStringLiteral("设置"))->click();
+        auto *letter = window.findChild<QLineEdit *>("globalShortcutLetter");
+        auto *apply = window.findChild<QPushButton *>("globalShortcutApply");
+        QVERIFY(letter && apply);
+        QTest::mouseClick(letter, Qt::LeftButton);
+        QCOMPARE(letter->selectedText(), QStringLiteral("X"));
+        QTest::keyClicks(letter, "j");
+        QCOMPARE(letter->text(), QStringLiteral("J"));
+        QTest::keyClicks(letter, "z");
+        QCOMPARE(letter->text(), QStringLiteral("Z"));
+        QVERIFY(apply->isEnabled());
+        QVERIFY(database_->setting("global_shortcut_binding").isEmpty());
+        QTest::keyClick(letter, Qt::Key_Backspace);
+        QVERIFY(letter->text().isEmpty() && !apply->isEnabled());
+        QTest::keyClicks(letter, "1!");
+        letter->insert(QStringLiteral("汉"));
+        letter->insert(QStringLiteral("ab"));
+        QVERIFY(letter->text().isEmpty() && !apply->isEnabled());
+        QTest::keyClick(letter, Qt::Key_Return);
+        QVERIFY(database_->setting("global_shortcut_binding").isEmpty());
+        letter->insert(QStringLiteral("k"));
+        QCOMPARE(letter->text(), QStringLiteral("K"));
+        QTest::keyClick(letter, Qt::Key_Return);
+        QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Alt+K"));
+        QVERIFY(!apply->isEnabled());
+    }
+
+    void shortcutSettingsWriteFailure()
+    {
+        QVERIFY(database_->setSetting("global_shortcut_enabled", "false"));
+        MainWindow window;
+        auto *enable = window.findChild<QCheckBox *>("globalShortcutCheck");
+        auto *letter = window.findChild<QLineEdit *>("globalShortcutLetter");
+        auto *apply = window.findChild<QPushButton *>("globalShortcutApply");
+        auto *status = window.findChild<QLabel *>("globalShortcutStatus");
+        auto *shortcut = window.findChild<GlobalShortcut *>();
+        QVERIFY(enable && letter && apply && status && shortcut);
+        const QString connection = QStringLiteral("blocked-shortcut-settings");
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+            db.setDatabaseName(database_->databasePath());
+            QVERIFY(db.open());
+            QSqlQuery query(db);
+            QVERIFY(query.exec("CREATE TRIGGER fail_shortcut BEFORE INSERT ON app_settings "
+                               "WHEN NEW.key IN ('global_shortcut_enabled','global_shortcut_binding') "
+                               "BEGIN SELECT RAISE(ABORT,'blocked shortcut setting'); END"));
+            letter->setText("J");
+            apply->click();
+            QCOMPARE(GlobalShortcut::text(shortcut->binding()), QStringLiteral("Alt+X"));
+            QVERIFY(status->text().contains("blocked shortcut setting"));
+            QVERIFY(database_->setting("global_shortcut_binding").isEmpty());
+            enable->setChecked(true);
+            QVERIFY(!enable->isChecked() && !shortcut->enabled());
+            QCOMPARE(database_->setting("global_shortcut_enabled"), QStringLiteral("false"));
+        }
+        QSqlDatabase::removeDatabase(connection);
     }
 
     void rules_data()

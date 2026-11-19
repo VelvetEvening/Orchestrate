@@ -1,6 +1,6 @@
 # 测试
 
-Windows 共 27 个 CTest 套件；套件内还有多个用例及数据行。生产代码只编译一次，测试与应用链接相同的静态库。
+Windows 共 28 个 CTest 套件，套件内还有多个用例及数据行。生产代码只编译一次，测试与应用链接相同的静态库。
 
 ```powershell
 # 日常功能回归；单模块修改可用 -R 选择相关套件。
@@ -17,7 +17,7 @@ Remove-Item Env:ORCHESTRATE_TEST_STRESS
 | 数据与内置身份 | `builtin_identity`、`database_migration`、`database_schema` |
 | 工具接入 | `manifest_parser`、`automation_contract`、`configurable_tools`、`builtin_acceptance`、`adapter_example`、`tool_copy` |
 | 内容与窗口 | `markdown_edit`、`math_preview`、`heading_text`、`clipboard`、`workspace_navigation`、`git_history` |
-| 启动与更新界面 | `autostart`、`startup_visibility`、`release_info`、`update_checker` |
+| 启动、快捷键与更新界面 | `autostart`、`global_shortcut`、`startup_visibility`、`release_info`、`update_checker` |
 | 更新器 | `update_backup`、`portable_update`、`update_tasks`、`update_startup` |
 | 定时关机 | `shutdown_process_identity`、`shutdown_result_codes`、`shutdown_task_settings`、`shutdown_disable` |
 
