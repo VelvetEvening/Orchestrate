@@ -125,6 +125,12 @@ if (WIN32)
     # Qt's bin directory also contains the MinGW runtime shipped with this Qt kit.
     target_link_libraries(MathPreviewTest PRIVATE psapi)
     string(REPLACE ";" "\;" test_path "$<TARGET_FILE_DIR:Qt6::Core>;$ENV{PATH}")
+    add_executable(GlobalShortcutTest test_global_shortcut.cpp)
+    target_link_libraries(GlobalShortcutTest PRIVATE OrchestrateShortcut Qt6::Test user32)
+    set_target_properties(GlobalShortcutTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_BINARY_DIR}/global-shortcut-test>")
+    add_test(NAME global_shortcut COMMAND GlobalShortcutTest
+        -o "${CMAKE_CURRENT_BINARY_DIR}/global-shortcut-test/results.txt,txt" -o -,txt)
+    set_tests_properties(global_shortcut PROPERTIES ENVIRONMENT "PATH=${test_path}" TIMEOUT 30)
     add_executable(StartupVisibilityTest test_startup_visibility.cpp)
     target_link_libraries(StartupVisibilityTest PRIVATE Qt6::Core Qt6::Sql Qt6::Test user32)
     target_compile_definitions(StartupVisibilityTest PRIVATE ORCHESTRATE_APPLICATION="$<TARGET_FILE:Orchestrate>")

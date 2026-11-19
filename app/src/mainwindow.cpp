@@ -7,6 +7,7 @@
 #include "pages/clipboardpage.h"
 #include "platform/globalshortcut.h"
 #include "platform/clipboardpaste.h"
+#include "widgets/shortcutsettings.h"
 #include "update/updatewidget.h"
 
 #include <QAction>
@@ -80,7 +81,8 @@ MainWindow::MainWindow(QWidget *parent, std::unique_ptr<AutoStart> autoStart)
 
     UiTheme::apply(*qApp, database_.setting(QStringLiteral("appearance_preset"), QStringLiteral("mist")));
 
-    globalShortcut_ = new GlobalShortcut(this);
+    globalShortcut_ = new GlobalShortcut(database_.setting("global_shortcut_enabled", "true") == "true",
+                                         database_.setting("global_shortcut_binding"), this);
     connect(globalShortcut_, &GlobalShortcut::activated, this, &MainWindow::showMainWindow);
     buildUi();
     sidebarCollapsed_ = database_.setting(QStringLiteral("sidebar_collapsed"), QStringLiteral("false")) == QStringLiteral("true");
@@ -284,12 +286,17 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
         connect(clipboardPage, &ClipboardPage::pasteOnUseChanged, this, &ClipboardPaste::setTrackingEnabled);
         connect(clipboardPage, &ClipboardPage::hideRequested, this, [this,clipboardPage](bool paste, quint32 sequence) {
             if (paste) {
-                ClipboardPaste::request(this,sequence,[this,clipboardPage] {
-                    const auto message = QStringLiteral("已复制。请在目标窗口手动粘贴。");
+                const auto reportManualPaste = [this, clipboardPage](const QString &message) {
                     clipboardPage->report(message);
                     if (trayIcon_ && trayIcon_->isVisible() && QSystemTrayIcon::supportsMessages())
                         trayIcon_->showMessage(QStringLiteral("剪贴板"),message,QSystemTrayIcon::Information,4000);
-                });
+                };
+                if (globalShortcut_->isRegistered() && globalShortcut_->binding() == QKeyCombination(Qt::ControlModifier, Qt::Key_V))
+                    reportManualPaste(QStringLiteral("已复制。Ctrl+V 用于唤起窗口，请在目标应用的右键菜单中选择粘贴。"));
+                else
+                    ClipboardPaste::request(this, sequence, [reportManualPaste] {
+                        reportManualPaste(QStringLiteral("已复制。请在目标窗口手动粘贴。"));
+                    });
             }
             hide();
         });
@@ -337,31 +344,7 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
             closeToTray_ = enabled;
         });
 
-        auto *shortcutCheck = new QCheckBox(QStringLiteral("启用全局快捷键 Alt+X，唤起 Orchestrate"), settingsCard);
-        shortcutCheck->setObjectName(QStringLiteral("globalShortcutCheck"));
-        shortcutCheck->setChecked(database_.setting(QStringLiteral("global_shortcut_enabled"), QStringLiteral("true")) == QStringLiteral("true"));
-        settingsCardLayout->addWidget(shortcutCheck);
-        auto *shortcutLabel = new QLabel(settingsCard);
-        shortcutLabel->setObjectName(QStringLiteral("globalShortcutStatus"));
-        shortcutLabel->setWordWrap(true);
-        settingsCardLayout->addWidget(shortcutLabel);
-        connect(globalShortcut_, &GlobalShortcut::statusChanged, shortcutLabel, &QLabel::setText);
-        connect(shortcutCheck, &QCheckBox::toggled, this, [this, shortcutLabel](bool enabled) {
-            globalShortcut_->configure(enabled);
-            QString error;
-            if (!database_.setSetting(QStringLiteral("global_shortcut_enabled"), enabled ? QStringLiteral("true") : QStringLiteral("false"), &error)) {
-                shortcutLabel->setText(globalShortcut_->status() + QStringLiteral("\n设置保存失败：") + error);
-            }
-        });
-        auto *retryShortcut = new QPushButton(QStringLiteral("重试注册 Alt+X"), settingsCard);
-        retryShortcut->setEnabled(shortcutCheck->isChecked());
-        settingsCardLayout->addWidget(retryShortcut, 0, Qt::AlignLeft);
-        connect(shortcutCheck, &QCheckBox::toggled, retryShortcut, &QPushButton::setEnabled);
-        connect(retryShortcut, &QPushButton::clicked, this, [this, shortcutCheck] {
-            globalShortcut_->configure(shortcutCheck->isChecked());
-        });
-        globalShortcut_->configure(shortcutCheck->isChecked());
-
+        settingsCardLayout->addWidget(new ShortcutSettings(*globalShortcut_, database_, settingsCard));
 
         settingsLayout->addWidget(settingsCard);
         auto *appearanceCard = makeSection(settingsPage);

@@ -105,6 +105,8 @@ add_library(OrchestrateApplication STATIC
     src/platform/clipboardpaste.cpp src/platform/clipboardpaste.h
     src/mainwindow.cpp
     src/mainwindow.h
+    src/widgets/shortcutsettings.cpp
+    src/widgets/shortcutsettings.h
     src/pages/calendarpage.cpp
     src/pages/calendarpage.h
     src/pages/projectspage.cpp
