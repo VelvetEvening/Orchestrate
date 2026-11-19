@@ -5,9 +5,10 @@
 
 class AppDatabase;
 class GlobalShortcut;
+class QButtonGroup;
 class QCheckBox;
-class QComboBox;
 class QLabel;
+class QLineEdit;
 class QPushButton;
 
 class ShortcutSettings final : public QWidget {
@@ -21,8 +22,8 @@ private:
     GlobalShortcut &shortcut_;
     AppDatabase &database_;
     QCheckBox *enabled_;
-    QComboBox *modifier_;
-    QComboBox *letter_;
+    QButtonGroup *modifier_;
+    QLineEdit *letter_;
     QPushButton *apply_;
     QLabel *warning_;
 };

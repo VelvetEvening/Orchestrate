@@ -205,3 +205,21 @@ QLabel#runTitle { color: @text@; font-weight: 600; }
 QLabel#runStatus { font-weight: 600; }
 QPlainTextEdit#runOutput { background: transparent; color: @text@; border: none; padding: 0; }
 QLabel#warningText, QLabel#commandParameterError { color: @warning@; background: @warningBackground@; border: none; border-radius: 6px; padding: 8px 10px; }
+
+QFrame#shortcutModifierSegments {
+    background: @indexSurface@; border: 1px solid @controlBorder@; border-radius: @controlRadius@;
+}
+QFrame#shortcutModifierSegments QToolButton {
+    background: transparent; color: @muted@; border: 1px solid transparent; border-radius: 4px;
+    min-width: 32px; min-height: 20px; padding: 1px 5px;
+}
+QFrame#shortcutModifierSegments QToolButton:hover { background: @hover@; color: @text@; }
+QFrame#shortcutModifierSegments QToolButton:checked {
+    background: @selection@; color: @accent@; border-color: @border@; font-weight: 600;
+}
+QFrame#shortcutModifierSegments QToolButton:focus { border-color: @accent@; }
+QLineEdit#globalShortcutLetter {
+    min-width: 35px; max-width: 35px; min-height: 20px;
+    color: @accent@; font-weight: 600;
+}
+QPushButton#globalShortcutApply { min-width: 4em; }

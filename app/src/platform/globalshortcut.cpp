@@ -128,7 +128,7 @@ bool GlobalShortcut::apply(bool enabled, QKeyCombination binding, const std::fun
     if (!enabled_)
         status_ = QStringLiteral("%1 已禁用，可通过托盘打开 %2。").arg(name, QGuiApplication::applicationDisplayName());
     else if (isRegistered())
-        status_ = QStringLiteral("运行时按 %1 唤起 %2。").arg(name, QGuiApplication::applicationDisplayName());
+        status_ = QStringLiteral("按 %1 显示或收起 %2。").arg(name, QGuiApplication::applicationDisplayName());
     else
         status_ = QStringLiteral("已选择 %1。测试环境中跳过系统注册。").arg(name);
     emit statusChanged(status_);

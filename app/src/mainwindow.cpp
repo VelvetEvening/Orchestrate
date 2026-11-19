@@ -83,7 +83,7 @@ MainWindow::MainWindow(QWidget *parent, std::unique_ptr<AutoStart> autoStart)
 
     globalShortcut_ = new GlobalShortcut(database_.setting("global_shortcut_enabled", "true") == "true",
                                          database_.setting("global_shortcut_binding"), this);
-    connect(globalShortcut_, &GlobalShortcut::activated, this, &MainWindow::showMainWindow);
+    connect(globalShortcut_, &GlobalShortcut::activated, this, &MainWindow::toggleMainWindow);
     buildUi();
     sidebarCollapsed_ = database_.setting(QStringLiteral("sidebar_collapsed"), QStringLiteral("false")) == QStringLiteral("true");
     updateSidebarAppearance();
@@ -460,6 +460,33 @@ void MainWindow::refreshAutoStartSettings(const QString &error)
     autoStartStatus_->setText(!error.isEmpty() ? error : !state.error.isEmpty() ? state.error : state.message);
 }
 
+void MainWindow::toggleMainWindow()
+{
+    if (auto *dialog = QApplication::activeModalWidget()) {
+        dialog->raise();
+        dialog->activateWindow();
+        return;
+    }
+
+    auto *popup = QApplication::activePopupWidget();
+    const bool ownsPopup = popup && popup->parentWidget() && popup->parentWidget()->window() == this;
+    bool inForeground = isActiveWindow() || ownsPopup;
+#ifdef Q_OS_WIN
+    if (QApplication::platformName() == QStringLiteral("windows")) {
+        if (const auto foreground = GetForegroundWindow()) {
+            inForeground = foreground == reinterpret_cast<HWND>(effectiveWinId())
+                || (ownsPopup && foreground == reinterpret_cast<HWND>(popup->effectiveWinId()));
+        }
+    }
+#endif
+    if (mainWindowVisible() && inForeground) {
+        if (ownsPopup) popup->hide();
+        hide();
+    } else {
+        showMainWindow();
+    }
+}
+
 void MainWindow::showMainWindow()
 {
     show();
@@ -470,6 +497,7 @@ void MainWindow::showMainWindow()
         // while QWidget already considers it visible, making show() a no-op.
         const auto hwnd = reinterpret_cast<HWND>(winId());
         ShowWindow(hwnd, IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
+        SetForegroundWindow(hwnd);
     }
 #endif
     raise();
