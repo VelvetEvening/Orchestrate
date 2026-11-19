@@ -143,6 +143,7 @@ private slots:
         QTest::newRow("mist") << QStringLiteral("mist") << QColor("#365f8c");
         QTest::newRow("paper") << QStringLiteral("paper") << QColor("#80523e");
         QTest::newRow("precision") << QStringLiteral("precision") << QColor("#244f78");
+        QTest::newRow("mamba") << QStringLiteral("mamba") << QColor("#fdb927");
     }
     void appearanceControlsFitAtCompactSize() {
         QFETCH(QString, paletteId);
@@ -155,7 +156,7 @@ private slots:
         const auto navigation = window.findChildren<QPushButton *>("navButton");
         auto *settings = navigation.at(4);
         QVERIFY(palette && layout && toggle);
-        QCOMPARE(palette->count(), 3);
+        QCOMPARE(palette->count(), 4);
         QCOMPARE(layout->count(), 2);
         QCOMPARE(palette->currentData().toString(), QStringLiteral("mist"));
         QCOMPARE(layout->currentData().toString(), QStringLiteral("standard"));
@@ -175,6 +176,7 @@ private slots:
             QCOMPARE(palette->currentData().toString(), paletteId);
             QCOMPARE(UiTheme::layoutId(), density);
             QCOMPARE(qApp->palette().color(QPalette::Link), accent);
+            QCOMPARE(qApp->palette().color(QPalette::Base).lightness() < 70, paletteId == "mamba");
             QVERIFY(!qApp->styleSheet().contains(QLatin1Char('@')));
 
             auto *section = layout->parentWidget();
@@ -213,6 +215,7 @@ private slots:
             const int right = section->contentsRect().right() - section->layout()->contentsMargins().right();
             QVERIFY(qAbs(layout->geometry().right() - right) <= 1);
             capture(*section, QStringLiteral("appearance-%1-%2").arg(paletteId, density));
+            if (paletteId == "mamba") capture(window, QStringLiteral("mamba-settings-%1").arg(density));
 
             const auto expandedIcon = toggle->icon().pixmap(24, 24).toImage();
             const int expandedHeight = settings->height();
@@ -246,7 +249,7 @@ private slots:
         QTest::keyClick(palette->view(), Qt::Key_End);
         QTest::keyClick(palette->view(), Qt::Key_Return);
         QTRY_VERIFY(!palette->view()->isVisible());
-        QCOMPARE(UiTheme::paletteId(), QStringLiteral("precision"));
+        QCOMPARE(UiTheme::paletteId(), QStringLiteral("mamba"));
         QTest::keyClick(layout, Qt::Key_Down, Qt::AltModifier);
         auto *options = layout->view();
         QTRY_VERIFY(options->isVisible());
@@ -254,6 +257,9 @@ private slots:
         QTest::mouseClick(options->viewport(), Qt::LeftButton, Qt::NoModifier, options->visualRect(compact).center());
         QTRY_VERIFY(!options->isVisible());
         QCOMPARE(UiTheme::layoutId(), QStringLiteral("compact"));
+        MainWindow restored;
+        QCOMPARE(restored.findChild<QComboBox *>("appearancePalette")->currentData().toString(), QStringLiteral("mamba"));
+        QCOMPARE(restored.findChild<QComboBox *>("appearanceLayout")->currentData().toString(), QStringLiteral("compact"));
     }
     void appearanceAndSidebarPreferencesRestore() {
         AppDatabase db;
@@ -411,7 +417,7 @@ private slots:
         QMargins normalMargins;
         const QList<QPair<QString, QString>> appearances {
             {"precision", "compact"}, {"precision", "standard"}, {"mist", "standard"},
-            {"mist", "compact"}, {"paper", "compact"}, {"paper", "standard"}
+            {"mist", "compact"}, {"mamba", "compact"}, {"mamba", "standard"}, {"paper", "compact"}, {"paper", "standard"}
         };
         for (const auto &[paletteId, layoutId] : appearances) {
             const auto previousLayout = layout->currentData().toString();

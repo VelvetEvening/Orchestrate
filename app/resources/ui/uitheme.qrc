@@ -1,6 +1,13 @@
 <RCC>
   <qresource prefix="/ui">
     <file>light.qss</file>
+    <file>mamba.qss</file>
+    <file>mamba-sidebar.png</file>
+    <file>icons/dark/check.svg</file>
+    <file>icons/dark/radio.svg</file>
+    <file>icons/dark/chevron-down.svg</file>
+    <file>icons/dark/chevron-right.svg</file>
+    <file>icons/dark/chevron-up.svg</file>
     <file>icons/calendar.svg</file>
     <file>icons/folder.svg</file>
     <file>icons/toolbox.svg</file>

@@ -1,0 +1,19 @@
+/* The section rules use the shared plum border. Gold marks actions and selection. */
+QFrame#sidebar {
+    background: qlineargradient(x1:0, y1:0, x2:0.2, y2:1, stop:0 #55217b, stop:1 #311345);
+}
+QPushButton#navButton { border-left: 4px solid transparent; }
+QPushButton#navButton:checked {
+    color: @text@; background: #4f2c43; border-color: transparent; border-left-color: @accent@;
+}
+QPushButton#navButton:focus { border-color: @focus@; }
+QPushButton#navButton:checked:focus { border-left-color: @accent@; }
+QComboBox, QComboBox[uiRole="appearanceChoice"]:on { background: @controlSurface@; }
+QComboBox[uiRole="appearanceChoice"]:hover { background: @hover@; }
+QCheckBox::indicator:checked, QRadioButton::indicator:checked { border-color: @accent@; }
+QCheckBox::indicator:checked:disabled, QRadioButton::indicator:checked:disabled {
+    background: @disabled@; border-color: @border@;
+}
+QPushButton#gitHistoryButton:enabled:hover, QPushButton#gitHistoryButton:enabled:pressed {
+    color: @primaryText@;
+}

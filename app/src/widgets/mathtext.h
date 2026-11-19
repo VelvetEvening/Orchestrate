@@ -12,6 +12,7 @@ namespace MathText {
 constexpr int SourceProperty = QTextFormat::UserProperty + 31;
 struct Span { qsizetype start, length; QString code; bool display; };
 using Images = QHash<QString, QImage>; // Delimited source -> 3x raster, local to one preview.
+QImage displayImage(const QImage &raster, const QSize &size);
 QVector<Span> spans(const QString &source);
 QString selectedText(const QTextCursor &cursor);
 int expandedPosition(const QTextDocument &document, int position);

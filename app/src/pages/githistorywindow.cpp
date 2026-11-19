@@ -40,7 +40,9 @@ void tableStyle(QTableView *table) {
 struct Edge { int from; int to; bool upper; int color; };
 struct GraphRow { int lane = 0; int color = 0; QList<Edge> edges; };
 QColor laneColor(int lane) {
-    const char *colors[]{UiTheme::Accent, UiTheme::Success, UiTheme::Warning, "#805889", "#32747b", UiTheme::Danger};
+    const char *colors[]{UiTheme::Accent, UiTheme::Success, UiTheme::Warning,
+                         UiTheme::isDark() ? "#ceb0e3" : "#805889",
+                         UiTheme::isDark() ? "#85cfda" : "#32747b", UiTheme::Danger};
     return QColor(colors[lane % 6]);
 }
 }

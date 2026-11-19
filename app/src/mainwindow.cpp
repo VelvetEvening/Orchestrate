@@ -20,6 +20,7 @@
 #include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QSignalBlocker>
@@ -48,6 +49,35 @@ constexpr int ExpandedSidebarWidth = 168;
 constexpr int CollapsedSidebarWidth = 72;
 const QString PaletteSetting = QStringLiteral("appearance_palette");
 const QString LayoutSetting = QStringLiteral("appearance_layout");
+
+class NavigationSidebar final : public QFrame
+{
+public:
+    using QFrame::QFrame;
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        QFrame::paintEvent(event);
+        if (width() <= CollapsedSidebarWidth || UiTheme::paletteId() != QStringLiteral("mamba")) return;
+        // Confine the artwork to the stretch between navigation and Settings.
+        for (int i = 0; i < layout()->count(); ++i) {
+            const auto *spacer = layout()->itemAt(i)->spacerItem();
+            if (!spacer) continue;
+            const QRect gap = spacer->geometry();
+            if (gap.height() <= 0) return;
+            static const QPixmap artwork(QStringLiteral(":/ui/mamba-sidebar.png"));
+            const QSize size = artwork.size().scaled(width(), gap.height(), Qt::KeepAspectRatio);
+            const int top = qBound(gap.top(), qRound(height() * 0.72 - size.height() * 0.52),
+                                   gap.bottom() + 1 - size.height());
+            QPainter painter(this);
+            painter.setRenderHint(QPainter::SmoothPixmapTransform);
+            painter.setOpacity(0.76);
+            painter.drawPixmap(QRect((width() - size.width()) / 2, top, size.width(), size.height()), artwork);
+            return;
+        }
+    }
+};
 
 QFrame *makeSection(QWidget *parent)
 {
@@ -140,7 +170,7 @@ void MainWindow::buildUi()
     auto *bodyLayout = new QHBoxLayout;
     bodyLayout->setContentsMargins(0, 0, 0, 0);
     bodyLayout->setSpacing(0);
-    sidebar_ = new QFrame(root);
+    sidebar_ = new NavigationSidebar(root);
     sidebar_->setObjectName(QStringLiteral("sidebar"));
     buildNavigation(sidebar_);
     bodyLayout->addWidget(sidebar_);
@@ -240,6 +270,7 @@ QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
     palette->addItem(UiTheme::paletteSwatch("mist"), QStringLiteral("云白 × 雾蓝"), QStringLiteral("mist"));
     palette->addItem(UiTheme::paletteSwatch("paper"), QStringLiteral("暖白 × 陶褐"), QStringLiteral("paper"));
     palette->addItem(UiTheme::paletteSwatch("precision"), QStringLiteral("冷灰 × 墨蓝"), QStringLiteral("precision"));
+    palette->addItem(UiTheme::paletteSwatch("mamba"), QStringLiteral("曼巴紫 × 冠军金"), QStringLiteral("mamba"));
 
     auto *layout = new QComboBox(section);
     layout->setObjectName(QStringLiteral("appearanceLayout"));

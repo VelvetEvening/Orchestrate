@@ -4,7 +4,7 @@ QMainWindow, QWidget#root, QWidget#settingsPage { background: @surface@; }
 QDialog, QMessageBox, QInputDialog { background: @surface@; }
 QLabel { background: transparent; }
 QFrame#sidebar { background: @sidebar@; border: none; }
-QFrame#windowHeader { background: @sidebar@; border: none; border-bottom: 1px solid @border@; }
+QFrame#windowHeader { background: @header@; border: none; border-bottom: 1px solid @border@; }
 QWidget[workspaceSurface="content"], QWidget[workspaceSurface="section"] {
     background: @surface@; border: none; border-radius: 0;
 }
@@ -35,7 +35,7 @@ QWidget#updateWidget {
     background: @surface@; border: 1px solid @border@; border-radius: 10px;
 }
 QPushButton, QToolButton {
-    background: @surface@; color: @text@; border: 1px solid @controlBorder@;
+    background: @controlSurface@; color: @text@; border: 1px solid @controlBorder@;
     border-radius: @controlRadius@; padding: @controlPadding@; min-height: 20px;
 }
 QPushButton:hover, QToolButton:hover { background: @hover@; border-color: @focus@; }
@@ -53,7 +53,7 @@ QPushButton#gitHistoryButton:enabled:focus { border-color: @accent@; }
 QPushButton#gitHistoryButton:disabled { color: @disabled@; background: transparent; border-color: transparent; font-weight: 400; }
 QPushButton:disabled, QToolButton:disabled { color: @disabled@; background: @background@; border-color: @border@; }
 QPushButton#primaryButton, QPushButton[uiRole="primary"], QPushButton:default {
-    background: @primaryBackground@; color: @accent@; border-color: @primaryBorder@; font-weight: 600;
+    background: @primaryBackground@; color: @primaryText@; border-color: @primaryBorder@; font-weight: 600;
 }
 QPushButton#primaryButton:hover, QPushButton[uiRole="primary"]:hover, QPushButton:default:hover { background: @primaryHover@; border-color: @primaryHoverBorder@; }
 QPushButton#primaryButton:pressed, QPushButton[uiRole="primary"]:pressed, QPushButton:default:pressed { background: @primaryPressed@; border-color: @focus@; }
@@ -92,12 +92,12 @@ QComboBox { padding-right: 28px; min-height: 20px; }
 QComboBox#appearancePalette { min-width: 7em; }
 QComboBox#appearanceLayout { min-width: 3em; }
 QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center right; width: 26px; border: none; }
-QComboBox::down-arrow { image: url(:/ui/icons/chevron-down.svg); width: 12px; height: 12px; }
+QComboBox::down-arrow { image: url(@icons@/chevron-down.svg); width: 12px; height: 12px; }
 QComboBox QAbstractItemView { background: @surface@; border: 1px solid @controlBorder@; padding: 4px; selection-background-color: @selection@; selection-color: @accent@; }
 QComboBox[uiRole="appearanceChoice"] { combobox-popup: 0; combobox-list-mousetracking: 1; }
 QComboBox[uiRole="appearanceChoice"]:hover { background: @hover@; }
 QComboBox[uiRole="appearanceChoice"]:on { background: @surface@; border-color: @accent@; }
-QComboBox[uiRole="appearanceChoice"]::down-arrow:on { image: url(:/ui/icons/chevron-up.svg); }
+QComboBox[uiRole="appearanceChoice"]::down-arrow:on { image: url(@icons@/chevron-up.svg); }
 QFrame[uiRole="appearancePopup"] { background: transparent; border: none; }
 QAbstractItemView[uiRole="appearanceOptions"] { background: @surface@; border: 1px solid @controlBorder@; border-radius: 8px; padding: 4px; outline: 0; }
 QAbstractItemView[uiRole="appearanceOptions"]::item { padding: @choiceItemPadding@; border: none; border-radius: 4px; }
@@ -108,16 +108,16 @@ QAbstractSpinBox::up-button, QAbstractSpinBox::down-button { subcontrol-origin: 
 QAbstractSpinBox::up-button { subcontrol-position: top right; border-top-right-radius: 6px; }
 QAbstractSpinBox::down-button { subcontrol-position: bottom right; border-bottom-right-radius: 6px; }
 QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover { background: @selection@; }
-QAbstractSpinBox::up-arrow { image: url(:/ui/icons/chevron-up.svg); width: 10px; height: 10px; }
-QAbstractSpinBox::down-arrow { image: url(:/ui/icons/chevron-down.svg); width: 10px; height: 10px; }
+QAbstractSpinBox::up-arrow { image: url(@icons@/chevron-up.svg); width: 10px; height: 10px; }
+QAbstractSpinBox::down-arrow { image: url(@icons@/chevron-down.svg); width: 10px; height: 10px; }
 QCheckBox, QRadioButton { spacing: 8px; padding: 3px 0; }
 QCheckBox:disabled, QRadioButton:disabled { color: @disabled@; }
 QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid @controlBorder@; border-radius: 4px; background: @surface@; }
-QCheckBox::indicator:checked { background: @selection@; border-color: @focus@; image: url(:/ui/icons/check.svg); }
+QCheckBox::indicator:checked { background: @checkFill@; border-color: @focus@; image: url(@icons@/check.svg); }
 QCheckBox::indicator:hover, QCheckBox::indicator:focus { border-color: @accent@; }
 QCheckBox::indicator:disabled { background: @background@; border-color: @border@; }
 QRadioButton::indicator { width: 16px; height: 16px; border: 1px solid @controlBorder@; border-radius: 8px; background: @surface@; }
-QRadioButton::indicator:checked { background: @selection@; border-color: @focus@; image: url(:/ui/icons/radio.svg); }
+QRadioButton::indicator:checked { background: @checkFill@; border-color: @focus@; image: url(@icons@/radio.svg); }
 QRadioButton::indicator:hover { border-color: @accent@; }
 QListWidget, QTreeWidget, QTableView { background: @surface@; alternate-background-color: @background@; border: 1px solid @border@; border-radius: 6px; padding: 4px; }
 QListWidget::item, QTreeWidget::item { padding: @itemPadding@; border: 1px solid transparent; border-radius: 4px; }
@@ -133,8 +133,8 @@ QListWidget#diaryList::item { min-height: @diaryMinHeight@; padding-top: 0; padd
 QListWidget#diaryCollectionList::item { min-height: @collectionMinHeight@; padding-top: 0; padding-bottom: 0; }
 QTreeWidget#clipboardItems::item { min-height: 30px; padding: 8px 12px; }
 QTreeWidget::branch { background: transparent; }
-QTreeWidget::branch:has-children:closed { image: url(:/ui/icons/chevron-right.svg); }
-QTreeWidget::branch:has-children:open { image: url(:/ui/icons/chevron-down.svg); }
+QTreeWidget::branch:has-children:closed { image: url(@icons@/chevron-right.svg); }
+QTreeWidget::branch:has-children:open { image: url(@icons@/chevron-down.svg); }
 QHeaderView::section { background: @background@; color: @muted@; border: none; border-bottom: 1px solid @border@; padding: 7px; }
 QTabBar::tab { color: @muted@; background: transparent; border: 1px solid transparent; border-radius: @controlRadius@; padding: @tabPadding@; margin-right: 4px; min-width: 36px; min-height: 20px; }
 QTabBar::tab:hover { background: @hover@; }

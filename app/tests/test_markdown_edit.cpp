@@ -72,7 +72,8 @@ private slots:
         QSignalSpy zoomChanges(&editor, &HeadingTextEdit::textPointSizeChanged);
         const QList<QPair<QString, QString>> appearances {
             {"mist", "compact"}, {"paper", "compact"}, {"paper", "standard"},
-            {"precision", "standard"}, {"precision", "compact"}, {"mist", "standard"}
+            {"precision", "standard"}, {"precision", "compact"}, {"mamba", "compact"},
+            {"mamba", "standard"}, {"mist", "standard"}
         };
         for (const auto &[palette, layout] : appearances) {
             UiTheme::apply(*qApp, palette, layout);
@@ -95,6 +96,20 @@ private slots:
         QCOMPARE(zoomChanges.count(), 0);
         source->undo();
         QVERIFY(!editor.toPlainText().endsWith(QStringLiteral(" 未保存")));
+    }
+    void formulaInkFollowsPalette() {
+        QImage raster(3, 1, QImage::Format_ARGB32_Premultiplied);
+        raster.fill(Qt::transparent);
+        raster.setPixelColor(0, 0, Qt::black);
+        raster.setPixelColor(1, 0, QColor(0, 0, 0, 128));
+        UiTheme::apply(*qApp, "mamba", "standard");
+        const auto dark = MathText::displayImage(raster, raster.size());
+        QCOMPARE(dark.pixelColor(0, 0), QColor(UiTheme::Text));
+        QCOMPARE(dark.pixelColor(1, 0).alpha(), 128);
+        QCOMPARE(dark.pixelColor(2, 0).alpha(), 0);
+        UiTheme::apply(*qApp, "mist", "standard");
+        QCOMPARE(MathText::displayImage(raster, raster.size()), raster);
+        QCOMPARE(raster.pixelColor(0, 0), QColor(Qt::black));
     }
     void firstHeadingUsesRenderingUntilCursorActivation() {
         HeadingTextEdit editor;

@@ -28,16 +28,17 @@ inline const char *Focus = "#6f8fb6";
 // Calendar record markers are informational, not success/warning status.
 inline const char *DiaryMarker = "#648098";
 inline const char *ReminderMarker = "#887789";
-inline constexpr const char *Success = "#386b50";
-inline constexpr const char *SuccessBackground = "#edf5ef";
-inline constexpr const char *Warning = "#87611e";
-inline constexpr const char *WarningBackground = "#faf3e5";
-inline constexpr const char *Danger = "#a64545";
-inline constexpr const char *DangerBackground = "#fbefef";
-inline constexpr const char *DangerHoverBorder = "#e6c5c5";
-inline constexpr const char *Disabled = "#919ba9";
+inline const char *Success = "#386b50";
+inline const char *SuccessBackground = "#edf5ef";
+inline const char *Warning = "#87611e";
+inline const char *WarningBackground = "#faf3e5";
+inline const char *Danger = "#a64545";
+inline const char *DangerBackground = "#fbefef";
+inline const char *DangerHoverBorder = "#e6c5c5";
+inline const char *Disabled = "#919ba9";
 
 QString paletteId();
+bool isDark();
 QString layoutId();
 bool isCompact();
 void apply(QApplication &app, const QString &paletteId, const QString &layoutId);
