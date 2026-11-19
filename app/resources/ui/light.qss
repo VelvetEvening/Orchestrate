@@ -18,8 +18,7 @@ QLabel#contentTitle, QLabel#objectTitle { color: @text@; font-size: 20px; font-w
 QLabel#cardTitle { color: @text@; font-size: 16px; font-weight: 600; }
 QLabel#toolName { color: @text@; font-size: 22px; font-weight: 600; }
 QLabel#emptyStateTitle { color: @text@; font-size: 18px; font-weight: 600; }
-QLabel#muted, QLabel#sourceText, QLabel#fieldHelp, QLabel#recordHint, QLabel#mathPreviewStatus,
-QLabel#autoStartStatus, QLabel#globalShortcutStatus {
+QLabel#muted, QLabel#sourceText, QLabel#fieldHelp, QLabel#recordHint, QLabel#mathPreviewStatus {
     color: @muted@; font-size: 12px;
 }
 QLabel#emptyViewHint { color: @muted@; font-size: 13px; padding: 20px; }
@@ -238,17 +237,25 @@ QLineEdit#globalShortcutLetter {
     min-width: 35px; max-width: 35px; min-height: 20px;
     color: @accent@; font-weight: 600;
 }
-QPushButton#globalShortcutApply { min-width: 4em; }
+QPushButton[uiRole="settingsToggle"] {
+    background: transparent; border-color: transparent; color: @text@;
+    text-align: right; padding-left: 40px;
+}
+QPushButton[uiRole="settingsToggle"]:checked:enabled { color: @accent@; }
+QPushButton[uiRole="settingsToggle"]:hover:enabled { background: @hover@; }
+QPushButton[uiRole="settingsToggle"]:pressed:enabled { background: @selection@; }
+QPushButton[uiRole="settingsToggle"]:focus { border-color: @focus@; }
+QPushButton[uiRole="settingsToggle"]:disabled { color: @disabled@; }
 
 /* The settings content column has its own reading sizes. */
-QWidget#settingsPage QLabel, QWidget#settingsPage QCheckBox, QWidget#settingsPage QComboBox,
+QWidget#settingsPage QLabel, QWidget#settingsPage QComboBox,
 QWidget#settingsPage QPushButton, QWidget#settingsPage QToolButton, QWidget#settingsPage QLineEdit,
 QWidget#settingsPage QAbstractItemView[uiRole="appearanceOptions"], QWidget#settingsPage QTextBrowser#releaseNotes {
     font-size: 15px;
 }
 QWidget#settingsPage QLabel#cardTitle { font-size: 20px; }
 QWidget#settingsPage QLabel#autoStartStatus, QWidget#settingsPage QLabel#globalShortcutStatus,
-QWidget#settingsPage QLabel#globalShortcutWarning { font-size: 14px; padding-left: 24px; }
+QWidget#settingsPage QLabel#closeToTrayStatus, QWidget#settingsPage QLabel#automaticUpdatesStatus { font-size: 14px; }
 QWidget#settingsPage QLabel#installedVersion, QWidget#settingsPage QLabel#updateStatus,
 QWidget#settingsPage QLabel#previousUpdateResult { font-size: 14px; color: @muted@; }
 QWidget#settingsPage QWidget#updateWidget { border: none; border-radius: 0; }

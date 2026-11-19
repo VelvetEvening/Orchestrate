@@ -20,7 +20,6 @@
 #include <QDateTimeEdit>
 #include <QSqlDatabase>
 #include <QSqlQuery>
-#include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFile>
@@ -249,7 +248,7 @@ static void seed(int diaryCount = 5) {
     ClipboardContent::plainText(QStringLiteral("返回不会丢失草稿。"),&item,&error); db.saveClipboardItem(&item,&error);
 }
 static void prepareWindow(MainWindow &window) {
-    window.findChild<QCheckBox*>("closeToTrayCheck")->setChecked(false); window.show();
+    window.findChild<QAbstractButton *>("closeToTrayEnabled")->setChecked(false); window.show();
     QTest::qWait(40);
 }
 using TestSupport::capture;
@@ -316,6 +315,18 @@ private slots:
         auto *settings = navigation.at(4);
         QVERIFY(palette && layout && manage && toggle && scroll && section);
         QVERIFY(!manage->icon().isNull());
+        QCOMPARE(palette->accessibleName(), QStringLiteral("风格"));
+        const QList<QAbstractButton *> toggles{
+            window.findChild<QAbstractButton *>("autoStartEnabled"),
+            window.findChild<QAbstractButton *>("closeToTrayEnabled"),
+            window.findChild<QAbstractButton *>("globalShortcutEnabled"),
+            window.findChild<QAbstractButton *>("automaticUpdatesEnabled")
+        };
+        for (const auto *setting : toggles) {
+            QVERIFY(setting && setting->isCheckable());
+            QVERIFY(!setting->accessibleName().isEmpty());
+            QCOMPARE(setting->text(), setting->isChecked() ? QStringLiteral("开启") : QStringLiteral("关闭"));
+        }
         QCOMPARE(palette->count(), external ? 3 : 2);
         QCOMPARE(layout->count(), 2);
         QCOMPARE(palette->currentData().toString(), QStringLiteral("mist"));
@@ -330,10 +341,10 @@ private slots:
             settings->click();
             window.activateWindow();
             QTRY_VERIFY(window.isActiveWindow());
-            palette->setFocus();
-            QTest::keyClick(palette, Qt::Key_Tab);
-            QCOMPARE(QApplication::focusWidget(), manage);
+            manage->setFocus();
             QTest::keyClick(manage, Qt::Key_Tab);
+            QCOMPARE(QApplication::focusWidget(), palette);
+            QTest::keyClick(palette, Qt::Key_Tab);
             QCOMPARE(QApplication::focusWidget(), layout);
             QTest::keyClick(layout, density == "compact" ? Qt::Key_End : Qt::Key_Home);
             QCoreApplication::processEvents();
@@ -361,9 +372,15 @@ private slots:
             QVERIFY(paletteRect.bottom() < layoutRect.top());
             QCOMPARE(paletteRect.left(), layoutRect.left());
             QCOMPARE(paletteRect.width(), layoutRect.width());
-            QVERIFY(paletteRect.right() < manageRect.left());
+            QVERIFY(manageRect.right() < paletteRect.left());
             QVERIFY(qAbs(manageRect.center().y() - paletteRect.center().y()) <= 1);
             QVERIFY(scroll->viewport()->rect().contains(QRect(manage->mapTo(scroll->viewport(), QPoint()), manage->size())));
+            const auto *settingsPage = scroll->widget();
+            const auto rightEdge = [settingsPage](const QWidget *widget) {
+                return widget->mapTo(settingsPage, widget->rect().topRight()).x();
+            };
+            for (const auto *setting : toggles)
+                QCOMPARE(rightEdge(setting), rightEdge(palette));
             for (auto *choice : {palette, layout}) {
                 QVERIFY(choice->isVisible());
                 QVERIFY(section->rect().contains(sectionRect(choice)));
@@ -1226,7 +1243,7 @@ private slots:
         window.resize(980,640); QCoreApplication::processEvents(); aligned(); capture(window, "v3.5.6-record-summary-compact");
         title->setText(original + " close draft");
         QVERIFY(answerLeave(QMessageBox::Cancel, [&] { window.close(); })); QVERIFY(window.isVisible());
-        window.findChild<QCheckBox *>("closeToTrayCheck")->setChecked(true);
+        window.findChild<QAbstractButton *>("closeToTrayEnabled")->setChecked(true);
         auto *tray = window.findChild<QSystemTrayIcon *>(); tray->show(); QVERIFY(tray->isVisible());
         QVERIFY(answerLeave(QMessageBox::Cancel, [&] { window.close(); })); QVERIFY(window.isVisible());
         QVERIFY(answerLeave(QMessageBox::Discard, [&] { window.close(); })); QVERIFY(!window.isVisible());
@@ -1368,7 +1385,7 @@ private slots:
         auto *editor = workspace->content(workspace->currentKey());
         auto *body = editor->findChild<QPlainTextEdit *>("clipboardItemBody");
         body->setPlainText(QStringLiteral("保留草稿"));
-        auto *toTray = window.findChild<QCheckBox *>("closeToTrayCheck");
+        auto *toTray = window.findChild<QAbstractButton *>("closeToTrayEnabled");
         window.findChild<QSystemTrayIcon *>()->show();
         for (bool closeToTray : {false, true}) {
             toTray->setChecked(closeToTray);
@@ -1496,7 +1513,7 @@ private slots:
             button(host,QStringLiteral("收回主窗口"))->click();
             draft->setFocus(); QTest::keyClick(draft,Qt::Key_Escape);
             QVERIFY(bw->currentKey().isEmpty());
-            window.findChild<QCheckBox*>("closeToTrayCheck")->setChecked(true);
+            window.findChild<QAbstractButton *>("closeToTrayEnabled")->setChecked(true);
             auto *tray=window.findChild<QSystemTrayIcon*>();
             if(tray && tray->isVisible())QVERIFY(!window.close()); else window.hide();
             QVERIFY(!window.isVisible()); window.showMainWindow();
@@ -1509,7 +1526,7 @@ private slots:
             if(cycle==3)warmedWidgets=count;
             if(cycle>3)QVERIFY2(count<=warmedWidgets+2,"Content widgets accumulated between completed cycles");
         }
-        window.findChild<QCheckBox*>("closeToTrayCheck")->setChecked(false); QVERIFY(window.close());
+        window.findChild<QAbstractButton *>("closeToTrayEnabled")->setChecked(false); QVERIFY(window.close());
         qInfo()<<cycles<<"content cycles, detach/attach/host-close/Escape, Git cancellation and tray restore; no retained content widgets";
     }
 };
@@ -1530,7 +1547,7 @@ static int runResourceProbe(QApplication &app) {
             {"widgets",QApplication::allWidgets().size()}}).toJson()); file.commit();
     };
     auto hide=[&] {
-        window.findChild<QCheckBox*>("closeToTrayCheck")->setChecked(true);
+        window.findChild<QAbstractButton *>("closeToTrayEnabled")->setChecked(true);
         auto *tray=window.findChild<QSystemTrayIcon*>();
         if(tray && tray->isVisible())window.close(); else window.hide();
         if(window.isVisible())qFatal("probe did not hide");

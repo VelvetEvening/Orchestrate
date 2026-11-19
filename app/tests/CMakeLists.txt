@@ -126,7 +126,7 @@ if (WIN32)
     target_link_libraries(MathPreviewTest PRIVATE psapi)
     string(REPLACE ";" "\;" test_path "$<TARGET_FILE_DIR:Qt6::Core>;$ENV{PATH}")
     add_executable(GlobalShortcutTest test_global_shortcut.cpp)
-    target_link_libraries(GlobalShortcutTest PRIVATE OrchestrateShortcut Qt6::Test user32)
+    target_link_libraries(GlobalShortcutTest PRIVATE OrchestrateApplication Qt6::Test user32)
     set_target_properties(GlobalShortcutTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_BINARY_DIR}/global-shortcut-test>")
     add_test(NAME global_shortcut COMMAND GlobalShortcutTest
         -o "${CMAKE_CURRENT_BINARY_DIR}/global-shortcut-test/results.txt,txt" -o -,txt)

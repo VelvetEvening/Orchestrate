@@ -15,7 +15,6 @@ class QFile;
 class QCryptographicHash;
 class QProcess;
 class QShowEvent;
-class QCheckBox;
 class QTextBrowser;
 class UpdateChecker;
 
@@ -55,7 +54,6 @@ private:
     QLabel *status_ = nullptr;
     QLabel *resultStatus_ = nullptr;
     QTextBrowser *notes_ = nullptr;
-    QCheckBox *automaticCheck_ = nullptr;
     UpdateChecker *checker_ = nullptr;
     QString statusBeforeCheck_;
     QString displayedNotes_;

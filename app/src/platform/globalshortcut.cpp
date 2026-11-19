@@ -98,6 +98,7 @@ bool GlobalShortcut::reportFailure(QString message)
     else
         message += QStringLiteral(" 全局快捷键已关闭。");
     status_ = message;
+    hasError_ = true;
     emit statusChanged(status_);
     return false;
 }
@@ -131,6 +132,7 @@ bool GlobalShortcut::apply(bool enabled, QKeyCombination binding, const std::fun
         status_ = QStringLiteral("按 %1 显示或收起 %2。").arg(name, QGuiApplication::applicationDisplayName());
     else
         status_ = QStringLiteral("已选择 %1。测试环境中跳过系统注册。").arg(name);
+    hasError_ = false;
     emit statusChanged(status_);
     return true;
 }

@@ -6,7 +6,6 @@
 #include "platform/autostart.h"
 
 class QAction;
-class QCheckBox;
 class ContentWorkspace;
 class GlobalShortcut;
 class QCloseEvent;
@@ -61,7 +60,7 @@ private:
     void openUpdatesPage();
 
     std::unique_ptr<AutoStart> autoStart_;
-    QCheckBox *autoStartCheck_ = nullptr;
+    QPushButton *autoStartToggle_ = nullptr;
     QLabel *autoStartStatus_ = nullptr;
     QPushButton *systemStartupButton_ = nullptr;
     NavigationSidebar *sidebar_ = nullptr;

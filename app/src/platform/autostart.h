@@ -11,7 +11,7 @@ public:
     struct State {
         bool enabled = false;
         bool disabledByWindows = false;
-        QString message;
+        QString message; // Windows approval and registration issues.
         QString error;
     };
 

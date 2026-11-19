@@ -6,7 +6,6 @@
 class AppDatabase;
 class GlobalShortcut;
 class QButtonGroup;
-class QCheckBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -17,13 +16,14 @@ public:
 
 private:
     QKeyCombination selection() const;
+    void applyBinding();
+    void applyEnabled(bool enabled);
     void refresh();
 
     GlobalShortcut &shortcut_;
     AppDatabase &database_;
-    QCheckBox *enabled_;
+    QPushButton *enabled_;
     QButtonGroup *modifier_;
     QLineEdit *letter_;
-    QPushButton *apply_;
-    QLabel *warning_;
+    QLabel *status_;
 };

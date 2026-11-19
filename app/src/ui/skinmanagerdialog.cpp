@@ -171,7 +171,7 @@ SkinManagerDialog::SkinManagerDialog(SkinLibrary &library, std::function<bool(co
         downloadingId_.clear();
         if (error.isEmpty()) {
             downloadErrors_.remove(id);
-            showStatus(QStringLiteral("皮肤已下载，可在设置的配色中选择。"), {}, true);
+            showStatus(QStringLiteral("皮肤已下载，可返回设置，在「风格」中选择。"), {}, true);
         } else {
             downloadErrors_.insert(id, error);
         }
@@ -386,7 +386,7 @@ void SkinManagerDialog::remove(QTreeWidgetItem *item)
     const auto id = item->data(NameColumn, SkinIdRole).toString();
     const bool active = id == UiTheme::paletteId();
     QString message = QStringLiteral("删除「%1」？").arg(item->text(NameColumn));
-    if (active) message += QStringLiteral("\n当前配色将切回云白 × 雾蓝。");
+    if (active) message += QStringLiteral("\n当前风格将切回云白 × 雾蓝。");
     QMessageBox prompt(QMessageBox::Question, QStringLiteral("删除皮肤"), message,
                        QMessageBox::Yes | QMessageBox::Cancel, this);
     prompt.setObjectName(QStringLiteral("skinRemoveConfirmation"));
@@ -407,7 +407,7 @@ void SkinManagerDialog::remove(QTreeWidgetItem *item)
         showStatus(QStringLiteral("无法删除皮肤。请重试。"), error);
         return;
     }
-    showStatus(active ? QStringLiteral("皮肤已删除，配色已切回云白 × 雾蓝。") : QStringLiteral("皮肤已删除。"), {}, true);
+    showStatus(active ? QStringLiteral("皮肤已删除，风格已切回云白 × 雾蓝。") : QStringLiteral("皮肤已删除。"), {}, true);
 }
 
 void SkinManagerDialog::showItemMenu(QTreeWidgetItem *item, const QPoint &globalPosition)

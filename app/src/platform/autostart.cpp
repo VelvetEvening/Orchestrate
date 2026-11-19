@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QStringList>
 
 namespace {
 const QString legacyEntryName = QStringLiteral("Orchestrate");
@@ -113,13 +114,11 @@ AutoStart::State AutoStart::state() const
         return result;
     }
     result.enabled = !registered.isEmpty();
-    if (!result.enabled) {
-        result.message = QStringLiteral("未开启。开启后将在当前用户登录 Windows 时自动打开 Orchestrate。");
-        return result;
-    }
-    result.message = registered.compare(command_, Qt::CaseInsensitive) == 0
-        ? QStringLiteral("已开启，当前用户登录 Windows 时将自动打开 Orchestrate。")
-        : QStringLiteral("启动项指向其他位置；若移动过程序，请关闭后重新开启以更新路径。");
+    if (!result.enabled) return result;
+
+    QStringList notices;
+    if (registered.compare(command_, Qt::CaseInsensitive) != 0)
+        notices.append(QStringLiteral("启动项指向其他位置。若移动过程序，请关闭后重新开启以更新路径。"));
     if (approval_) {
         QSettings approvalStore(approval_->fileName(), approval_->format());
         approvalStore.sync();
@@ -127,14 +126,12 @@ AutoStart::State AutoStart::state() const
         // Windows keeps its user-disabled marker separate from the Run entry.
         // Reading state never changes Windows' approval data.
         result.disabledByWindows = disabledMarker(approval);
-        if (result.disabledByWindows) {
-            result.message = QStringLiteral("启动项已登记，但已被 Windows 禁用。请在系统启动应用设置中启用 Orchestrate。");
-            if (registered.compare(command_, Qt::CaseInsensitive) != 0)
-                result.message += QStringLiteral("\n启动项还指向其他位置，请关闭后重新开启以更新路径。");
-        }
-        else if (approvalStore.status() != QSettings::NoError)
-            result.message += QStringLiteral("\n无法读取 Windows 的启动许可状态，可在系统启动应用设置中核对。");
+        if (result.disabledByWindows)
+            notices.prepend(QStringLiteral("启动项已被 Windows 禁用。请在系统启动应用设置中启用 Orchestrate。"));
+        if (approvalStore.status() != QSettings::NoError)
+            notices.append(QStringLiteral("无法读取 Windows 的启动许可状态，可在系统启动应用设置中核对。"));
     }
+    result.message = notices.join(QLatin1Char('\n'));
     return result;
 }
 

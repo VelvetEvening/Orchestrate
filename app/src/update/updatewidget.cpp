@@ -1,9 +1,9 @@
 #include "updatewidget.h"
 #include "updatechecker.h"
 #include "platform/instancelock.h"
+#include "ui/settingsform.h"
 
 #include <QCoreApplication>
-#include <QCheckBox>
 #include <QCryptographicHash>
 #include <QDesktopServices>
 #include <QDir>
@@ -20,7 +20,6 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QShowEvent>
-#include <QSignalBlocker>
 #include <QTextBrowser>
 #include <QTextDocument>
 #include <QTextOption>
@@ -101,11 +100,15 @@ UpdateWidget::UpdateWidget(QWidget *parent, UpdateChecker *checker) : QWidget(pa
     auto *version = new QLabel(QStringLiteral("Orchestrate %1").arg(QCoreApplication::applicationVersion()), this);
     version->setObjectName(QStringLiteral("installedVersion"));
     layout->addWidget(version);
-    automaticCheck_ = new QCheckBox(QStringLiteral("自动检查更新（每天一次）"), this);
-    automaticCheck_->setObjectName(QStringLiteral("automaticUpdateCheck"));
-    automaticCheck_->setChecked(checker_->automaticEnabled());
-    automaticCheck_->setToolTip(QStringLiteral("启动三分钟后检查；只提醒新版本，下载和安装由你确认。"));
-    layout->addWidget(automaticCheck_);
+    auto *options = new QGridLayout;
+    SettingsForm::configure(*options);
+    auto *automaticToggle = SettingsForm::makeToggle(this, QStringLiteral("automaticUpdatesEnabled"), checker_->automaticEnabled());
+    const auto automaticHelp = QStringLiteral("启动三分钟后开始，每天检查一次。下载和安装由你确认。");
+    automaticToggle->setToolTip(automaticHelp);
+    automaticToggle->setAccessibleDescription(automaticHelp);
+    SettingsForm::addRow(*options, 0, QStringLiteral("自动检查更新"), automaticToggle);
+    auto *automaticStatus = SettingsForm::addStatus(*options, 1, QStringLiteral("automaticUpdatesStatus"), this);
+    layout->addLayout(options);
     status_ = new QLabel(this);
     status_->setObjectName(QStringLiteral("updateStatus"));
     status_->setTextFormat(Qt::PlainText);
@@ -159,13 +162,16 @@ UpdateWidget::UpdateWidget(QWidget *parent, UpdateChecker *checker) : QWidget(pa
         if (state_ == State::Available) download();
         else if (state_ == State::Ready) emit installRequested();
     });
-    connect(automaticCheck_, &QCheckBox::toggled, this, [this](bool enabled) {
+    connect(automaticToggle, &QPushButton::toggled, this, [this, automaticToggle, automaticStatus](bool enabled) {
         QString error;
         if (!checker_->setAutomaticEnabled(enabled, &error)) {
-            const QSignalBlocker blocker(automaticCheck_);
-            automaticCheck_->setChecked(checker_->automaticEnabled());
-            status_->setText(error);
+            SettingsForm::setToggleValue(*automaticToggle, checker_->automaticEnabled());
+            automaticStatus->setText(error);
+            automaticStatus->show();
+            return;
         }
+        automaticStatus->clear();
+        automaticStatus->hide();
     });
     connect(checker_, &UpdateChecker::checkStarted, this, [this](bool) {
         statusBeforeCheck_ = status_->text();

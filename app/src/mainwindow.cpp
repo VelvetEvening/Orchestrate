@@ -8,6 +8,7 @@
 #include "platform/globalshortcut.h"
 #include "platform/clipboardpaste.h"
 #include "ui/contentworkspace.h"
+#include "ui/settingsform.h"
 #include "ui/skinlibrary.h"
 #include "ui/skinmanagerdialog.h"
 #include "widgets/shortcutsettings.h"
@@ -15,7 +16,6 @@
 
 #include <QAction>
 #include <QApplication>
-#include <QCheckBox>
 #include <QComboBox>
 #include <QCloseEvent>
 #include <QDesktopServices>
@@ -58,9 +58,10 @@ constexpr int ExpandedSidebarWidth = 168;
 constexpr int CollapsedSidebarWidth = 72;
 constexpr int MaxSkinLabelWidth = 220;
 constexpr int SettingsPageIndex = 4;
-constexpr int SettingsColumnWidth = 720;
+constexpr int SettingsColumnWidth = 624;
 const QString PaletteSetting = QStringLiteral("appearance_palette");
 const QString LayoutSetting = QStringLiteral("appearance_layout");
+const QString CloseToTraySetting = QStringLiteral("close_to_tray");
 const QString DefaultPalette = QStringLiteral("mist");
 const QString SkinManagerKey = QStringLiteral("skin-library");
 
@@ -161,6 +162,7 @@ MainWindow::MainWindow(QWidget *parent, std::unique_ptr<AutoStart> autoStart, QN
     const QString savedPalette = database_.setting(PaletteSetting, legacyPreset);
     applyAppearance(savedPalette, database_.setting(LayoutSetting, legacyLayout));
     if (savedPalette != UiTheme::paletteId()) database_.setSetting(PaletteSetting, UiTheme::paletteId());
+    closeToTray_ = database_.setting(CloseToTraySetting, QStringLiteral("true")) == QStringLiteral("true");
 
     globalShortcut_ = new GlobalShortcut(database_.setting("global_shortcut_enabled", "true") == "true",
                                          database_.setting("global_shortcut_binding"), this);
@@ -314,9 +316,7 @@ QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
     title->setObjectName(QStringLiteral("cardTitle"));
     body->addWidget(title);
     auto *options = new QGridLayout;
-    options->setContentsMargins(0, 0, 0, 0);
-    options->setSpacing(9);
-    options->setColumnStretch(3, 1);
+    SettingsForm::configure(*options);
     body->addLayout(options);
 
     auto *palette = new QComboBox(section);
@@ -327,15 +327,11 @@ QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
     layout->addItem(UiTheme::icon("layout-compact"), QStringLiteral("紧凑"), QStringLiteral("compact"));
 
     const auto addChoice = [&](int row, QComboBox *choice, const QString &label, const QString &key, QString (*currentId)()) {
-        auto *caption = new QLabel(label, section);
-        caption->setBuddy(choice);
-        choice->setAccessibleName(label);
         UiTheme::styleAppearanceChoice(choice);
         choice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
         choice->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
         choice->setCurrentIndex(choice->findData(currentId()));
-        options->addWidget(caption, row, 0);
-        options->addWidget(choice, row, 1);
+        SettingsForm::addRow(*options, row, label, choice);
         connect(choice, &QComboBox::currentIndexChanged, this, [this, choice, key, currentId, palette, layout] {
             QString error;
             if (!database_.setSetting(key, choice->currentData().toString(), &error)) {
@@ -347,7 +343,7 @@ QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
             applyAppearance(palette->currentData().toString(), layout->currentData().toString());
         });
     };
-    addChoice(0, palette, QStringLiteral("配色"), PaletteSetting, UiTheme::paletteId);
+    addChoice(0, palette, QStringLiteral("风格"), PaletteSetting, UiTheme::paletteId);
     addChoice(1, layout, QStringLiteral("布局"), LayoutSetting, UiTheme::layoutId);
     palette->ensurePolished();
     fillPaletteChoices(palette, UiTheme::installedThemes());
@@ -358,9 +354,9 @@ QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
     manage->setLayoutDirection(Qt::RightToLeft);
     manage->setIconSize(QSize(12, 12));
     manage->setCursor(Qt::PointingHandCursor);
-    options->addWidget(manage, 0, 2, Qt::AlignLeft | Qt::AlignVCenter);
-    QWidget::setTabOrder(palette, manage);
-    QWidget::setTabOrder(manage, layout);
+    options->addWidget(manage, 0, SettingsForm::AccessoryColumn, Qt::AlignLeft | Qt::AlignAbsolute | Qt::AlignVCenter);
+    QWidget::setTabOrder(manage, palette);
+    QWidget::setTabOrder(palette, layout);
     connect(manage, &QPushButton::clicked, this, [this, manage] { openSkinManager(manage); });
 
     connect(palette, &QComboBox::currentIndexChanged, palette, [palette] {
@@ -407,35 +403,41 @@ QFrame *MainWindow::makeRuntimeSection(QWidget *parent)
     title->setObjectName(QStringLiteral("cardTitle"));
     body->addWidget(title);
 
-    auto *startup = new QVBoxLayout;
-    startup->setSpacing(4);
-    autoStartCheck_ = new QCheckBox(QStringLiteral("开机自动启动 Orchestrate"), section);
-    autoStartCheck_->setObjectName(QStringLiteral("autoStartCheck"));
-    startup->addWidget(autoStartCheck_);
-    autoStartStatus_ = new QLabel(section);
-    autoStartStatus_->setObjectName(QStringLiteral("autoStartStatus"));
-    autoStartStatus_->setTextFormat(Qt::PlainText);
-    autoStartStatus_->setWordWrap(true);
-    startup->addWidget(autoStartStatus_);
+    auto *options = new QGridLayout;
+    SettingsForm::configure(*options);
+    body->addLayout(options);
+    autoStartToggle_ = SettingsForm::makeToggle(section, QStringLiteral("autoStartEnabled"), false);
+    SettingsForm::addRow(*options, 0, QStringLiteral("开机自动启动"), autoStartToggle_);
+    autoStartStatus_ = SettingsForm::addStatus(*options, 1, QStringLiteral("autoStartStatus"), section);
     systemStartupButton_ = new QPushButton(QStringLiteral("打开 Windows 启动应用设置"), section);
-    startup->addWidget(systemStartupButton_, 0, Qt::AlignLeft);
-    body->addLayout(startup);
-    connect(autoStartCheck_, &QCheckBox::toggled, this, [this](bool enabled) {
+    systemStartupButton_->setObjectName(QStringLiteral("openWindowsStartupSettings"));
+    options->addWidget(systemStartupButton_, 2, SettingsForm::LabelColumn, 1, SettingsForm::ColumnCount, Qt::AlignLeft);
+    connect(autoStartToggle_, &QPushButton::toggled, this, [this](bool enabled) {
         QString error;
         autoStart_->setEnabled(enabled, &error);
         refreshAutoStartSettings(error);
     });
     connect(systemStartupButton_, &QPushButton::clicked, this, [this] {
         if (!QDesktopServices::openUrl(QUrl(QStringLiteral("ms-settings:startupapps"))))
-            autoStartStatus_->setText(QStringLiteral("无法打开系统设置，请手动进入 Windows 设置 → 应用 → 启动。"));
+            refreshAutoStartSettings(QStringLiteral("无法打开系统设置，请手动进入 Windows 设置 → 应用 → 启动。"));
     });
     refreshAutoStartSettings();
 
-    auto *trayCheck = new QCheckBox(QStringLiteral("关闭主窗口时继续驻留系统托盘"), section);
-    trayCheck->setObjectName(QStringLiteral("closeToTrayCheck"));
-    trayCheck->setChecked(closeToTray_);
-    body->addWidget(trayCheck);
-    connect(trayCheck, &QCheckBox::toggled, this, [this](bool enabled) { closeToTray_ = enabled; });
+    auto *trayToggle = SettingsForm::makeToggle(section, QStringLiteral("closeToTrayEnabled"), closeToTray_);
+    SettingsForm::addRow(*options, 3, QStringLiteral("关闭窗口时驻留托盘"), trayToggle);
+    auto *trayStatus = SettingsForm::addStatus(*options, 4, QStringLiteral("closeToTrayStatus"), section);
+    connect(trayToggle, &QPushButton::toggled, this, [this, trayToggle, trayStatus](bool enabled) {
+        QString error;
+        if (!database_.setSetting(CloseToTraySetting, enabled ? QStringLiteral("true") : QStringLiteral("false"), &error)) {
+            SettingsForm::setToggleValue(*trayToggle, closeToTray_);
+            trayStatus->setText(QStringLiteral("无法保存托盘设置。\n") + error);
+            trayStatus->show();
+            return;
+        }
+        closeToTray_ = enabled;
+        trayStatus->clear();
+        trayStatus->hide();
+    });
     body->addWidget(new ShortcutSettings(*globalShortcut_, database_, section));
     return section;
 }
@@ -510,7 +512,6 @@ void MainWindow::buildTray()
     } else {
         trayIcon_->setVisible(false);
         trayIcon_->setToolTip(QStringLiteral("系统托盘不可用，关闭窗口将直接退出。"));
-        closeToTray_ = false;
     }
 }
 
@@ -620,13 +621,18 @@ void MainWindow::openUpdatesPage()
 
 void MainWindow::refreshAutoStartSettings(const QString &error)
 {
-    if (!autoStartCheck_) return;
+    if (!autoStartToggle_) return;
     const auto state = autoStart_->state();
-    const QSignalBlocker blocker(autoStartCheck_);
-    autoStartCheck_->setChecked(state.enabled);
-    autoStartCheck_->setEnabled(state.error.isEmpty());
+    SettingsForm::setToggleValue(*autoStartToggle_, state.enabled);
+    autoStartToggle_->setEnabled(state.error.isEmpty());
     systemStartupButton_->setVisible(state.disabledByWindows);
-    autoStartStatus_->setText(!error.isEmpty() ? error : !state.error.isEmpty() ? state.error : state.message);
+    QStringList notices;
+    if (!error.isEmpty()) notices.append(error);
+    if (!state.error.isEmpty() && state.error != error) notices.append(state.error);
+    if (!state.message.isEmpty()) notices.append(state.message);
+    UiTheme::setRole(autoStartStatus_, error.isEmpty() && state.error.isEmpty() ? "warning" : "error");
+    autoStartStatus_->setText(notices.join(QLatin1Char('\n')));
+    autoStartStatus_->setVisible(!notices.isEmpty());
 }
 
 void MainWindow::toggleMainWindow()

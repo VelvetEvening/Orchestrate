@@ -1,7 +1,18 @@
+#include "data/appdatabase.h"
 #include "platform/globalshortcut.h"
-#include <QGuiApplication>
+#include "widgets/shortcutsettings.h"
+#include <QAbstractButton>
+#include <QApplication>
+#include <QButtonGroup>
+#include <QDir>
+#include <QFile>
+#include <QLabel>
+#include <QLineEdit>
+#include <QProcess>
 #include <QScopeGuard>
 #include <QSignalSpy>
+#include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QUuid>
 #include <QtTest>
 #include <optional>
@@ -9,6 +20,7 @@
 
 namespace {
 constexpr int ProbeId = 17;
+constexpr char IsolatedRun[] = "--orchestrate-shortcut-fixture";
 
 bool reserve(QKeyCombination key)
 {
@@ -30,6 +42,30 @@ std::optional<QKeyCombination> availableTestKey(Qt::KeyboardModifier modifier)
         if (available(key)) return key;
     }
     return std::nullopt;
+}
+
+int runWithPortableDatabase(int argc, char **argv)
+{
+    QCoreApplication app(argc, argv);
+    QTemporaryDir fixture(QDir::temp().filePath(QStringLiteral("orchestrate-shortcut-test-XXXXXX")));
+    if (!fixture.isValid()) {
+        qCritical() << "Could not create a portable shortcut test directory.";
+        return 1;
+    }
+    // AppDatabase follows the executable, so the real database opens inside the fixture.
+    const auto executable = fixture.filePath(QStringLiteral("GlobalShortcutTest.exe"));
+    if (!QFile::copy(app.applicationFilePath(), executable)) {
+        qCritical() << "Could not stage the shortcut test executable.";
+        return 1;
+    }
+    QProcess child;
+    child.setProcessChannelMode(QProcess::ForwardedChannels);
+    child.start(executable, QStringList{QString::fromLatin1(IsolatedRun)} + app.arguments().mid(1));
+    if (!child.waitForStarted(5000) || !child.waitForFinished(20000)) {
+        qCritical() << "Shortcut test did not complete:" << child.errorString();
+        return 1;
+    }
+    return child.exitStatus() == QProcess::NormalExit ? child.exitCode() : 1;
 }
 }
 
@@ -119,10 +155,97 @@ private slots:
             QVERIFY(!shortcut.enabled() && !shortcut.isRegistered());
         }
     }
+
+    void settingsChangesReachNativeRegistrationImmediately()
+    {
+        QList<Qt::Key> letters;
+        for (const auto key : {Qt::Key_J, Qt::Key_K, Qt::Key_U, Qt::Key_G, Qt::Key_B}) {
+            if (available(QKeyCombination(Qt::AltModifier, key))
+                && available(QKeyCombination(Qt::ControlModifier, key))) letters.append(key);
+        }
+        if (letters.size() < 2) QSKIP("Test combinations are already registered in this Windows session.");
+        const QKeyCombination initial(Qt::AltModifier, letters.first());
+        const QKeyCombination disabledEdit(Qt::ControlModifier, letters.at(1));
+        const QKeyCombination modifierEdit(Qt::AltModifier, letters.at(1));
+        const QString initialText = GlobalShortcut::text(initial);
+        const QString disabledEditText = GlobalShortcut::text(disabledEdit);
+        const QString modifierEditText = GlobalShortcut::text(modifierEdit);
+
+        AppDatabase database;
+        QString error;
+        QVERIFY2(database.open(&error), qPrintable(error));
+        QVERIFY(database.setSetting("global_shortcut_binding", initialText));
+        QVERIFY(database.setSetting("global_shortcut_enabled", "false"));
+        GlobalShortcut shortcut(false, initialText);
+        ShortcutSettings settings(shortcut, database, nullptr);
+        auto *toggle = settings.findChild<QAbstractButton *>("globalShortcutEnabled");
+        auto *modifier = settings.findChild<QButtonGroup *>("globalShortcutModifier");
+        auto *letter = settings.findChild<QLineEdit *>("globalShortcutLetter");
+        auto *status = settings.findChild<QLabel *>("globalShortcutStatus");
+        QVERIFY(toggle && modifier && letter && status && !toggle->isChecked());
+        settings.show();
+
+        modifier->button(int(Qt::ControlModifier))->click();
+        QCOMPARE(shortcut.binding(), QKeyCombination(Qt::ControlModifier, initial.key()));
+        QTest::keyClick(letter, disabledEdit.key());
+        QCOMPARE(shortcut.binding(), disabledEdit);
+        QCOMPARE(database.setting("global_shortcut_binding"), disabledEditText);
+        QVERIFY(!shortcut.isRegistered() && available(disabledEdit));
+        QVERIFY(status->isHidden());
+
+        {
+            QVERIFY(reserve(disabledEdit));
+            const auto release = qScopeGuard([] { UnregisterHotKey(nullptr, ProbeId); });
+            QTest::mouseClick(toggle, Qt::LeftButton);
+            QVERIFY(!toggle->isChecked() && !shortcut.enabled() && !shortcut.isRegistered());
+            QCOMPARE(toggle->text(), QStringLiteral("关闭"));
+            QCOMPARE(database.setting("global_shortcut_enabled"), QStringLiteral("false"));
+            QCOMPARE(database.setting("global_shortcut_binding"), disabledEditText);
+            QVERIFY(status->isVisible() && status->text().contains(QStringLiteral("已被占用")));
+        }
+
+        toggle->setFocus();
+        QTest::keyClick(toggle, Qt::Key_Space);
+        QVERIFY(toggle->isChecked() && shortcut.enabled() && shortcut.isRegistered());
+        QCOMPARE(toggle->text(), QStringLiteral("开启"));
+        QCOMPARE(database.setting("global_shortcut_enabled"), QStringLiteral("true"));
+        QVERIFY(!available(disabledEdit) && status->isHidden());
+
+        modifier->button(int(Qt::AltModifier))->click();
+        QCOMPARE(shortcut.binding(), modifierEdit);
+        QCOMPARE(database.setting("global_shortcut_binding"), modifierEditText);
+        QVERIFY(available(disabledEdit) && !available(modifierEdit));
+        QTest::keyClick(letter, initial.key());
+        QCOMPARE(shortcut.binding(), initial);
+        QCOMPARE(database.setting("global_shortcut_binding"), initialText);
+        QVERIFY(available(modifierEdit) && !available(initial));
+
+        {
+            QVERIFY(reserve(modifierEdit));
+            const auto release = qScopeGuard([] { UnregisterHotKey(nullptr, ProbeId); });
+            QTest::keyClick(letter, modifierEdit.key());
+            QCOMPARE(shortcut.binding(), initial);
+            QCOMPARE(letter->text(), QString(QChar(char16_t(initial.key()))));
+            QCOMPARE(database.setting("global_shortcut_binding"), initialText);
+            QVERIFY(toggle->isChecked() && !available(initial));
+            QVERIFY(status->isVisible() && status->text().contains(modifierEditText)
+                    && status->text().contains(initialText));
+        }
+        QTest::keyClick(letter, modifierEdit.key());
+        QCOMPARE(shortcut.binding(), modifierEdit);
+        QVERIFY(status->isHidden() && !available(modifierEdit));
+        QTest::mouseClick(toggle, Qt::LeftButton);
+        QVERIFY(!toggle->isChecked() && !shortcut.isRegistered() && available(modifierEdit));
+        QCOMPARE(database.setting("global_shortcut_binding"), modifierEditText);
+        QCOMPARE(database.setting("global_shortcut_enabled"), QStringLiteral("false"));
+    }
 };
 
 int main(int argc, char **argv)
 {
+    if (argc < 2 || qstrcmp(argv[1], IsolatedRun) != 0) return runWithPortableDatabase(argc, argv);
+    for (int index = 1; index + 1 < argc; ++index) argv[index] = argv[index + 1];
+    argv[--argc] = nullptr;
     // Keep test windows on a private desktop. Registrations can still conflict across desktops.
     const HDESK previous = GetThreadDesktop(GetCurrentThreadId());
     const auto name = QUuid::createUuid().toString(QUuid::Id128).toStdWString();
@@ -131,7 +254,9 @@ int main(int argc, char **argv)
     const auto cleanup = qScopeGuard([&] { SetThreadDesktop(previous); CloseDesktop(desktop); });
     if (!SetThreadDesktop(desktop)) { qCritical() << "SetThreadDesktop failed" << GetLastError(); return 1; }
     qputenv("QT_QPA_PLATFORM", "windows");
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
+    QStandardPaths::setTestModeEnabled(true);
+    app.setOrganizationName(QString::fromStdWString(name));
     GlobalShortcutTest test;
     return QTest::qExec(&test, argc, argv);
 }

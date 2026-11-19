@@ -17,6 +17,7 @@ public:
     bool isRegistered() const { return id_ != 0; }
     static QString text(QKeyCombination binding);
     QString status() const { return status_; }
+    bool hasError() const { return hasError_; }
     bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
 signals:
     void activated();
@@ -29,4 +30,5 @@ private:
     QKeyCombination binding_;
     unsigned short id_ = 0;
     QString status_;
+    bool hasError_ = false;
 };
