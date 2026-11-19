@@ -1,12 +1,16 @@
 #pragma once
 
 #include <QDialog>
+#include <QHash>
 #include <functional>
 
 class QLabel;
+class QLineEdit;
+class QPoint;
 class QPushButton;
-class QStackedWidget;
+class QShowEvent;
 class QTreeWidget;
+class QTreeWidgetItem;
 class SkinLibrary;
 
 class SkinManagerDialog final : public QDialog
@@ -16,23 +20,31 @@ public:
                       QWidget *parent);
 
     void refreshCatalog();
+    void updateActiveSkin();
+
+protected:
+    bool eventFilter(QObject *object, QEvent *event) override;
+    void showEvent(QShowEvent *event) override;
 
 private:
     void refreshRows();
+    void filterRows();
     void updateActions();
-    void actOnSelection();
-    void showStatus(const QString &message, const QString &error = {});
+    void updateRowActions(QTreeWidgetItem *item);
+    void download(QTreeWidgetItem *item);
+    void remove(QTreeWidgetItem *item);
+    void showItemMenu(QTreeWidgetItem *item, const QPoint &globalPosition);
+    void showStatus(const QString &message, const QString &error = {}, bool clearOnReturn = false);
 
     SkinLibrary &library_;
     std::function<bool(const QString &, QString *)> removeTheme_;
-    QStackedWidget *content_;
     QTreeWidget *list_;
-    QLabel *empty_;
+    QLineEdit *search_;
     QLabel *status_;
     QPushButton *refresh_;
-    QPushButton *action_;
     bool catalogLoading_ = false;
     bool catalogFailed_ = false;
+    bool clearStatusOnReturn_ = false;
     QString downloadingId_;
-    QString failedDownloadId_;
+    QHash<QString, QString> downloadErrors_;
 };

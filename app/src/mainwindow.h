@@ -7,6 +7,7 @@
 
 class QAction;
 class QCheckBox;
+class ContentWorkspace;
 class GlobalShortcut;
 class QCloseEvent;
 class QFrame;
@@ -14,9 +15,11 @@ class QLabel;
 class QMenu;
 class QNetworkAccessManager;
 class QPushButton;
+class QScrollArea;
 class QStackedWidget;
 class QSystemTrayIcon;
 class SkinLibrary;
+class UpdateWidget;
 
 class MainWindow final : public QMainWindow
 {
@@ -42,9 +45,11 @@ private:
     bool savePendingChanges();
     void buildUi();
     void buildNavigation(QWidget *parent);
+    QScrollArea *makeSettingsPage();
     QFrame *makeAppearanceSection(QWidget *parent);
+    QFrame *makeRuntimeSection(QWidget *parent);
     void applyAppearance(const QString &palette, const QString &layout);
-    void openSkinManager();
+    void openSkinManager(QWidget *source);
     void buildTray();
     void switchToPage(int index, bool confirmLeave = true);
     void toggleSidebar();
@@ -64,6 +69,9 @@ private:
     GlobalShortcut *globalShortcut_ = nullptr;
     QPushButton *sidebarToggleButton_ = nullptr;
     QStackedWidget *pageStack_ = nullptr;
+    ContentWorkspace *settingsWorkspace_ = nullptr;
+    QScrollArea *settingsScroll_ = nullptr;
+    UpdateWidget *updateWidget_ = nullptr;
     QSystemTrayIcon *trayIcon_ = nullptr;
     QMenu *trayMenu_ = nullptr;
     QAction *showAction_ = nullptr;

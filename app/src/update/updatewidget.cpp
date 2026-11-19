@@ -99,6 +99,7 @@ UpdateWidget::UpdateWidget(QWidget *parent, UpdateChecker *checker) : QWidget(pa
     title->setObjectName(QStringLiteral("cardTitle"));
     layout->addWidget(title);
     auto *version = new QLabel(QStringLiteral("Orchestrate %1").arg(QCoreApplication::applicationVersion()), this);
+    version->setObjectName(QStringLiteral("installedVersion"));
     layout->addWidget(version);
     automaticCheck_ = new QCheckBox(QStringLiteral("自动检查更新（每天一次）"), this);
     automaticCheck_->setObjectName(QStringLiteral("automaticUpdateCheck"));

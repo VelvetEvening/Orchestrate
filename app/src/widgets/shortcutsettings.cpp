@@ -97,7 +97,6 @@ ShortcutSettings::ShortcutSettings(GlobalShortcut &shortcut, AppDatabase &databa
     enabled_ = new QCheckBox(QStringLiteral("启用全局快捷键"), this);
     enabled_->setObjectName(QStringLiteral("globalShortcutCheck"));
     row->addWidget(enabled_);
-    row->addStretch();
 
     auto *segments = new QFrame(this);
     segments->setObjectName(QStringLiteral("shortcutModifierSegments"));
@@ -129,6 +128,7 @@ ShortcutSettings::ShortcutSettings(GlobalShortcut &shortcut, AppDatabase &databa
     apply_->setObjectName(QStringLiteral("globalShortcutApply"));
     UiTheme::setRole(apply_, "primary");
     row->addWidget(apply_);
+    row->addStretch();
 
     auto *status = new QLabel(shortcut_.status(), this);
     status->setObjectName(QStringLiteral("globalShortcutStatus"));

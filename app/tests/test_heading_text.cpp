@@ -1169,8 +1169,14 @@ private slots:
         auto *settings = button(window, QStringLiteral("设置 · 有更新"));
         QVERIFY(settings->toolTip().contains(tag));
         auto *action = window.findChild<QAction *>("viewUpdateAction"); QVERIFY(action); QVERIFY(action->isVisible());
+        auto *scroll = window.findChild<QScrollArea *>("settingsScroll");
+        auto *heading = update->findChild<QLabel *>("cardTitle");
+        QVERIFY(scroll && heading);
+        window.resize(window.minimumSize());
         action->trigger();
         QTRY_VERIFY(update->isVisible());
+        QTRY_VERIFY(scroll->viewport()->rect().contains(
+            QRect(heading->mapTo(scroll->viewport(), QPoint()), heading->size())));
         capture(window, QStringLiteral("settings-update-available"));
         window.findChild<QPushButton *>("sidebarToggle")->click();
         QVERIFY(settings->text().isEmpty()); QVERIFY(settings->toolTip().contains(tag));

@@ -239,3 +239,27 @@ QLineEdit#globalShortcutLetter {
     color: @accent@; font-weight: 600;
 }
 QPushButton#globalShortcutApply { min-width: 4em; }
+
+/* The settings content column has its own reading sizes. */
+QWidget#settingsPage QLabel, QWidget#settingsPage QCheckBox, QWidget#settingsPage QComboBox,
+QWidget#settingsPage QPushButton, QWidget#settingsPage QToolButton, QWidget#settingsPage QLineEdit,
+QWidget#settingsPage QAbstractItemView[uiRole="appearanceOptions"], QWidget#settingsPage QTextBrowser#releaseNotes {
+    font-size: 15px;
+}
+QWidget#settingsPage QLabel#cardTitle { font-size: 20px; }
+QWidget#settingsPage QLabel#autoStartStatus, QWidget#settingsPage QLabel#globalShortcutStatus,
+QWidget#settingsPage QLabel#globalShortcutWarning { font-size: 14px; padding-left: 24px; }
+QWidget#settingsPage QLabel#installedVersion, QWidget#settingsPage QLabel#updateStatus,
+QWidget#settingsPage QLabel#previousUpdateResult { font-size: 14px; color: @muted@; }
+QWidget#settingsPage QWidget#updateWidget { border: none; border-radius: 0; }
+QWidget#settingsPage QPushButton#manageSkinsButton {
+    background: transparent; border-color: transparent; color: @accent@;
+}
+QWidget#settingsPage QPushButton#manageSkinsButton:hover { background: @hover@; }
+QWidget#settingsPage QPushButton#manageSkinsButton:focus { border-color: @focus@; }
+QWidget#settingsPage QPushButton#manageSkinsButton:pressed { background: @selection@; color: @selectionText@; }
+
+QDialog#skinManagerDialog QLineEdit#skinSearch, QDialog#skinManagerDialog QTreeWidget#skinManagerList {
+    font-size: 15px;
+}
+QDialog#skinManagerDialog QLabel#skinManagerStatus { font-size: 14px; }

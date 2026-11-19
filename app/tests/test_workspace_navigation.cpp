@@ -9,8 +9,11 @@
 #include "pages/githistorywindow.h"
 #include "pages/gitcommitdialog.h"
 #include "pages/collaborationrecorddialog.h"
+#include "update/updatewidget.h"
 #include "widgets/headingtextedit.h"
 #include "clipboard/clipboardcontent.h"
+#include <QAction>
+#include <QAbstractButton>
 #include <QApplication>
 #include <QCalendarWidget>
 #include <QComboBox>
@@ -31,8 +34,10 @@
 #include <QNetworkReply>
 #include <QPainter>
 #include <QPlainTextEdit>
+#include <QPointer>
 #include <QPersistentModelIndex>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QScrollBar>
 #include <QStackedWidget>
 #include <QStyleOptionComboBox>
@@ -53,6 +58,11 @@
 #include <cstring>
 
 namespace {
+
+const auto SkinLibraryKey = QStringLiteral("skin-library");
+const auto SkinRemovalPrompt = QStringLiteral("skinRemoveConfirmation");
+constexpr int SkinStatusColumn = 1;
+constexpr int SkinRemovalColumn = 2;
 
 class SkinReply final : public QNetworkReply {
 public:
@@ -114,6 +124,7 @@ public:
     bool failImage = false;
     int delay = 0;
     QStringList requests;
+    QList<SkinCatalogEntry> extraSkins;
 
 protected:
     QNetworkReply *createRequest(Operation operation, const QNetworkRequest &request, QIODevice *) override
@@ -123,21 +134,51 @@ protected:
         QByteArray bytes;
         bool failure = offline || operation != GetOperation;
         if (path.endsWith(QStringLiteral("/catalog.json"))) {
-            const QJsonObject theme{{QStringLiteral("id"), TestSkinFixture::Id},
-                                    {QStringLiteral("name"), TestSkinFixture::Name}};
+            QJsonArray themes{QJsonObject{{QStringLiteral("id"), TestSkinFixture::Id},
+                                         {QStringLiteral("name"), TestSkinFixture::Name}}};
+            for (const auto &skin : extraSkins)
+                themes.append(QJsonObject{{QStringLiteral("id"), skin.id}, {QStringLiteral("name"), skin.name}});
             bytes = QJsonDocument(QJsonObject{{QStringLiteral("schemaVersion"), 1},
-                                              {QStringLiteral("themes"), QJsonArray{theme}}}).toJson();
+                                              {QStringLiteral("themes"), themes}}).toJson();
         } else if (path.endsWith(QStringLiteral("/themes/%1/theme.json").arg(TestSkinFixture::Id))) {
             bytes = TestSkinFixture::manifest(true);
         } else if (path.endsWith(QStringLiteral("/themes/%1/sidebar.png").arg(TestSkinFixture::Id))) {
             bytes = TestSkinFixture::sidebarImage();
             failure = failure || failImage;
         } else {
-            failure = true;
+            for (const auto &skin : extraSkins) {
+                if (!path.endsWith(QStringLiteral("/themes/%1/theme.json").arg(skin.id))) continue;
+                bytes = QJsonDocument(QJsonObject{{QStringLiteral("schemaVersion"), 1},
+                                                  {QStringLiteral("id"), skin.id},
+                                                  {QStringLiteral("name"), skin.name},
+                                                  {QStringLiteral("base"), QStringLiteral("light")}}).toJson();
+                break;
+            }
+            failure = failure || bytes.isEmpty();
         }
         return new SkinReply(request, failure ? QByteArray() : bytes, failure, delay, this);
     }
 };
+
+QTreeWidgetItem *skinRow(QTreeWidget *list, const QString &id)
+{
+    for (int index = 0; index < list->topLevelItemCount(); ++index) {
+        auto *row = list->topLevelItem(index);
+        if (row->data(0, Qt::UserRole).toString() == id) return row;
+    }
+    return nullptr;
+}
+
+QPoint skinCellPoint(QTreeWidget *list, QTreeWidgetItem *row, int column = SkinStatusColumn)
+{
+    return list->visualRect(list->model()->index(list->indexOfTopLevelItem(row), column)).center();
+}
+
+QString skinState(QTreeWidget *list, const QString &id)
+{
+    const auto *row = skinRow(list, id);
+    return row ? row->data(SkinStatusColumn, Qt::AccessibleTextRole).toString() : QString();
+}
 
 bool hasSidebarArtwork(QWidget &sidebar)
 {
@@ -225,13 +266,17 @@ static void captureAppearancePopup(QComboBox *choice, const QString &name) {
     painter.end();
     QVERIFY(shot.save(qApp->applicationDirPath() + "/artifacts/" + name + ".png"));
 }
-static bool answerLeave(QMessageBox::StandardButton choice, const std::function<void()> &action) {
+static bool answerLeave(QMessageBox::StandardButton choice, const std::function<void()> &action,
+                        const QString &expectedPrompt = {}) {
     bool prompted = false;
     QTimer timer;
     QObject::connect(&timer, &QTimer::timeout, [&] {
         auto *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
         if (!box) return;
-        prompted = true; timer.stop(); box->button(choice)->click();
+        auto *answer = box->button(choice);
+        prompted = expectedPrompt.isEmpty() || (box->objectName() == expectedPrompt && answer);
+        timer.stop();
+        if (answer) answer->click(); else box->reject();
     });
     timer.start(10); action(); return prompted;
 }
@@ -261,14 +306,16 @@ private slots:
         const bool external = paletteId == TestSkinFixture::Id;
         if (external) QVERIFY(TestSkinFixture::writeInstalled(qApp->applicationDirPath() + "/data/skins"));
         MainWindow window; prepareWindow(window);
-        window.resize(980, 640);
         auto *palette = window.findChild<QComboBox *>("appearancePalette");
         auto *layout = window.findChild<QComboBox *>("appearanceLayout");
         auto *manage = window.findChild<QPushButton *>("manageSkinsButton");
         auto *toggle = window.findChild<QPushButton *>("sidebarToggle");
+        auto *scroll = window.findChild<QScrollArea *>("settingsScroll");
+        auto *section = window.findChild<QWidget *>("settingsAppearanceSection");
         const auto navigation = window.findChildren<QPushButton *>("navButton");
         auto *settings = navigation.at(4);
-        QVERIFY(palette && layout && manage && toggle);
+        QVERIFY(palette && layout && manage && toggle && scroll && section);
+        QVERIFY(!manage->icon().isNull());
         QCOMPARE(palette->count(), external ? 3 : 2);
         QCOMPARE(layout->count(), 2);
         QCOMPARE(palette->currentData().toString(), QStringLiteral("mist"));
@@ -279,11 +326,14 @@ private slots:
         palette->setCurrentIndex(palette->findData(paletteId));
         int standardDateRowHeight = 0;
         for (const auto &density : {QStringLiteral("standard"), QStringLiteral("compact")}) {
+            window.resize(1180, 760);
             settings->click();
             window.activateWindow();
             QTRY_VERIFY(window.isActiveWindow());
             palette->setFocus();
             QTest::keyClick(palette, Qt::Key_Tab);
+            QCOMPARE(QApplication::focusWidget(), manage);
+            QTest::keyClick(manage, Qt::Key_Tab);
             QCOMPARE(QApplication::focusWidget(), layout);
             QTest::keyClick(layout, density == "compact" ? Qt::Key_End : Qt::Key_Home);
             QCoreApplication::processEvents();
@@ -292,14 +342,32 @@ private slots:
             QCOMPARE(UiTheme::layoutId(), density);
             QCOMPARE(qApp->palette().color(QPalette::Link), accent);
             QVERIFY(!qApp->styleSheet().contains(QLatin1Char('@')));
+            scroll->verticalScrollBar()->setValue(0);
+            const auto name = QStringLiteral("appearance-%1-%2").arg(paletteId, density);
+            capture(window, name);
+            window.resize(window.minimumSize());
+            QTRY_COMPARE(window.size(), window.minimumSize());
+            QCoreApplication::processEvents();
+            capture(window, name + QStringLiteral("-minimum"));
 
-            auto *section = layout->parentWidget();
+            const auto sectionRect = [section](QWidget *widget) {
+                return QRect(widget->mapTo(section, QPoint()), widget->size());
+            };
+            const auto paletteRect = sectionRect(palette);
+            const auto layoutRect = sectionRect(layout);
+            const auto manageRect = sectionRect(manage);
             QVERIFY(manage->isVisible());
-            QVERIFY(section->rect().contains(manage->geometry()));
-            QVERIFY(manage->geometry().right() < palette->x());
+            QVERIFY(section->rect().contains(manageRect));
+            QVERIFY(paletteRect.bottom() < layoutRect.top());
+            QCOMPARE(paletteRect.left(), layoutRect.left());
+            QCOMPARE(paletteRect.width(), layoutRect.width());
+            QVERIFY(paletteRect.right() < manageRect.left());
+            QVERIFY(qAbs(manageRect.center().y() - paletteRect.center().y()) <= 1);
+            QVERIFY(scroll->viewport()->rect().contains(QRect(manage->mapTo(scroll->viewport(), QPoint()), manage->size())));
             for (auto *choice : {palette, layout}) {
                 QVERIFY(choice->isVisible());
-                QVERIFY(section->rect().contains(choice->geometry()));
+                QVERIFY(section->rect().contains(sectionRect(choice)));
+                QVERIFY(scroll->viewport()->rect().contains(QRect(choice->mapTo(scroll->viewport(), QPoint()), choice->size())));
                 QStyleOptionComboBox option;
                 option.initFrom(choice);
                 option.currentText = choice->currentText();
@@ -327,11 +395,6 @@ private slots:
                 QTRY_VERIFY(!options->isVisible());
                 QCOMPARE(choice->currentIndex(), applied);
             }
-            QVERIFY(palette->x() > section->width() / 2);
-            QVERIFY(palette->geometry().right() < layout->x());
-            const int right = section->contentsRect().right() - section->layout()->contentsMargins().right();
-            QVERIFY(qAbs(layout->geometry().right() - right) <= 1);
-            capture(*section, QStringLiteral("appearance-%1-%2").arg(paletteId, density));
 
             const auto expandedIcon = toggle->icon().pixmap(24, 24).toImage();
             const int expandedHeight = settings->height();
@@ -482,6 +545,179 @@ private slots:
         layout->setCurrentIndex(layout->findData("compact"));
         QCOMPARE(db.setting("appearance_layout"), QStringLiteral("compact"));
     }
+    void skinLibraryKeepsItsWorkspaceAndDownloadsTheActivatedRow() {
+        SkinNetwork network;
+        network.delay = 60;
+        for (int number = 1; number <= 32; ++number) {
+            const auto suffix = QStringLiteral("%1").arg(number, 2, 10, QLatin1Char('0'));
+            network.extraSkins.append({QStringLiteral("sample-") + suffix, QStringLiteral("配色样本 ") + suffix});
+        }
+        MainWindow window(nullptr, nullptr, &network);
+        prepareWindow(window);
+        window.resize(1180, 760);
+        const auto nav = window.findChildren<QPushButton *>("navButton");
+        auto *settings = window.findChild<QWidget *>("settingsPage");
+        auto *workspace = window.findChild<ContentWorkspace *>("settingsWorkspace");
+        auto *scroll = window.findChild<QScrollArea *>("settingsScroll");
+        auto *manage = window.findChild<QPushButton *>("manageSkinsButton");
+        QVERIFY(settings && workspace && scroll && manage);
+        QCOMPARE(ContentWorkspace::find(settings), workspace);
+        nav.at(4)->click();
+        QTRY_VERIFY(settings->isVisible());
+        QVERIFY(network.requests.isEmpty());
+        QVERIFY(!workspace->content(SkinLibraryKey));
+
+        manage->setFocus();
+        QTest::keyClick(manage, Qt::Key_Space);
+        QTRY_COMPARE(workspace->currentKey(), SkinLibraryKey);
+        auto *page = workspace->content(SkinLibraryKey);
+        QVERIFY(page && page->isVisible() && !page->isWindow() && !page->isModal());
+        QCOMPARE(page->objectName(), QStringLiteral("skinManagerDialog"));
+        QVERIFY(!settings->isVisible());
+        auto *list = page->findChild<QTreeWidget *>("skinManagerList");
+        auto *search = page->findChild<QLineEdit *>("skinSearch");
+        auto *refresh = page->findChild<QPushButton *>("skinCatalogRefresh");
+        auto *back = page->parentWidget()->findChild<QPushButton *>("contentBack");
+        auto *detach = page->parentWidget()->findChild<QPushButton *>("contentDetach");
+        QVERIFY(list && search && refresh && back && detach);
+        QVERIFY(!refresh->icon().isNull());
+        QVERIFY(refresh->text().isEmpty());
+        QTRY_COMPARE(list->topLevelItemCount(), network.extraSkins.size() + 1);
+        QCOMPARE(network.requests.size(), 1);
+        QVERIFY(network.requests.first().endsWith("/catalog.json"));
+        QTRY_VERIFY(list->verticalScrollBar()->maximum() > 0);
+        capture(window, "skin-library-many-standard");
+
+        const QString mouseId = network.extraSkins.at(22).id;
+        const QString filteredId = network.extraSkins.at(27).id;
+        const QString keyboardId = network.extraSkins.at(30).id;
+        auto *target = skinRow(list, mouseId);
+        QVERIFY(target);
+        list->setCurrentItem(target);
+        list->scrollToItem(target, QAbstractItemView::PositionAtCenter);
+        const int savedScroll = list->verticalScrollBar()->value();
+        QVERIFY(savedScroll > 0);
+        QTest::mouseClick(back, Qt::LeftButton);
+        QTRY_VERIFY(settings->isVisible());
+        QCOMPARE(workspace->currentKey(), QString());
+        QTRY_COMPARE(QApplication::focusWidget(), manage);
+        QTest::keyClick(manage, Qt::Key_Space);
+        QTRY_COMPARE(workspace->currentKey(), SkinLibraryKey);
+        QCOMPARE(workspace->content(SkinLibraryKey), page);
+        QCOMPARE(list->currentItem(), target);
+        QCOMPARE(list->verticalScrollBar()->value(), savedScroll);
+
+        nav.at(1)->click();
+        QTRY_VERIFY(window.findChild<ProjectsPage *>()->isVisible());
+        QVERIFY(!page->isVisible());
+        nav.at(4)->click();
+        QTRY_VERIFY(page->isVisible());
+        QCOMPARE(workspace->content(SkinLibraryKey), page);
+        QCOMPARE(list->currentItem(), target);
+
+        QTest::mouseClick(detach, Qt::LeftButton);
+        auto *host = window.findChild<QDialog *>("contentWindow");
+        QVERIFY(host && host->isVisible() && host->isAncestorOf(page));
+        const QPointer<QDialog> detachedHost(host);
+        QCOMPARE(page->window(), static_cast<QWidget *>(host));
+        QCOMPARE(detach->text(), QStringLiteral("收回主窗口"));
+        QVERIFY(settings->isVisible());
+        manage->click();
+        QCOMPARE(workspace->content(SkinLibraryKey), page);
+        QCOMPARE(window.findChildren<QDialog *>("skinManagerDialog").size(), 1);
+        QCOMPARE(window.findChildren<QDialog *>("contentWindow").size(), 1);
+        QTest::mouseClick(detach, Qt::LeftButton);
+        QTRY_COMPARE(page->window(), static_cast<QWidget *>(&window));
+        QTRY_VERIFY(detachedHost.isNull());
+        QCOMPARE(workspace->currentKey(), SkinLibraryKey);
+        QCOMPARE(detach->text(), QStringLiteral("独立打开"));
+        QCOMPARE(list->currentItem(), target);
+        QCOMPARE(network.requests.size(), 1);
+
+        auto *first = skinRow(list, TestSkinFixture::Id);
+        QVERIFY(first);
+        list->setCurrentItem(first);
+        list->scrollToItem(target, QAbstractItemView::PositionAtCenter);
+        QVERIFY(list->currentItem() != target);
+        const QPoint location = skinCellPoint(list, target);
+        QVERIFY(list->viewport()->rect().contains(location));
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, location);
+        QTRY_VERIFY(skinState(list, mouseId).contains(QStringLiteral("已下载")));
+        QCOMPARE(network.requests.size(), 2);
+        QVERIFY(network.requests.last().endsWith(QStringLiteral("/themes/%1/theme.json").arg(mouseId)));
+        QCOMPARE(skinState(list, keyboardId), QStringLiteral("可下载"));
+        QCOMPARE(skinState(list, TestSkinFixture::Id), QStringLiteral("可下载"));
+
+        const auto visibleRows = [list] {
+            int count = 0;
+            for (int i = 0; i < list->topLevelItemCount(); ++i)
+                if (!list->topLevelItem(i)->isHidden()) ++count;
+            return count;
+        };
+        search->setFocus();
+        QTest::keyClicks(search, QStringLiteral("missing-skin"));
+        QTRY_COMPARE(visibleRows(), 0);
+        auto *empty = page->findChild<QLabel *>("emptyViewHint");
+        QVERIFY(empty && empty->isVisible());
+        QCOMPARE(empty->text(), QStringLiteral("没有匹配的皮肤"));
+        QTest::keyClick(search, Qt::Key_A, Qt::ControlModifier);
+        QTest::keyClicks(search, QStringLiteral(" 28 "));
+        QTRY_COMPARE(visibleRows(), 1);
+        QCOMPARE(network.requests.size(), 2);
+        auto *filtered = skinRow(list, filteredId);
+        QVERIFY(filtered && !filtered->isHidden());
+        const auto filteredLocation = skinCellPoint(list, filtered);
+        QVERIFY(list->viewport()->rect().contains(filteredLocation));
+        capture(window, "skin-library-filtered");
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, filteredLocation);
+        QTRY_VERIFY(skinState(list, filteredId).contains(QStringLiteral("已下载")));
+        QCOMPARE(network.requests.size(), 3);
+        QVERIFY(network.requests.last().endsWith(QStringLiteral("/themes/%1/theme.json").arg(filteredId)));
+        search->setFocus();
+        QTest::keyClick(search, Qt::Key_A, Qt::ControlModifier);
+        QTest::keyClick(search, Qt::Key_Backspace);
+        QTRY_COMPARE(visibleRows(), network.extraSkins.size() + 1);
+        QCOMPARE(network.requests.size(), 3);
+
+        auto *keyboardTarget = skinRow(list, keyboardId);
+        QVERIFY(keyboardTarget);
+        list->setCurrentItem(keyboardTarget);
+        list->setFocus();
+        QTest::keyClick(list, Qt::Key_Return);
+        QTRY_VERIFY(skinState(list, keyboardId).contains(QStringLiteral("已下载")));
+        QCOMPARE(network.requests.size(), 4);
+        QVERIFY(network.requests.last().endsWith(QStringLiteral("/themes/%1/theme.json").arg(keyboardId)));
+        QCOMPARE(UiTheme::paletteId(), QStringLiteral("mist"));
+        window.resize(window.minimumSize());
+        QTRY_COMPARE(window.size(), window.minimumSize());
+        capture(window, "skin-library-many-minimum");
+
+        QVERIFY(refresh->toolTip().contains(QStringLiteral("刷新")));
+        QTest::mouseClick(refresh, Qt::LeftButton);
+        QVERIFY(!refresh->isEnabled());
+        QTRY_VERIFY(refresh->isEnabled());
+        QCOMPARE(network.requests.size(), 5);
+        QVERIFY(network.requests.last().endsWith("/catalog.json"));
+
+        // A tray update link can return to Settings from the embedded library.
+        auto *update = window.findChild<UpdateWidget *>();
+        auto *updateAction = window.findChild<QAction *>("viewUpdateAction");
+        QVERIFY(update && updateAction);
+        auto *versionHeading = update->findChild<QLabel *>("cardTitle");
+        QVERIFY(versionHeading);
+        update->updateAvailableChanged(QStringLiteral("v99.0.0"));
+        QVERIFY(updateAction->isVisible());
+        window.hide();
+        updateAction->trigger();
+        QTRY_VERIFY(window.isVisible() && settings->isVisible() && versionHeading->isVisible());
+        QCOMPARE(workspace->currentKey(), QString());
+        QTRY_VERIFY(scroll->viewport()->rect().contains(
+            QRect(versionHeading->mapTo(scroll->viewport(), QPoint()), versionHeading->size())));
+        QCOMPARE(workspace->content(SkinLibraryKey), page);
+        QCOMPARE(network.requests.size(), 5);
+        capture(window, "settings-update-from-skin-library");
+    }
+
     void skinManagementDownloadsAndRemovesActiveSkinOffline() {
         AppDatabase db;
         QVERIFY(db.open());
@@ -507,35 +743,46 @@ private slots:
             QVERIFY(network.requests.isEmpty());
             QCOMPARE(palette->count(), 2);
 
+            auto *workspace = window.findChild<ContentWorkspace *>("settingsWorkspace");
+            QVERIFY(workspace);
             QTest::mouseClick(manage, Qt::LeftButton);
-            auto *dialog = window.findChild<QDialog *>("skinManagerDialog");
+            auto *dialog = workspace->content(SkinLibraryKey);
             QVERIFY(dialog && dialog->isVisible());
             auto *list = dialog->findChild<QTreeWidget *>("skinManagerList");
-            auto *action = dialog->findChild<QPushButton *>("skinActionButton");
-            auto *status = dialog->findChild<QLabel *>("skinManagerStatus");
-            auto *close = dialog->findChild<QPushButton *>("skinManagerClose");
-            QVERIFY(list && action && status && close);
+            auto *back = dialog->parentWidget()->findChild<QPushButton *>("contentBack");
+            QVERIFY(list && back);
             QTRY_COMPARE(list->topLevelItemCount(), 1);
-            QCOMPARE(list->currentItem()->text(0), TestSkinFixture::Name);
-            QCOMPARE(action->text(), QStringLiteral("下载"));
+            auto *entry = skinRow(list, TestSkinFixture::Id);
+            QVERIFY(entry);
+            QCOMPARE(entry->text(0), TestSkinFixture::Name);
+            QCOMPARE(skinState(list, TestSkinFixture::Id), QStringLiteral("可下载"));
             QCOMPARE(network.requests.size(), 1);
             QVERIFY(network.requests.first().endsWith("/catalog.json"));
-            capture(*dialog, "skin-manager-catalog");
+            capture(window, "skin-manager-catalog");
 
             network.failImage = true;
-            QTest::mouseClick(action, Qt::LeftButton);
-            QTRY_COMPARE(action->text(), QStringLiteral("重试下载"));
-            QVERIFY(status->text().contains(QStringLiteral("皮肤下载失败")));
-            QVERIFY(status->text().contains(QStringLiteral("模拟网络连接失败")));
+            QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, skinCellPoint(list, entry));
+            QTRY_VERIFY(skinState(list, TestSkinFixture::Id).contains(QStringLiteral("重试")));
+            entry = skinRow(list, TestSkinFixture::Id);
+            QVERIFY(entry);
+            QVERIFY(entry->toolTip(SkinStatusColumn).contains(QStringLiteral("模拟网络连接失败")));
             QCOMPARE(network.requests.size(), 3);
             QCOMPARE(palette->findData(TestSkinFixture::Id), -1);
             QVERIFY(!QFileInfo::exists(manifest));
-            capture(*dialog, "skin-manager-download-failed");
+            capture(window, "skin-manager-download-failed");
 
             network.failImage = false;
-            QTest::mouseClick(action, Qt::LeftButton);
-            QTRY_COMPARE(action->text(), QStringLiteral("删除"));
-            QCOMPARE(list->currentItem()->text(1), QStringLiteral("已安装"));
+            network.delay = 100;
+            list->setCurrentItem(entry);
+            list->setFocus();
+            QTest::keyClick(list, Qt::Key_Space);
+            QVERIFY(skinState(list, TestSkinFixture::Id).contains(QStringLiteral("正在下载")));
+            QTest::mouseClick(back, Qt::LeftButton);
+            QTRY_VERIFY(palette->isVisible());
+            QTRY_VERIFY(QFileInfo::exists(manifest));
+            QTest::mouseClick(manage, Qt::LeftButton);
+            QCOMPARE(workspace->content(SkinLibraryKey), dialog);
+            QTRY_VERIFY(skinState(list, TestSkinFixture::Id).contains(QStringLiteral("已下载")));
             QCOMPARE(network.requests.size(), 5);
             QCOMPARE(palette->currentData().toString(), QStringLiteral("paper"));
             QCOMPARE(db.setting("appearance_palette"), QStringLiteral("paper"));
@@ -543,8 +790,21 @@ private slots:
             QVERIFY(QFileInfo::exists(manifest));
             QVERIFY(QFileInfo::exists(sidebarImage));
 
-            QTest::mouseClick(close, Qt::LeftButton);
-            QTRY_VERIFY(!QApplication::activeModalWidget());
+            entry = skinRow(list, TestSkinFixture::Id);
+            QVERIFY(entry);
+            QVERIFY(entry->text(SkinStatusColumn).isEmpty());
+            const auto check = UiTheme::icon(QStringLiteral("check")).pixmap(24, 24);
+            QVERIFY(!check.isNull());
+            QCOMPARE(entry->icon(SkinStatusColumn).pixmap(24, 24).toImage(), check.toImage());
+            QVERIFY(!answerLeave(QMessageBox::Cancel, [&] {
+                QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, skinCellPoint(list, entry));
+                QTest::keyClick(list, Qt::Key_Return);
+            }));
+            QVERIFY(QFileInfo::exists(manifest));
+            QCOMPARE(network.requests.size(), 5);
+
+            QTest::mouseClick(back, Qt::LeftButton);
+            QTRY_VERIFY(palette->isVisible());
             const int installed = palette->findData(TestSkinFixture::Id);
             QVERIFY(installed >= 0);
             QCOMPARE(palette->itemText(installed), TestSkinFixture::Name);
@@ -564,10 +824,13 @@ private slots:
             QCOMPARE(sidebar->width(), 72);
             QVERIFY(!hasSidebarArtwork(*sidebar));
             toggle->click();
+            QTest::mouseClick(manage, Qt::LeftButton);
+            QTRY_VERIFY(skinState(list, TestSkinFixture::Id).contains(QStringLiteral("正在使用")));
+            QCOMPARE(network.requests.size(), 5);
         }
 
         network.offline = true;
-        network.delay = 80;
+        network.delay = 250;
         network.requests.clear();
         {
             MainWindow restored(nullptr, nullptr, &network);
@@ -583,20 +846,34 @@ private slots:
             QCOMPARE(UiTheme::layoutId(), QStringLiteral("compact"));
             QTRY_VERIFY(hasSidebarArtwork(*sidebar));
 
+            auto *workspace = restored.findChild<ContentWorkspace *>("settingsWorkspace");
+            QVERIFY(workspace);
             QTest::mouseClick(manage, Qt::LeftButton);
-            auto *dialog = restored.findChild<QDialog *>("skinManagerDialog");
+            auto *dialog = workspace->content(SkinLibraryKey);
             QVERIFY(dialog && dialog->isVisible());
             auto *list = dialog->findChild<QTreeWidget *>("skinManagerList");
-            auto *action = dialog->findChild<QPushButton *>("skinActionButton");
             auto *status = dialog->findChild<QLabel *>("skinManagerStatus");
             auto *refresh = dialog->findChild<QPushButton *>("skinCatalogRefresh");
-            QVERIFY(list && action && status && refresh);
+            QVERIFY(list && status && refresh);
             QCOMPARE(list->topLevelItemCount(), 1);
-            QCOMPARE(list->currentItem()->text(1), QStringLiteral("正在使用"));
-            QVERIFY(action->isEnabled());
-            QTRY_COMPARE(refresh->text(), QStringLiteral("重试目录"));
+            QVERIFY(skinState(list, TestSkinFixture::Id).contains(QStringLiteral("正在使用")));
+            QVERIFY(refresh->text().isEmpty());
+            QTRY_COMPARE(refresh->toolTip(), QStringLiteral("重试目录"));
             QVERIFY(status->text().contains(QStringLiteral("无法加载皮肤目录")));
-            capture(*dialog, "skin-manager-offline");
+            capture(restored, "skin-manager-offline");
+
+            auto *installedRow = skinRow(list, TestSkinFixture::Id);
+            QVERIFY(installedRow);
+            QVERIFY(answerLeave(QMessageBox::Cancel, [&] {
+                QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier,
+                                  skinCellPoint(list, installedRow, SkinRemovalColumn));
+            }, SkinRemovalPrompt));
+            QVERIFY(QFileInfo::exists(manifest));
+            const auto requestRemoval = [&] {
+                list->setCurrentItem(skinRow(list, TestSkinFixture::Id));
+                list->setFocus();
+                QTest::keyClick(list, Qt::Key_Delete);
+            };
 
             const QString connection = QStringLiteral("skin-removal-save-failure");
             {
@@ -607,9 +884,9 @@ private slots:
                 QVERIFY(query.exec("CREATE TRIGGER reject_skin_fallback BEFORE INSERT ON app_settings "
                                    "WHEN NEW.key = 'appearance_palette' AND NEW.value = 'mist' "
                                    "BEGIN SELECT RAISE(ABORT, 'test failure'); END"));
-                QTest::mouseClick(action, Qt::LeftButton);
+                QVERIFY(answerLeave(QMessageBox::Yes, requestRemoval, SkinRemovalPrompt));
                 QVERIFY(status->text().contains(QStringLiteral("无法删除皮肤")));
-                QCOMPARE(list->currentItem()->text(1), QStringLiteral("正在使用"));
+                QVERIFY(skinState(list, TestSkinFixture::Id).contains(QStringLiteral("正在使用")));
                 QCOMPARE(palette->currentData().toString(), TestSkinFixture::Id);
                 QCOMPARE(db.setting("appearance_palette"), TestSkinFixture::Id);
                 QVERIFY(QFileInfo::exists(manifest));
@@ -620,8 +897,7 @@ private slots:
 
             QTest::mouseClick(refresh, Qt::LeftButton);
             QVERIFY(!refresh->isEnabled());
-            QVERIFY(action->isEnabled());
-            QTest::mouseClick(action, Qt::LeftButton);
+            QVERIFY(answerLeave(QMessageBox::Yes, requestRemoval, SkinRemovalPrompt));
             QCOMPARE(list->topLevelItemCount(), 0);
             QCOMPARE(palette->count(), 2);
             QCOMPARE(palette->currentData().toString(), QStringLiteral("mist"));
@@ -634,7 +910,8 @@ private slots:
             QVERIFY(!hasSidebarArtwork(*sidebar));
             QCOMPARE(network.requests.size(), 2);
             QTest::keyClick(dialog, Qt::Key_Escape);
-            QTRY_VERIFY(!QApplication::activeModalWidget());
+            QTRY_VERIFY(palette->isVisible());
+            QVERIFY(!workspace->content(SkinLibraryKey));
         }
         network.requests.clear();
         MainWindow restored(nullptr, nullptr, &network);

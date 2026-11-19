@@ -7,6 +7,7 @@
 #include "pages/clipboardpage.h"
 #include "platform/globalshortcut.h"
 #include "platform/clipboardpaste.h"
+#include "ui/contentworkspace.h"
 #include "ui/skinlibrary.h"
 #include "ui/skinmanagerdialog.h"
 #include "widgets/shortcutsettings.h"
@@ -21,6 +22,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFrame>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
@@ -28,13 +30,14 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSizePolicy>
 #include <QSignalBlocker>
-#include <QScrollArea>
 #include <QStackedWidget>
-#include "ui/contentworkspace.h"
 #include <QStyle>
 #include <QSystemTrayIcon>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QUrl>
 #include <QWidget>
@@ -54,9 +57,12 @@ namespace {
 constexpr int ExpandedSidebarWidth = 168;
 constexpr int CollapsedSidebarWidth = 72;
 constexpr int MaxSkinLabelWidth = 220;
+constexpr int SettingsPageIndex = 4;
+constexpr int SettingsColumnWidth = 720;
 const QString PaletteSetting = QStringLiteral("appearance_palette");
 const QString LayoutSetting = QStringLiteral("appearance_layout");
 const QString DefaultPalette = QStringLiteral("mist");
+const QString SkinManagerKey = QStringLiteral("skin-library");
 
 QFrame *makeSection(QWidget *parent)
 {
@@ -301,38 +307,35 @@ void MainWindow::updateSidebarAppearance()
 QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
 {
     auto *section = makeSection(parent);
-    auto *row = new QHBoxLayout(section);
-    UiTheme::setLayoutMetrics(row, {24, 22, 24, 24}, 8);
+    section->setObjectName(QStringLiteral("settingsAppearanceSection"));
+    auto *body = new QVBoxLayout(section);
+    UiTheme::setLayoutMetrics(body, {0, 20, 0, 22}, 10);
     auto *title = new QLabel(QStringLiteral("风格与布局"), section);
     title->setObjectName(QStringLiteral("cardTitle"));
-    row->addWidget(title);
-    row->addStretch(1);
-
-    auto *manage = new QPushButton(QStringLiteral("管理皮肤…"), section);
-    manage->setObjectName(QStringLiteral("manageSkinsButton"));
-    row->addWidget(manage);
-    row->addSpacing(12);
-    connect(manage, &QPushButton::clicked, this, &MainWindow::openSkinManager);
+    body->addWidget(title);
+    auto *options = new QGridLayout;
+    options->setContentsMargins(0, 0, 0, 0);
+    options->setSpacing(9);
+    options->setColumnStretch(3, 1);
+    body->addLayout(options);
 
     auto *palette = new QComboBox(section);
     palette->setObjectName(QStringLiteral("appearancePalette"));
-    fillPaletteChoices(palette, UiTheme::installedThemes());
-
     auto *layout = new QComboBox(section);
     layout->setObjectName(QStringLiteral("appearanceLayout"));
     layout->addItem(UiTheme::icon("layout-standard"), QStringLiteral("标准"), QStringLiteral("standard"));
     layout->addItem(UiTheme::icon("layout-compact"), QStringLiteral("紧凑"), QStringLiteral("compact"));
 
-    const auto addChoice = [&](QComboBox *choice, const QString &label, const QString &key, QString (*currentId)()) {
+    const auto addChoice = [&](int row, QComboBox *choice, const QString &label, const QString &key, QString (*currentId)()) {
         auto *caption = new QLabel(label, section);
         caption->setBuddy(choice);
         choice->setAccessibleName(label);
         UiTheme::styleAppearanceChoice(choice);
         choice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-        choice->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        choice->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
         choice->setCurrentIndex(choice->findData(currentId()));
-        row->addWidget(caption);
-        row->addWidget(choice);
+        options->addWidget(caption, row, 0);
+        options->addWidget(choice, row, 1);
         connect(choice, &QComboBox::currentIndexChanged, this, [this, choice, key, currentId, palette, layout] {
             QString error;
             if (!database_.setSetting(key, choice->currentData().toString(), &error)) {
@@ -344,9 +347,22 @@ QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
             applyAppearance(palette->currentData().toString(), layout->currentData().toString());
         });
     };
-    addChoice(palette, QStringLiteral("配色"), PaletteSetting, UiTheme::paletteId);
-    row->addSpacing(12);
-    addChoice(layout, QStringLiteral("布局"), LayoutSetting, UiTheme::layoutId);
+    addChoice(0, palette, QStringLiteral("配色"), PaletteSetting, UiTheme::paletteId);
+    addChoice(1, layout, QStringLiteral("布局"), LayoutSetting, UiTheme::layoutId);
+    palette->ensurePolished();
+    fillPaletteChoices(palette, UiTheme::installedThemes());
+
+    auto *manage = new QPushButton(UiTheme::icon(QStringLiteral("chevron-right")), QStringLiteral("管理皮肤"), section);
+    manage->setObjectName(QStringLiteral("manageSkinsButton"));
+    manage->setFlat(true);
+    manage->setLayoutDirection(Qt::RightToLeft);
+    manage->setIconSize(QSize(12, 12));
+    manage->setCursor(Qt::PointingHandCursor);
+    options->addWidget(manage, 0, 2, Qt::AlignLeft | Qt::AlignVCenter);
+    QWidget::setTabOrder(palette, manage);
+    QWidget::setTabOrder(manage, layout);
+    connect(manage, &QPushButton::clicked, this, [this, manage] { openSkinManager(manage); });
+
     connect(palette, &QComboBox::currentIndexChanged, palette, [palette] {
         palette->setToolTip(palette->currentData(Qt::ToolTipRole).toString());
     });
@@ -363,19 +379,106 @@ void MainWindow::applyAppearance(const QString &palette, const QString &layout)
 {
     UiTheme::apply(*qApp, palette, layout);
     if (sidebar_) sidebar_->setArtworkPath(UiTheme::sidebarImagePath());
+    if (settingsWorkspace_) {
+        if (auto *dialog = static_cast<SkinManagerDialog *>(settingsWorkspace_->content(SkinManagerKey)))
+            dialog->updateActiveSkin();
+    }
 }
 
-void MainWindow::openSkinManager()
+void MainWindow::openSkinManager(QWidget *source)
 {
+    if (settingsWorkspace_->activate(SkinManagerKey, source)) return;
     auto *dialog = new SkinManagerDialog(*skinLibrary_, [this](const QString &id, QString *error) {
         if (id != UiTheme::paletteId()) return skinLibrary_->removeTheme(id, error);
         return skinLibrary_->removeTheme(id, error, [this](QString *saveError) {
             return database_.setSetting(PaletteSetting, DefaultPalette, saveError);
         });
-    }, this);
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->open();
+    }, settingsWorkspace_);
+    settingsWorkspace_->present(SkinManagerKey, dialog, source);
     dialog->refreshCatalog();
+}
+
+QFrame *MainWindow::makeRuntimeSection(QWidget *parent)
+{
+    auto *section = makeSection(parent);
+    auto *body = new QVBoxLayout(section);
+    UiTheme::setLayoutMetrics(body, {0, 20, 0, 22}, 10);
+    auto *title = new QLabel(QStringLiteral("运行与托盘"), section);
+    title->setObjectName(QStringLiteral("cardTitle"));
+    body->addWidget(title);
+
+    auto *startup = new QVBoxLayout;
+    startup->setSpacing(4);
+    autoStartCheck_ = new QCheckBox(QStringLiteral("开机自动启动 Orchestrate"), section);
+    autoStartCheck_->setObjectName(QStringLiteral("autoStartCheck"));
+    startup->addWidget(autoStartCheck_);
+    autoStartStatus_ = new QLabel(section);
+    autoStartStatus_->setObjectName(QStringLiteral("autoStartStatus"));
+    autoStartStatus_->setTextFormat(Qt::PlainText);
+    autoStartStatus_->setWordWrap(true);
+    startup->addWidget(autoStartStatus_);
+    systemStartupButton_ = new QPushButton(QStringLiteral("打开 Windows 启动应用设置"), section);
+    startup->addWidget(systemStartupButton_, 0, Qt::AlignLeft);
+    body->addLayout(startup);
+    connect(autoStartCheck_, &QCheckBox::toggled, this, [this](bool enabled) {
+        QString error;
+        autoStart_->setEnabled(enabled, &error);
+        refreshAutoStartSettings(error);
+    });
+    connect(systemStartupButton_, &QPushButton::clicked, this, [this] {
+        if (!QDesktopServices::openUrl(QUrl(QStringLiteral("ms-settings:startupapps"))))
+            autoStartStatus_->setText(QStringLiteral("无法打开系统设置，请手动进入 Windows 设置 → 应用 → 启动。"));
+    });
+    refreshAutoStartSettings();
+
+    auto *trayCheck = new QCheckBox(QStringLiteral("关闭主窗口时继续驻留系统托盘"), section);
+    trayCheck->setObjectName(QStringLiteral("closeToTrayCheck"));
+    trayCheck->setChecked(closeToTray_);
+    body->addWidget(trayCheck);
+    connect(trayCheck, &QCheckBox::toggled, this, [this](bool enabled) { closeToTray_ = enabled; });
+    body->addWidget(new ShortcutSettings(*globalShortcut_, database_, section));
+    return section;
+}
+
+QScrollArea *MainWindow::makeSettingsPage()
+{
+    auto *page = new QWidget(pageStack_);
+    page->setObjectName(QStringLiteral("settingsPage"));
+    auto *pageLayout = new QHBoxLayout(page);
+    UiTheme::setLayoutMetrics(pageLayout, {32, 4, 32, 24}, 0);
+    auto *column = new QWidget(page);
+    column->setMaximumWidth(SettingsColumnWidth);
+    pageLayout->addWidget(column, 1);
+    pageLayout->addStretch();
+
+    auto *body = new QVBoxLayout(column);
+    body->setContentsMargins(0, 0, 0, 0);
+    body->setSpacing(0);
+    body->addWidget(makeAppearanceSection(column));
+    body->addWidget(makeRuntimeSection(column));
+
+    updateWidget_ = new UpdateWidget(column);
+    updateWidget_->setAccessibleName(QStringLiteral("版本与更新"));
+    updateWidget_->setFocusPolicy(Qt::ClickFocus);
+    UiTheme::setSurface(updateWidget_, "content");
+    UiTheme::setLayoutMetrics(updateWidget_->layout(), {0, 20, 0, 0}, 9);
+    connect(updateWidget_, &UpdateWidget::installRequested, this, &MainWindow::installUpdate);
+    connect(updateWidget_, &UpdateWidget::updateAvailableChanged, this, &MainWindow::setAvailableUpdate);
+    connect(updateWidget_, &UpdateWidget::updateNotificationRequested, this, [this](const QString &tag) {
+        if (trayIcon_ && trayIcon_->isVisible() && QSystemTrayIcon::supportsMessages())
+            trayIcon_->showMessage(QStringLiteral("Orchestrate 有新版本"),
+                QStringLiteral("%1 已发布。打开“设置 → 版本与更新”查看说明并下载。").arg(tag),
+                QSystemTrayIcon::Information, 8000);
+    });
+    body->addWidget(updateWidget_);
+    body->addStretch();
+
+    auto *scroll = new QScrollArea(pageStack_);
+    scroll->setObjectName(QStringLiteral("settingsScroll"));
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidget(page);
+    return scroll;
 }
 
 void MainWindow::buildTray()
@@ -426,6 +529,7 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
                 return !current || current == workspace || current->confirmLeaveCurrent();
             });
             connect(workspace, &ContentWorkspace::activationRequested, this, [this,index] { switchToPage(index, false); });
+            return workspace;
         };
         auto *calendarPage = new CalendarPage(&database_, trayIcon_, pageStack_);
         addWorkspace(calendarPage,0);
@@ -457,73 +561,11 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
             hide();
         });
 
-        auto *settingsPage = new QWidget(pageStack_);
-        settingsPage->setObjectName(QStringLiteral("settingsPage"));
-        auto *settingsLayout = new QVBoxLayout(settingsPage);
-        settingsLayout->setContentsMargins(0, 0, 0, 0);
-        settingsLayout->setSpacing(0);
-
-        auto *settingsCard = makeSection(settingsPage);
-        auto *settingsCardLayout = new QVBoxLayout(settingsCard);
-        UiTheme::setLayoutMetrics(settingsCardLayout, {24, 22, 24, 24}, 12);
-
-        auto *runtimeTitle = new QLabel(QStringLiteral("运行与托盘"), settingsCard);
-        runtimeTitle->setObjectName(QStringLiteral("cardTitle"));
-        settingsCardLayout->addWidget(runtimeTitle);
-
-        autoStartCheck_ = new QCheckBox(QStringLiteral("开机自动启动 Orchestrate"), settingsCard);
-        autoStartCheck_->setObjectName(QStringLiteral("autoStartCheck"));
-        settingsCardLayout->addWidget(autoStartCheck_);
-        autoStartStatus_ = new QLabel(settingsCard);
-        autoStartStatus_->setObjectName(QStringLiteral("autoStartStatus"));
-        autoStartStatus_->setTextFormat(Qt::PlainText);
-        autoStartStatus_->setWordWrap(true);
-        settingsCardLayout->addWidget(autoStartStatus_);
-        systemStartupButton_ = new QPushButton(QStringLiteral("打开 Windows 启动应用设置"), settingsCard);
-        settingsCardLayout->addWidget(systemStartupButton_, 0, Qt::AlignLeft);
-        connect(autoStartCheck_, &QCheckBox::toggled, this, [this](bool enabled) {
-            QString error;
-            autoStart_->setEnabled(enabled, &error);
-            refreshAutoStartSettings(error);
-        });
-        connect(systemStartupButton_, &QPushButton::clicked, this, [this] {
-            if (!QDesktopServices::openUrl(QUrl(QStringLiteral("ms-settings:startupapps"))))
-                autoStartStatus_->setText(QStringLiteral("无法打开系统设置，请手动进入 Windows 设置 → 应用 → 启动。"));
-        });
-        refreshAutoStartSettings();
-
-        auto *trayCheck = new QCheckBox(QStringLiteral("关闭主窗口时继续驻留系统托盘"), settingsCard);
-        trayCheck->setObjectName(QStringLiteral("closeToTrayCheck"));
-        trayCheck->setChecked(closeToTray_);
-        settingsCardLayout->addWidget(trayCheck);
-        connect(trayCheck, &QCheckBox::toggled, this, [this](bool enabled) {
-            closeToTray_ = enabled;
-        });
-
-        settingsCardLayout->addWidget(new ShortcutSettings(*globalShortcut_, database_, settingsCard));
-
-        settingsLayout->addWidget(settingsCard);
-        settingsLayout->addWidget(makeAppearanceSection(settingsPage));
-        auto *update = new UpdateWidget(settingsPage);
-        UiTheme::setSurface(update, "section");
-        UiTheme::setLayoutMetrics(update->layout(), {24, 22, 24, 24}, update->layout()->spacing());
-        connect(update, &UpdateWidget::installRequested, this, &MainWindow::installUpdate);
-        connect(update, &UpdateWidget::updateAvailableChanged, this, &MainWindow::setAvailableUpdate);
-        connect(update, &UpdateWidget::updateNotificationRequested, this, [this](const QString &tag) {
-            if (trayIcon_ && trayIcon_->isVisible() && QSystemTrayIcon::supportsMessages())
-                trayIcon_->showMessage(QStringLiteral("Orchestrate 有新版本"),
-                    QStringLiteral("%1 已发布。打开“设置 → 版本与更新”查看说明并下载。").arg(tag),
-                    QSystemTrayIcon::Information, 8000);
-        });
-        settingsLayout->addWidget(update);
-        settingsLayout->addStretch(1);
-        auto *settingsScroll = new QScrollArea(pageStack_);
-        settingsScroll->setWidgetResizable(true);
-        settingsScroll->setFrameShape(QFrame::NoFrame);
-        settingsScroll->setWidget(settingsPage);
-        pageStack_->addWidget(settingsScroll);
+        settingsScroll_ = makeSettingsPage();
+        settingsWorkspace_ = addWorkspace(settingsScroll_, SettingsPageIndex);
+        settingsWorkspace_->setObjectName(QStringLiteral("settingsWorkspace"));
         QWidget::setTabOrder(sidebarToggleButton_, navigationButtons_.first());
-        update->startAutomaticChecks();
+        updateWidget_->startAutomaticChecks();
     }
 
     if (index < 0 || index >= pageStack_->count()) {
@@ -539,7 +581,7 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
         }
     }
     pageStack_->setCurrentIndex(index);
-    if (index == 4) refreshAutoStartSettings();
+    if (index == SettingsPageIndex) refreshAutoStartSettings();
     for (int i = 0; i < navigationButtons_.size(); ++i) {
         navigationButtons_.at(i)->setChecked(i == index);
     }
@@ -547,8 +589,8 @@ void MainWindow::switchToPage(int index, bool confirmLeave)
 
 void MainWindow::setAvailableUpdate(const QString &tag)
 {
-    if (navigationButtons_.size() < 5) return;
-    auto *settings = navigationButtons_.at(4);
+    if (navigationButtons_.size() <= SettingsPageIndex) return;
+    auto *settings = navigationButtons_.at(SettingsPageIndex);
     const auto text = tag.isEmpty() ? QStringLiteral("设置") : QStringLiteral("设置 · 有更新");
     settings->setProperty("expandedText", text);
     settings->setText(sidebarCollapsed_ ? QString() : text);
@@ -565,12 +607,15 @@ void MainWindow::setAvailableUpdate(const QString &tag)
 void MainWindow::openUpdatesPage()
 {
     showMainWindow();
-    switchToPage(4);
-    auto *scroll = qobject_cast<QScrollArea *>(pageStack_->currentWidget());
-    if (scroll) {
-        auto *update = scroll->findChild<UpdateWidget *>();
-        if (update) scroll->ensureWidgetVisible(update);
-    }
+    switchToPage(SettingsPageIndex);
+    if (!settingsWorkspace_ || pageStack_->currentWidget() != settingsWorkspace_) return;
+    settingsWorkspace_->back();
+    QTimer::singleShot(0, this, [this] {
+        if (pageStack_->currentWidget() != settingsWorkspace_ || !settingsWorkspace_->currentKey().isEmpty()) return;
+        updateWidget_->setFocus();
+        const int top = updateWidget_->mapTo(settingsScroll_->widget(), QPoint()).y();
+        settingsScroll_->verticalScrollBar()->setValue(top);
+    });
 }
 
 void MainWindow::refreshAutoStartSettings(const QString &error)
