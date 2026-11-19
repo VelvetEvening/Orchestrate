@@ -72,46 +72,6 @@ QFrame *makeSection(QWidget *parent)
     return card;
 }
 
-class SettingsScroll final : public QScrollArea
-{
-public:
-    SettingsScroll(QWidget *page, QBoxLayout *sections, QWidget *parent)
-        : QScrollArea(parent), sections_(sections)
-    {
-        setObjectName(QStringLiteral("settingsScroll"));
-        setWidgetResizable(true);
-        setFrameShape(QFrame::NoFrame);
-        setWidget(page);
-    }
-
-protected:
-    bool viewportEvent(QEvent *event) override
-    {
-        if (event->type() == QEvent::Resize) arrangeSections();
-        return QScrollArea::viewportEvent(event);
-    }
-
-    bool eventFilter(QObject *object, QEvent *event) override
-    {
-        if (object == widget() && event->type() == QEvent::LayoutRequest) arrangeSections();
-        return QScrollArea::eventFilter(object, event);
-    }
-
-private:
-    void arrangeSections()
-    {
-        if (!widget()) return;
-        const auto margins = widget()->layout()->contentsMargins();
-        const int available = viewport()->width() - margins.left() - margins.right();
-        const int widest = qMax(sections_->itemAt(0)->minimumSize().width(),
-                                sections_->itemAt(1)->minimumSize().width());
-        const int required = qMax(864, 2 * widest + sections_->spacing());
-        sections_->setDirection(available >= required ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom);
-    }
-
-    QBoxLayout *sections_;
-};
-
 void fillPaletteChoices(QComboBox *choice, const QList<SkinTheme> &installed)
 {
     const QSignalBlocker blocker(choice);
@@ -365,20 +325,28 @@ QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
     auto *section = makeSection(parent);
     section->setObjectName(QStringLiteral("settingsAppearanceSection"));
     auto *body = new QVBoxLayout(section);
-    UiTheme::setLayoutMetrics(body, {0, 0, 0, 20}, 16);
+    UiTheme::setLayoutMetrics(body, {0, 0, 0, 20}, 12);
     auto *heading = new QHBoxLayout;
     auto *title = new QLabel(QStringLiteral("风格与布局"), section);
     title->setObjectName(QStringLiteral("cardTitle"));
     heading->addWidget(title, 1);
     body->addLayout(heading);
-    body->addWidget(UiTheme::createAppearancePreview(section));
-    auto *options = new QGridLayout;
+    auto *samplesAndChoices = new QHBoxLayout;
+    UiTheme::setLayoutMetrics(samplesAndChoices, {0, 0, 0, 0}, 28);
+    samplesAndChoices->addWidget(UiTheme::createAppearancePreview(section), 3);
+    auto *choices = new QWidget(section);
+    choices->setMaximumWidth(400);
+    auto *options = new QGridLayout(choices);
     SettingsForm::configure(*options);
-    body->addLayout(options);
+    options->setColumnStretch(SettingsForm::AccessoryColumn, 0);
+    options->setColumnStretch(SettingsForm::ControlColumn, 1);
+    options->setVerticalSpacing(12);
+    samplesAndChoices->addWidget(choices, 2, Qt::AlignVCenter);
+    body->addLayout(samplesAndChoices);
 
-    auto *palette = new QComboBox(section);
+    auto *palette = new QComboBox(choices);
     palette->setObjectName(QStringLiteral("appearancePalette"));
-    auto *layout = new QComboBox(section);
+    auto *layout = new QComboBox(choices);
     layout->setObjectName(QStringLiteral("appearanceLayout"));
     layout->addItem(UiTheme::icon("layout-standard"), QStringLiteral("标准"), QStringLiteral("standard"));
     layout->addItem(UiTheme::icon("layout-compact"), QStringLiteral("紧凑"), QStringLiteral("compact"));
@@ -505,20 +473,11 @@ QScrollArea *MainWindow::makeSettingsPage()
     auto *page = new QWidget(pageStack_);
     page->setObjectName(QStringLiteral("settingsPage"));
     auto *pageLayout = new QVBoxLayout(page);
-    UiTheme::setLayoutMetrics(pageLayout, {32, 30, 32, 24}, 0);
-    auto *sections = new QBoxLayout(QBoxLayout::TopToBottom);
-    sections->setSpacing(28);
-    pageLayout->addLayout(sections);
-    pageLayout->addStretch();
-    sections->addWidget(makeAppearanceSection(page), 1, Qt::AlignTop);
+    UiTheme::setLayoutMetrics(pageLayout, {30, 24, 30, 22}, 18);
+    pageLayout->addWidget(makeAppearanceSection(page));
+    pageLayout->addWidget(makeRuntimeSection(page));
 
-    auto *system = new QWidget(page);
-    auto *body = new QVBoxLayout(system);
-    UiTheme::setLayoutMetrics(body, {0, 0, 0, 0}, 20);
-    body->addWidget(makeRuntimeSection(system));
-    sections->addWidget(system, 1, Qt::AlignTop);
-
-    updateWidget_ = new UpdateWidget(system);
+    updateWidget_ = new UpdateWidget(page);
     updateWidget_->setAccessibleName(QStringLiteral("版本与更新"));
     updateWidget_->setFocusPolicy(Qt::ClickFocus);
     UiTheme::setSurface(updateWidget_, "content");
@@ -531,8 +490,15 @@ QScrollArea *MainWindow::makeSettingsPage()
                 QStringLiteral("%1 已发布。打开“设置 → 版本与更新”查看说明并下载。").arg(tag),
                 QSystemTrayIcon::Information, 8000);
     });
-    body->addWidget(updateWidget_);
-    return new SettingsScroll(page, sections, pageStack_);
+    pageLayout->addWidget(updateWidget_);
+    pageLayout->addStretch();
+
+    auto *scroll = new QScrollArea(pageStack_);
+    scroll->setObjectName(QStringLiteral("settingsScroll"));
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setWidget(page);
+    return scroll;
 }
 
 void MainWindow::buildTray()

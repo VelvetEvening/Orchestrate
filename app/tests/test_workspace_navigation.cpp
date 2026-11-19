@@ -256,7 +256,9 @@ private slots:
         QCOMPARE(paletteRect.right(), layoutRect.right());
         auto *preview = window.findChild<QWidget *>("appearancePreview");
         QVERIFY(preview && manageRect.bottom() < pageRect(preview).top());
-        QVERIFY(pageRect(preview).bottom() < paletteRect.top());
+        QVERIFY(pageRect(preview).right() < paletteRect.left());
+        QVERIFY(pageRect(preview).top() <= paletteRect.top());
+        QVERIFY(layoutRect.bottom() <= pageRect(preview).bottom());
         QCOMPARE(manageRect.right(), paletteRect.right());
         for (auto *choice : {palette, layout}) {
             QVERIFY(scroll->viewport()->rect().contains(QRect(choice->mapTo(scroll->viewport(), QPoint()), choice->size())));
@@ -276,15 +278,23 @@ private slots:
 
         auto *appearance = window.findChild<QFrame *>("settingsAppearanceSection");
         auto *runtime = window.findChild<QFrame *>("settingsRuntimeSection");
-        QVERIFY(appearance && runtime);
+        auto *updates = window.findChild<QWidget *>("updateWidget");
+        QVERIFY(appearance && runtime && updates);
         QVERIFY(pageRect(runtime).top() > pageRect(appearance).bottom());
+        QVERIFY(pageRect(updates).top() > pageRect(runtime).bottom());
         window.activateWindow();
         QTRY_VERIFY(window.isActiveWindow());
         layout->setFocus();
         QTRY_VERIFY(layout->hasFocus());
+        const int minimumWindowSectionWidth = appearance->width();
         window.resize(1180, 760);
-        QTRY_VERIFY(pageRect(runtime).left() > pageRect(appearance).right());
-        QCOMPARE(pageRect(runtime).top(), pageRect(appearance).top());
+        QTRY_VERIFY(appearance->width() > minimumWindowSectionWidth);
+        QCOMPARE(pageRect(runtime).left(), pageRect(appearance).left());
+        QCOMPARE(pageRect(updates).right(), pageRect(appearance).right());
+        QVERIFY(pageRect(runtime).top() > pageRect(appearance).bottom());
+        QVERIFY(pageRect(updates).top() > pageRect(runtime).bottom());
+        QVERIFY(pageRect(preview).right() < pageRect(palette).left());
+        QCOMPARE(pageRect(manage).right(), pageRect(layout).right());
         QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
         QCOMPARE(QApplication::focusWidget(), layout);
         capture(window, "settings-wide");

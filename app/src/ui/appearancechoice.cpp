@@ -35,20 +35,16 @@ protected:
         p.scale(scale, scale);
         p.translate(-201, -97);
         auto font = this->font();
-        font.setPixelSize(12);
-        p.setFont(font);
-        p.setPen(UiTheme::Muted);
-        p.drawText(QRectF(20, 36, 128, 20), Qt::AlignVCenter, QStringLiteral("效果预览"));
-        font.setPixelSize(49);
+        font.setPixelSize(60);
         font.setWeight(QFont::DemiBold);
         p.setFont(font);
         p.setPen(UiTheme::Text);
-        p.drawText(QRectF(18, 54, 133, 66), Qt::AlignVCenter, QStringLiteral("Aa 字"));
-        qreal x = 29;
+        p.drawText(QRectF(18, 39, 120, 83), Qt::AlignCenter, QStringLiteral("Aa"));
+        qreal x = 39;
         for (const auto &color : {UiTheme::Sidebar, UiTheme::Surface, UiTheme::Text, UiTheme::Accent}) {
             p.setPen(QPen(UiTheme::Border, 1));
             p.setBrush(color);
-            p.drawEllipse(QPointF(x, 145), 9, 9);
+            p.drawEllipse(QPointF(x, 137), 9, 9);
             x += 26;
         }
 

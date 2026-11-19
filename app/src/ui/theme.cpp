@@ -509,7 +509,7 @@ static void applyStylesheet(QApplication &app)
         {"recordMinHeight", compact ? "30px" : "42px"},
         {"diaryMinHeight", compact ? "30px" : "40px"},
         {"collectionMinHeight", compact ? "34px" : "46px"},
-        {"appearancePreviewHeight", compact ? "188px" : "216px"},
+        {"appearancePreviewHeight", compact ? "140px" : "164px"},
         {"clipboardListSize", compact ? "10pt" : "11pt"},
         {"clipboardRowHeight", compact ? "30px" : "38px"}
     };
