@@ -237,19 +237,20 @@ QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
 
     auto *palette = new QComboBox(section);
     palette->setObjectName(QStringLiteral("appearancePalette"));
-    palette->addItem(QStringLiteral("云白 × 雾蓝"), QStringLiteral("mist"));
-    palette->addItem(QStringLiteral("暖白 × 陶褐"), QStringLiteral("paper"));
-    palette->addItem(QStringLiteral("冷灰 × 墨蓝"), QStringLiteral("precision"));
+    palette->addItem(UiTheme::paletteSwatch("mist"), QStringLiteral("云白 × 雾蓝"), QStringLiteral("mist"));
+    palette->addItem(UiTheme::paletteSwatch("paper"), QStringLiteral("暖白 × 陶褐"), QStringLiteral("paper"));
+    palette->addItem(UiTheme::paletteSwatch("precision"), QStringLiteral("冷灰 × 墨蓝"), QStringLiteral("precision"));
 
     auto *layout = new QComboBox(section);
     layout->setObjectName(QStringLiteral("appearanceLayout"));
-    layout->addItem(QStringLiteral("标准"), QStringLiteral("standard"));
-    layout->addItem(QStringLiteral("紧凑"), QStringLiteral("compact"));
+    layout->addItem(UiTheme::icon("layout-standard"), QStringLiteral("标准"), QStringLiteral("standard"));
+    layout->addItem(UiTheme::icon("layout-compact"), QStringLiteral("紧凑"), QStringLiteral("compact"));
 
     const auto addChoice = [&](QComboBox *choice, const QString &label, const QString &key, QString (*currentId)()) {
         auto *caption = new QLabel(label, section);
         caption->setBuddy(choice);
         choice->setAccessibleName(label);
+        UiTheme::styleAppearanceChoice(choice);
         choice->setSizeAdjustPolicy(QComboBox::AdjustToContents);
         choice->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         choice->setCurrentIndex(choice->findData(currentId()));

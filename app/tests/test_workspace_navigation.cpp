@@ -26,6 +26,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPlainTextEdit>
 #include <QPersistentModelIndex>
 #include <QPushButton>
@@ -100,6 +101,19 @@ static void prepareWindow(MainWindow &window) {
     QTest::qWait(40);
 }
 using TestSupport::capture;
+static void captureAppearancePopup(QComboBox *choice, const QString &name) {
+    if (qEnvironmentVariableIntValue("ORCHESTRATE_TEST_ARTIFACTS") != 1) return;
+    auto *host = choice->window();
+    auto *popup = choice->view()->window();
+    const QRect field(choice->mapTo(host, QPoint()), choice->size());
+    const QRect menu(host->mapFromGlobal(popup->mapToGlobal(QPoint())), popup->size());
+    const QRect crop = field.united(menu).adjusted(-6, -6, 6, 6).intersected(host->rect());
+    QPixmap shot = host->grab(crop);
+    QPainter painter(&shot);
+    painter.drawPixmap(menu.topLeft() - crop.topLeft(), popup->grab());
+    painter.end();
+    QVERIFY(shot.save(qApp->applicationDirPath() + "/artifacts/" + name + ".png"));
+}
 static bool answerLeave(QMessageBox::StandardButton choice, const std::function<void()> &action) {
     bool prompted = false;
     QTimer timer;
@@ -150,6 +164,8 @@ private slots:
         int standardDateRowHeight = 0;
         for (const auto &density : {QStringLiteral("standard"), QStringLiteral("compact")}) {
             settings->click();
+            window.activateWindow();
+            QTRY_VERIFY(window.isActiveWindow());
             palette->setFocus();
             QTest::keyClick(palette, Qt::Key_Tab);
             QCOMPARE(QApplication::focusWidget(), layout);
@@ -170,7 +186,27 @@ private slots:
                 option.currentText = choice->currentText();
                 const QRect textRect = choice->style()->subControlRect(
                     QStyle::CC_ComboBox, &option, QStyle::SC_ComboBoxEditField, choice);
-                QVERIFY(textRect.width() >= choice->fontMetrics().horizontalAdvance(option.currentText));
+                QVERIFY(textRect.width() >= choice->iconSize().width() + 4
+                                             + choice->fontMetrics().horizontalAdvance(option.currentText));
+
+                QTest::mouseClick(choice, Qt::LeftButton);
+                auto *options = choice->view();
+                QTRY_VERIFY(options->isVisible());
+                const QRect field(choice->mapToGlobal(QPoint()), choice->size());
+                const QRect list(options->mapToGlobal(QPoint()), options->size());
+                captureAppearancePopup(choice, QStringLiteral("%1-%2-%3-open").arg(choice->objectName(), paletteId, density));
+                QVERIFY(!field.intersects(list));
+                for (int row = 0; row < choice->count(); ++row) {
+                    const auto item = choice->model()->index(row, choice->modelColumn());
+                    QVERIFY(options->viewport()->rect().contains(options->visualRect(item)));
+                }
+                const int applied = choice->currentIndex();
+                QTest::keyClick(options, applied == 0 ? Qt::Key_End : Qt::Key_Home);
+                QVERIFY(options->currentIndex().row() != applied);
+                QCOMPARE(choice->currentIndex(), applied);
+                QTest::keyClick(options, Qt::Key_Escape);
+                QTRY_VERIFY(!options->isVisible());
+                QCOMPARE(choice->currentIndex(), applied);
             }
             QVERIFY(palette->x() > section->width() / 2);
             QVERIFY(palette->geometry().right() < layout->x());
@@ -199,6 +235,25 @@ private slots:
                 QCOMPARE(grid->indexAt(cell.bottomRight()), grid->currentIndex());
             }
         }
+    }
+    void appearancePopupAppliesChoice() {
+        MainWindow window; prepareWindow(window);
+        window.findChildren<QPushButton *>("navButton").at(4)->click();
+        auto *palette = window.findChild<QComboBox *>("appearancePalette");
+        auto *layout = window.findChild<QComboBox *>("appearanceLayout");
+        QTest::keyClick(palette, Qt::Key_Down, Qt::AltModifier);
+        QTRY_VERIFY(palette->view()->isVisible());
+        QTest::keyClick(palette->view(), Qt::Key_End);
+        QTest::keyClick(palette->view(), Qt::Key_Return);
+        QTRY_VERIFY(!palette->view()->isVisible());
+        QCOMPARE(UiTheme::paletteId(), QStringLiteral("precision"));
+        QTest::keyClick(layout, Qt::Key_Down, Qt::AltModifier);
+        auto *options = layout->view();
+        QTRY_VERIFY(options->isVisible());
+        const auto compact = layout->model()->index(layout->findData("compact"), 0);
+        QTest::mouseClick(options->viewport(), Qt::LeftButton, Qt::NoModifier, options->visualRect(compact).center());
+        QTRY_VERIFY(!options->isVisible());
+        QCOMPARE(UiTheme::layoutId(), QStringLiteral("compact"));
     }
     void appearanceAndSidebarPreferencesRestore() {
         AppDatabase db;

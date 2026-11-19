@@ -21,6 +21,7 @@ function(orchestrate_enable_warnings target)
 endfunction()
 
 add_library(OrchestrateUi STATIC src/ui/theme.cpp src/ui/theme.h
+    src/ui/appearancechoice.cpp
     src/ui/contentworkspace.cpp src/ui/contentworkspace.h
     resources/ui/uitheme.qrc resources/resources.qrc)
 target_link_libraries(OrchestrateUi PUBLIC Qt6::Widgets)

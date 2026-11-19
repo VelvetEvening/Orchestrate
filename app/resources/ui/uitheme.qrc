@@ -13,6 +13,8 @@
     <file>icons/chevron-up.svg</file>
     <file>icons/chevron-down.svg</file>
     <file>icons/check.svg</file>
+    <file>icons/layout-standard.svg</file>
+    <file>icons/layout-compact.svg</file>
     <file>icons/radio.svg</file>
     <file>icons/play.svg</file>
     <file>icons/refresh.svg</file>

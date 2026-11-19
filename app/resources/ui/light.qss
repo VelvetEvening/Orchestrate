@@ -94,6 +94,15 @@ QComboBox#appearanceLayout { min-width: 3em; }
 QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center right; width: 26px; border: none; }
 QComboBox::down-arrow { image: url(:/ui/icons/chevron-down.svg); width: 12px; height: 12px; }
 QComboBox QAbstractItemView { background: @surface@; border: 1px solid @controlBorder@; padding: 4px; selection-background-color: @selection@; selection-color: @accent@; }
+QComboBox[uiRole="appearanceChoice"] { combobox-popup: 0; combobox-list-mousetracking: 1; }
+QComboBox[uiRole="appearanceChoice"]:hover { background: @hover@; }
+QComboBox[uiRole="appearanceChoice"]:on { background: @surface@; border-color: @accent@; }
+QComboBox[uiRole="appearanceChoice"]::down-arrow:on { image: url(:/ui/icons/chevron-up.svg); }
+QFrame[uiRole="appearancePopup"] { background: transparent; border: none; }
+QAbstractItemView[uiRole="appearanceOptions"] { background: @surface@; border: 1px solid @controlBorder@; border-radius: 8px; padding: 4px; outline: 0; }
+QAbstractItemView[uiRole="appearanceOptions"]::item { padding: @choiceItemPadding@; border: none; border-radius: 4px; }
+QAbstractItemView[uiRole="appearanceOptions"]::item:hover { background: @hover@; }
+QAbstractItemView[uiRole="appearanceOptions"]::item:selected { background: @selection@; color: @accent@; }
 QAbstractSpinBox { padding-right: 24px; min-height: 20px; }
 QAbstractSpinBox::up-button, QAbstractSpinBox::down-button { subcontrol-origin: border; width: 22px; border: none; border-left: 1px solid @border@; }
 QAbstractSpinBox::up-button { subcontrol-position: top right; border-top-right-radius: 6px; }

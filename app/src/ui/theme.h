@@ -7,6 +7,7 @@
 
 class QApplication;
 class QCalendarWidget;
+class QComboBox;
 class QLayout;
 class QWidget;
 
@@ -42,6 +43,8 @@ bool isCompact();
 void apply(QApplication &app, const QString &paletteId, const QString &layoutId);
 void install(QApplication &app);
 QIcon icon(const QString &name);
+QIcon paletteSwatch(const QString &id);
+void styleAppearanceChoice(QComboBox *choice);
 void setRole(QWidget *widget, const char *role);
 void setSurface(QWidget *widget, const char *surface);
 void setLayoutMetrics(QLayout *layout, const QMargins &margins, int spacing = -1);

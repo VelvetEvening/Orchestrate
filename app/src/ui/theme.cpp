@@ -7,6 +7,8 @@
 #include <QFontDatabase>
 #include <QLayout>
 #include <QPalette>
+#include <QPainter>
+#include <QPainterPath>
 #include <QPlainTextEdit>
 #include <QAbstractButton>
 #include <QStyle>
@@ -39,6 +41,18 @@ static void initializeUiResources()
 namespace {
 QString activePalette = QStringLiteral("mist");
 bool compactLayout = false;
+
+struct PaletteSample {
+    const char *sidebar;
+    const char *accent;
+};
+
+PaletteSample paletteSample(const QString &id)
+{
+    if (id == QStringLiteral("paper")) return {"#f0ede7", "#80523e"};
+    if (id == QStringLiteral("precision")) return {"#e5ebf2", "#244f78"};
+    return {"#eff3f4", "#365f8c"};
+}
 
 void refreshItemForegrounds(QAbstractItemView *view, const QColor &oldMuted, const QColor &oldAccent)
 {
@@ -134,15 +148,16 @@ void install(QApplication &app)
 
 static void applyPalette(QApplication &app, bool paper, bool precision)
 {
+    const auto sample = paletteSample(activePalette);
     Background = paper ? "#f7f5f0" : precision ? "#f4f6f8" : "#f7f9fa";
-    Sidebar = paper ? "#f0ede7" : precision ? "#e5ebf2" : "#eff3f4";
+    Sidebar = sample.sidebar;
     IndexSurface = precision ? "#edf1f6" : Background;
     Surface = paper ? "#fffdf8" : "#ffffff";
     Text = paper ? "#383734" : precision ? "#253246" : "#2f3b48";
     Muted = paper ? "#6e6a64" : precision ? "#536277" : "#5e6c78";
     Border = paper ? "#e2ded6" : precision ? "#d8e0e8" : "#dfe6ea";
     ControlBorder = paper ? "#b8b0a6" : precision ? "#a8b6c7" : "#b3bfcd";
-    Accent = paper ? "#80523e" : precision ? "#244f78" : "#365f8c";
+    Accent = sample.accent;
     Selection = paper ? "#ece8e1" : precision ? "#dce8f3" : "#dfe9f2";
     Hover = paper ? "#f3f0ea" : "#edf2f5";
     Focus = paper ? "#96765f" : "#6f8fb6";
@@ -216,6 +231,7 @@ void apply(QApplication &app, const QString &paletteId, const QString &layoutId)
             {"controlPadding", compact ? "4px 9px" : "6px 11px"},
             {"controlRadius", compact ? "4px" : "6px"},
             {"inputPadding", compact ? "4px 8px" : "6px 9px"},
+            {"choiceItemPadding", compact ? "5px 24px 5px 7px" : "8px 26px 8px 9px"},
             {"navPadding", compact ? "6px 10px" : "10px 12px"},
             {"navRadius", compact ? "4px" : "7px"},
             {"tabPadding", compact ? "4px 9px" : "7px 12px"},
@@ -257,6 +273,32 @@ QIcon icon(const QString &name)
 {
     initializeUiResources();
     return QIcon(QStringLiteral(":/ui/icons/%1.svg").arg(name));
+}
+
+QIcon paletteSwatch(const QString &id)
+{
+    const auto sample = paletteSample(id);
+    const QSize size(22, 16);
+    QPixmap pixmap(size * 4);
+    pixmap.setDevicePixelRatio(4);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    QPainterPath shape;
+    shape.addRoundedRect(QRectF(1, 1.5, 20, 13), 4, 4);
+    painter.fillPath(shape, QColor(sample.sidebar));
+    painter.setClipPath(shape);
+    painter.fillRect(QRectF(12, 1, 10, 14), QColor(sample.accent));
+    painter.setClipping(false);
+    QColor outline(sample.accent);
+    outline.setAlpha(84);
+    painter.setPen(QPen(outline, 1));
+    painter.drawPath(shape);
+    painter.end();
+
+    QIcon swatch(pixmap);
+    swatch.addPixmap(pixmap, QIcon::Selected);
+    return swatch;
 }
 
 void setRole(QWidget *widget, const char *role)
