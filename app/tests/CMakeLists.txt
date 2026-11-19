@@ -125,6 +125,12 @@ if (WIN32)
     # Qt's bin directory also contains the MinGW runtime shipped with this Qt kit.
     target_link_libraries(MathPreviewTest PRIVATE psapi)
     string(REPLACE ";" "\;" test_path "$<TARGET_FILE_DIR:Qt6::Core>;$ENV{PATH}")
+    add_executable(GlobalShortcutTest test_global_shortcut.cpp)
+    target_link_libraries(GlobalShortcutTest PRIVATE OrchestrateApplication Qt6::Test user32)
+    set_target_properties(GlobalShortcutTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_BINARY_DIR}/global-shortcut-test>")
+    add_test(NAME global_shortcut COMMAND GlobalShortcutTest
+        -o "${CMAKE_CURRENT_BINARY_DIR}/global-shortcut-test/results.txt,txt" -o -,txt)
+    set_tests_properties(global_shortcut PROPERTIES ENVIRONMENT "PATH=${test_path}" TIMEOUT 30)
     add_executable(StartupVisibilityTest test_startup_visibility.cpp)
     target_link_libraries(StartupVisibilityTest PRIVATE Qt6::Core Qt6::Sql Qt6::Test user32)
     target_compile_definitions(StartupVisibilityTest PRIVATE ORCHESTRATE_APPLICATION="$<TARGET_FILE:Orchestrate>")
@@ -203,6 +209,19 @@ foreach(application_test AutomationContractTest BuiltinAcceptanceTest HeadingTex
         ClipboardTest GitHistoryTest WorkspaceNavigationTest ConfigurableToolsTest)
     target_link_libraries(${application_test} PRIVATE OrchestrateApplication)
 endforeach()
+
+add_executable(SkinLibraryTest test_skin_library.cpp)
+target_link_libraries(SkinLibraryTest PRIVATE OrchestrateUi Qt6::Test)
+add_test(NAME skin_library COMMAND SkinLibraryTest)
+
+add_executable(ThemeRenderingTest test_theme_rendering.cpp)
+target_link_libraries(ThemeRenderingTest PRIVATE OrchestrateText Qt6::Test)
+add_test(NAME theme_rendering COMMAND ThemeRenderingTest)
+
+set_tests_properties(skin_library theme_rendering PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+if(WIN32)
+    set_property(TEST skin_library theme_rendering APPEND PROPERTY ENVIRONMENT "PATH=${test_path}")
+endif()
 
 get_property(test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 foreach(test_target IN LISTS test_targets)

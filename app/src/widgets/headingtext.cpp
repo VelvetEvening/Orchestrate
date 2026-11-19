@@ -173,8 +173,7 @@ void HeadingText::render(QTextDocument &document, const QString &source, const M
             const QSizeF logicalSize(original.width() / 3.0 * scale, original.height() / 3.0 * scale);
             // QTextDocument downsamples images without a smooth-pixmap hint.
             // Filter once at the viewport's actual pixel density to keep fine strokes.
-            const auto image = original.scaled(qMax(1, qRound(logicalSize.width() * devicePixelRatio)),
-                qMax(1, qRound(logicalSize.height() * devicePixelRatio)), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+            const auto image = MathText::displayImage(original, (logicalSize * devicePixelRatio).toSize().expandedTo(QSize(1, 1)));
             QByteArray png;
             QBuffer buffer(&png);
             buffer.open(QIODevice::WriteOnly);

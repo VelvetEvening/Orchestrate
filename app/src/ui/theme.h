@@ -2,48 +2,59 @@
 
 #include <QColor>
 #include <QIcon>
+#include <QList>
 #include <QMargins>
 #include <QString>
 
+class QAbstractItemModel;
 class QApplication;
 class QCalendarWidget;
+class QComboBox;
 class QLayout;
+class QModelIndex;
 class QWidget;
+struct SkinTheme;
 
 namespace UiTheme {
 // Shared by the stylesheet, custom calendar/drag painting and status badges.
-inline const char *Background = "#f7f9fa";
-inline const char *Sidebar = "#eff3f4";
-inline const char *IndexSurface = "#f7f9fa";
-inline const char *Surface = "#ffffff";
-inline const char *Text = "#2f3b48";
-inline const char *Muted = "#5e6c78";
-inline const char *Border = "#dfe6ea";
-inline const char *ControlBorder = "#b3bfcd";
-inline const char *Accent = "#365f8c";
-inline const char *Selection = "#dfe9f2";
-inline const char *Hover = "#edf2f5";
-inline const char *Focus = "#6f8fb6";
+extern const QColor &Background;
+extern const QColor &Sidebar;
+extern const QColor &IndexSurface;
+extern const QColor &Surface;
+extern const QColor &Text;
+extern const QColor &Muted;
+extern const QColor &Border;
+extern const QColor &ControlBorder;
+extern const QColor &Accent;
+extern const QColor &Selection;
+extern const QColor &SelectionText;
+extern const QColor &Focus;
 // Calendar record markers are informational, not success/warning status.
-inline const char *DiaryMarker = "#648098";
-inline const char *ReminderMarker = "#887789";
-inline constexpr const char *Success = "#386b50";
-inline constexpr const char *SuccessBackground = "#edf5ef";
-inline constexpr const char *Warning = "#87611e";
-inline constexpr const char *WarningBackground = "#faf3e5";
-inline constexpr const char *Danger = "#a64545";
-inline constexpr const char *DangerBackground = "#fbefef";
-inline constexpr const char *DangerHoverBorder = "#e6c5c5";
-inline constexpr const char *Disabled = "#919ba9";
+extern const QColor &DiaryMarker;
+extern const QColor &ReminderMarker;
+extern const QColor &Success;
+extern const QColor &SuccessBackground;
+extern const QColor &Warning;
+extern const QColor &Danger;
+extern const QColor &DangerBackground;
+extern const QColor &Disabled;
+extern const QColor &GraphSecondary;
+extern const QColor &GraphTertiary;
 
-enum class Preset { Mist, Paper, Precision };
-Preset preset();
-QString presetId();
-void apply(QApplication &app, const QString &id);
+QString paletteId();
+QString layoutId();
+bool isCompact();
+void setInstalledThemes(const QList<SkinTheme> &themes);
+QList<SkinTheme> installedThemes();
+QString sidebarImagePath();
+void apply(QApplication &app, const QString &paletteId, const QString &layoutId);
 void install(QApplication &app);
 QIcon icon(const QString &name);
+QIcon paletteSwatch(const QString &id);
+void styleAppearanceChoice(QComboBox *choice);
 void setRole(QWidget *widget, const char *role);
 void setSurface(QWidget *widget, const char *surface);
 void setLayoutMetrics(QLayout *layout, const QMargins &margins, int spacing = -1);
+void setItemForeground(QAbstractItemModel *model, const QModelIndex &index, const char *colorToken);
 void applyCalendarPalette(QCalendarWidget *calendar);
 }

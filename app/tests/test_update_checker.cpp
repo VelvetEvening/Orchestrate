@@ -1,8 +1,8 @@
 #include "test_support.h"
 #include "update/updatechecker.h"
 #include "update/updatewidget.h"
+#include <QAbstractButton>
 #include <QApplication>
-#include <QCheckBox>
 #include <QDir>
 #include <QFile>
 #include <QFontDatabase>
@@ -149,15 +149,30 @@ private slots:
         QTemporaryDir dir; Network network; network.delay = -1;
         auto now = QDateTime::currentDateTimeUtc();
         UpdateChecker checker(dir.filePath("check.json"), &network);
-        checker.now_ = [&] { return now; }; checker.start();
+        checker.now_ = [&] { return now; };
+        UpdateWidget widget(nullptr, &checker);
+        auto *toggle = widget.findChild<QAbstractButton *>("automaticUpdatesEnabled");
+        QVERIFY(toggle && toggle->isCheckable() && toggle->isChecked());
+        QCOMPARE(toggle->text(), QStringLiteral("开启"));
+        widget.show();
+        checker.start();
         QSignalSpy done(&checker, &UpdateChecker::checkFinished);
         now = now.addSecs(181); checker.checkAutomatic(); QVERIFY(checker.checking());
-        QString error; QVERIFY(checker.setAutomaticEnabled(false, &error));
+        QTest::mouseClick(toggle, Qt::LeftButton);
+        QVERIFY(!toggle->isChecked() && !checker.automaticEnabled());
+        QCOMPARE(toggle->text(), QStringLiteral("关闭"));
         QVERIFY(!checker.checking()); QVERIFY(!checker.timer_.isActive()); QCOMPARE(done.count(), 1);
         UpdateChecker restarted(dir.filePath("check.json"), &network);
         QVERIFY(!restarted.automaticEnabled());
         network.delay = 0; checker.checkNow(); QTRY_COMPARE(done.count(), 2);
         QVERIFY(checker.hasUpdate()); QVERIFY(!checker.timer_.isActive());
+        toggle->setFocus();
+        QTest::keyClick(toggle, Qt::Key_Space);
+        QVERIFY(toggle->isChecked() && checker.automaticEnabled() && checker.timer_.isActive());
+        QCOMPARE(toggle->text(), QStringLiteral("开启"));
+        QCOMPARE(network.requests, 2);
+        UpdateChecker reenabled(dir.filePath("check.json"), &network);
+        QVERIFY(reenabled.automaticEnabled());
     }
 
     void pausedChecksAndDuplicateManualClicks()
@@ -203,8 +218,17 @@ private slots:
         const auto blocked = dir.filePath("not-a-directory"); QFile file(blocked);
         QVERIFY(file.open(QIODevice::WriteOnly)); file.close();
         UpdateChecker unwritable(blocked + "/check.json", &network);
-        QString error; QVERIFY(!unwritable.setAutomaticEnabled(false, &error));
-        QVERIFY(unwritable.automaticEnabled()); QVERIFY(!error.isEmpty());
+        UpdateWidget widget(nullptr, &unwritable);
+        auto *toggle = widget.findChild<QAbstractButton *>("automaticUpdatesEnabled");
+        auto *failure = widget.findChild<QLabel *>("automaticUpdatesStatus");
+        auto *status = widget.findChild<QLabel *>("updateStatus");
+        QVERIFY(toggle && failure && status);
+        const QString statusBeforeToggle = status->text();
+        toggle->click();
+        QVERIFY(unwritable.automaticEnabled() && toggle->isChecked());
+        QCOMPARE(toggle->text(), QStringLiteral("开启"));
+        QVERIFY(!failure->isHidden() && failure->text().contains(QStringLiteral("无法保存自动更新检查设置")));
+        QCOMPARE(status->text(), statusBeforeToggle);
         unwritable.start(); unwritable.earliestCheck_ = QDateTime::currentDateTimeUtc().addSecs(-1);
         unwritable.checkAutomatic(); QCOMPARE(network.requests, 1);
         QVERIFY(unwritable.timer_.remainingTime() > 23 * 60 * 60 * 1000);

@@ -6,22 +6,27 @@
 #include "platform/autostart.h"
 
 class QAction;
-class QCheckBox;
+class ContentWorkspace;
 class GlobalShortcut;
 class QCloseEvent;
 class QFrame;
 class QLabel;
 class QMenu;
+class QNetworkAccessManager;
 class QPushButton;
+class QScrollArea;
 class QStackedWidget;
 class QSystemTrayIcon;
+class SkinLibrary;
+class UpdateWidget;
 
 class MainWindow final : public QMainWindow
 {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr, std::unique_ptr<AutoStart> autoStart = nullptr);
+    explicit MainWindow(QWidget *parent = nullptr, std::unique_ptr<AutoStart> autoStart = nullptr,
+                        QNetworkAccessManager *skinNetwork = nullptr);
     ~MainWindow() override = default;
     bool ready() const { return database_.isOpen(); }
     bool mainWindowVisible() const;
@@ -34,9 +39,16 @@ protected:
 #endif
 
 private:
+    class NavigationSidebar;
+    void toggleMainWindow();
     bool savePendingChanges();
     void buildUi();
     void buildNavigation(QWidget *parent);
+    QScrollArea *makeSettingsPage();
+    QFrame *makeAppearanceSection(QWidget *parent);
+    QFrame *makeRuntimeSection(QWidget *parent);
+    void applyAppearance(const QString &palette, const QString &layout);
+    void openSkinManager(QWidget *source);
     void buildTray();
     void switchToPage(int index, bool confirmLeave = true);
     void toggleSidebar();
@@ -48,13 +60,17 @@ private:
     void openUpdatesPage();
 
     std::unique_ptr<AutoStart> autoStart_;
-    QCheckBox *autoStartCheck_ = nullptr;
+    QPushButton *autoStartToggle_ = nullptr;
     QLabel *autoStartStatus_ = nullptr;
     QPushButton *systemStartupButton_ = nullptr;
-    QFrame *sidebar_ = nullptr;
+    NavigationSidebar *sidebar_ = nullptr;
+    SkinLibrary *skinLibrary_ = nullptr;
     GlobalShortcut *globalShortcut_ = nullptr;
     QPushButton *sidebarToggleButton_ = nullptr;
     QStackedWidget *pageStack_ = nullptr;
+    ContentWorkspace *settingsWorkspace_ = nullptr;
+    QScrollArea *settingsScroll_ = nullptr;
+    UpdateWidget *updateWidget_ = nullptr;
     QSystemTrayIcon *trayIcon_ = nullptr;
     QMenu *trayMenu_ = nullptr;
     QAction *showAction_ = nullptr;

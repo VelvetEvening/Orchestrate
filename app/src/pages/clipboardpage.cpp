@@ -302,7 +302,7 @@ void ClipboardPage::refreshTabs(int selected)
         int current=0;
         for (const auto &tab : tabs) {
             const int index=tabs_->addTab(tab.name); tabs_->setTabData(index,tab.id);
-            if (tab.history) tabs_->setTabIcon(index,QIcon(QStringLiteral(":/icons/star.svg")));
+            if (tab.history) tabs_->setTabIcon(index, UiTheme::icon(QStringLiteral("star")));
             tabs_->setTabToolTip(index,tab.history ? QStringLiteral("自动收纳复制的内容") : tab.name);
             if (tab.id==selected) current=index;
         }

@@ -80,8 +80,8 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!page.runRecords_.value(t.id).running, 5000);
         QVERIFY(!page.runRecords_.value(t.id).failed);
         {
-            const auto restoreTheme = qScopeGuard([] { UiTheme::apply(*qApp, QStringLiteral("mist")); });
-            UiTheme::apply(*qApp, QStringLiteral("paper"));
+            const auto restoreTheme = qScopeGuard([] { UiTheme::apply(*qApp, "mist", "standard"); });
+            UiTheme::apply(*qApp, "paper", "standard");
             QCoreApplication::processEvents();
             QCOMPARE(page.runStatus_->font().weight(), QFont::DemiBold);
             const auto icon = toolItem->icon(0).pixmap(32,32).toImage();

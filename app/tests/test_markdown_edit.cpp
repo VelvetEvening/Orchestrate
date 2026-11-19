@@ -3,6 +3,7 @@
 #include "widgets/mathpreview.h"
 #include "widgets/textlayoutguard.h"
 #include "ui/theme.h"
+#include "test_skin_fixture.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QDir>
@@ -12,6 +13,7 @@
 #include <QContextMenuEvent>
 #include <QInputMethodEvent>
 #include <QPlainTextEdit>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTextBlock>
 #include <QTextTable>
@@ -45,7 +47,12 @@ private slots:
         QFETCH(bool, reading);
         QFETCH(bool, sourceMode);
         QFETCH(qreal, pointSize);
-        UiTheme::apply(*qApp, QStringLiteral("mist"));
+        UiTheme::setInstalledThemes({TestSkinFixture::theme()});
+        const auto restoreTheme = qScopeGuard([] {
+            UiTheme::setInstalledThemes({});
+            UiTheme::apply(*qApp, "mist", "standard");
+        });
+        UiTheme::apply(*qApp, "mist", "standard");
         HeadingTextEdit editor;
         editor.resize(640, 480);
         editor.setPlainText(QStringLiteral("# 阅读标题\n\n正文阅读与未保存草稿。\n\n[主题链接](https://example.com)\n\n`行内代码`\n\n- 项目记录"));
@@ -70,8 +77,11 @@ private slots:
         source->setTextCursor(selection);
         view->setSourceCursor(position, anchor);
         QSignalSpy zoomChanges(&editor, &HeadingTextEdit::textPointSizeChanged);
-        for (const auto &id : {QStringLiteral("paper"), QStringLiteral("precision"), QStringLiteral("mist")}) {
-            UiTheme::apply(*qApp, id);
+        const QList<QPair<QString, QString>> appearances {
+            {TestSkinFixture::Id, "compact"}, {"paper", "standard"}
+        };
+        for (const auto &[palette, layout] : appearances) {
+            UiTheme::apply(*qApp, palette, layout);
             QCoreApplication::processEvents();
             QCOMPARE(source->font().pointSizeF(), pointSize);
             QCOMPARE(view->font().pointSizeF(), pointSize);

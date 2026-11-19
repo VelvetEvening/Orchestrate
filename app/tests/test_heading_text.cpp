@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "test_support.h"
+#include "test_skin_fixture.h"
 #include "platform/fileaccess.h"
 #include "pages/collaborationrecorddialog.h"
 #include "update/updatewidget.h"
@@ -7,7 +8,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include "platform/globalshortcut.h"
-#include <QCheckBox>
+#include <QAbstractButton>
+#include <QButtonGroup>
 #include <QToolButton>
 #include <QCloseEvent>
 #include <QLabel>
@@ -1196,26 +1198,26 @@ private slots:
             MainWindow window(nullptr, backend());
             window.show();
             button(window, QStringLiteral("设置"))->click();
-            auto *check = window.findChild<QCheckBox *>(QStringLiteral("autoStartCheck"));
+            auto *toggle = window.findChild<QAbstractButton *>(QStringLiteral("autoStartEnabled"));
             auto *status = window.findChild<QLabel *>(QStringLiteral("autoStartStatus"));
-            QVERIFY(check && check->isEnabled() && !check->isChecked());
-            QTest::mouseClick(check, Qt::LeftButton, Qt::NoModifier, QPoint(10, check->height() / 2));
-            QVERIFY(check->isChecked());
-            QVERIFY(status->text().contains(QStringLiteral("已开启")));
-            capture(window, QStringLiteral("settings-autostart"));
-            auto *updateCheck = window.findChild<QPushButton *>(QStringLiteral("checkUpdatesButton"));
-            QVERIFY(updateCheck && updateCheck->isVisible());
-            QVERIFY(window.findChild<QLabel *>(QStringLiteral("updateStatus")));
-            window.resize(980, 640);
-            QCoreApplication::processEvents();
-            auto *retry = button(window, QStringLiteral("重试注册 Alt+X"));
-            QVERIFY(retry->mapTo(&window, retry->rect().bottomRight()).y() < window.height());
-            capture(window, QStringLiteral("settings-autostart-compact"));
+            QVERIFY(toggle && status && toggle->isEnabled() && toggle->isCheckable() && !toggle->isChecked());
+            QCOMPARE(toggle->text(), QStringLiteral("关闭"));
+            QVERIFY(status->isHidden());
+            QTest::mouseClick(toggle, Qt::LeftButton);
+            QVERIFY(toggle->isChecked());
+            QCOMPARE(toggle->text(), QStringLiteral("开启"));
+            QVERIFY(status->isHidden());
         }
         MainWindow restored(nullptr, backend());
-        auto *check = restored.findChild<QCheckBox *>(QStringLiteral("autoStartCheck"));
-        QVERIFY(check->isChecked());
-        check->setChecked(false);
+        restored.show();
+        button(restored, QStringLiteral("设置"))->click();
+        auto *toggle = restored.findChild<QAbstractButton *>(QStringLiteral("autoStartEnabled"));
+        auto *status = restored.findChild<QLabel *>(QStringLiteral("autoStartStatus"));
+        QVERIFY(toggle && status && toggle->isChecked());
+        toggle->setFocus();
+        QTest::keyClick(toggle, Qt::Key_Space);
+        QVERIFY(!toggle->isChecked() && status->isHidden());
+        QCOMPARE(toggle->text(), QStringLiteral("关闭"));
         QSettings actual(path, QSettings::IniFormat);
         actual.sync();
         QVERIFY(!actual.contains(startupEntry));
@@ -1223,14 +1225,13 @@ private slots:
         actual.setValue(startupEntry, QStringLiteral("\"C:\\old\\Orchestrate.exe\""));
         actual.sync();
         button(restored, QStringLiteral("设置"))->click();
-        QVERIFY(check->isChecked());
-        QVERIFY(restored.findChild<QLabel *>(QStringLiteral("autoStartStatus"))->text().contains(QStringLiteral("其他位置")));
+        QVERIFY(toggle->isChecked() && status->isVisible());
+        QVERIFY(status->text().contains(QStringLiteral("其他位置")));
         QSettings approval(approvalPath, QSettings::IniFormat);
         approval.setValue(startupEntry, QByteArray::fromHex("030000000000000000000000"));
         approval.sync();
-        restored.show();
         button(restored, QStringLiteral("设置"))->click();
-        QVERIFY(restored.findChild<QLabel *>(QStringLiteral("autoStartStatus"))->text().contains(QStringLiteral("已被 Windows 禁用")));
+        QVERIFY(status->isVisible() && status->text().contains(QStringLiteral("已被 Windows 禁用")));
         QVERIFY(button(restored, QStringLiteral("打开 Windows 启动应用设置"))->isVisible());
         capture(restored, QStringLiteral("settings-autostart-disabled"));
     }
@@ -1245,10 +1246,52 @@ private slots:
             std::make_unique<QSettings>(blocker.fileName() + "/login.ini", QSettings::IniFormat),
             nullptr, QStringLiteral("C:/Orchestrate.exe"));
         MainWindow window(nullptr, std::move(startup));
-        auto *check = window.findChild<QCheckBox *>(QStringLiteral("autoStartCheck"));
-        check->setChecked(true);
-        QVERIFY(!check->isChecked());
-        QVERIFY(window.findChild<QLabel *>(QStringLiteral("autoStartStatus"))->text().contains(QStringLiteral("保存开机启动设置失败")));
+        auto *toggle = window.findChild<QAbstractButton *>(QStringLiteral("autoStartEnabled"));
+        auto *status = window.findChild<QLabel *>(QStringLiteral("autoStartStatus"));
+        QVERIFY(toggle && status);
+        toggle->click();
+        QVERIFY(!toggle->isChecked() && !status->isHidden());
+        QCOMPARE(toggle->text(), QStringLiteral("关闭"));
+        QVERIFY(status->text().contains(QStringLiteral("保存开机启动设置失败")));
+    }
+
+    void closeToTrayPreferencePersistsAndRecoversFromWriteFailure()
+    {
+        {
+            MainWindow window;
+            window.show();
+            button(window, QStringLiteral("设置"))->click();
+            auto *toggle = window.findChild<QAbstractButton *>("closeToTrayEnabled");
+            QVERIFY(toggle && toggle->isVisible() && toggle->isChecked());
+            QTest::mouseClick(toggle, Qt::LeftButton);
+            QVERIFY(!toggle->isChecked());
+            QCOMPARE(toggle->text(), QStringLiteral("关闭"));
+            QCOMPARE(database_->setting("close_to_tray"), QStringLiteral("false"));
+        }
+        MainWindow restored;
+        restored.show();
+        button(restored, QStringLiteral("设置"))->click();
+        auto *toggle = restored.findChild<QAbstractButton *>("closeToTrayEnabled");
+        auto *status = restored.findChild<QLabel *>("closeToTrayStatus");
+        QVERIFY(toggle && status && !toggle->isChecked() && status->isHidden());
+        const QString connection = QStringLiteral("blocked-tray-settings");
+        const auto cleanup = qScopeGuard([&] { QSqlDatabase::removeDatabase(connection); });
+        auto sql = QSqlDatabase::addDatabase("QSQLITE", connection);
+        sql.setDatabaseName(database_->databasePath());
+        QVERIFY(sql.open());
+        QSqlQuery query(sql);
+        QVERIFY(query.exec("CREATE TRIGGER fail_tray BEFORE INSERT ON app_settings "
+                           "WHEN NEW.key = 'close_to_tray' BEGIN SELECT RAISE(ABORT,'blocked tray setting'); END"));
+        toggle->setFocus();
+        QTest::keyClick(toggle, Qt::Key_Space);
+        QVERIFY(!toggle->isChecked() && status->isVisible());
+        QVERIFY(status->text().contains(QStringLiteral("blocked tray setting")));
+        QCOMPARE(database_->setting("close_to_tray"), QStringLiteral("false"));
+        QVERIFY(query.exec("DROP TRIGGER fail_tray"));
+        QTest::keyClick(toggle, Qt::Key_Space);
+        QVERIFY(toggle->isChecked() && status->isHidden());
+        QCOMPARE(toggle->text(), QStringLiteral("开启"));
+        QCOMPARE(database_->setting("close_to_tray"), QStringLiteral("true"));
     }
 
     void calendarFocusIndependentRendering()
@@ -1316,7 +1359,7 @@ private slots:
         calendar->setSelectedDate(QDate::currentDate().addDays(QDate::currentDate().day() == 1 ? 1 : -1));
         capture(window, QStringLiteral("calendar-today-unselected"));
         auto *tray = window.findChild<QSystemTrayIcon *>();
-        auto *closeCheck = window.findChild<QCheckBox *>(QStringLiteral("closeToTrayCheck"));
+        auto *closeCheck = window.findChild<QAbstractButton *>(QStringLiteral("closeToTrayEnabled"));
         auto *shortcut = window.findChild<GlobalShortcut *>();
         QVERIFY(tray && closeCheck && shortcut);
         tray->show();
@@ -1343,37 +1386,157 @@ private slots:
         QVERIFY(close.isAccepted());
     }
 
-    void shortcutPreferenceAndIsolation()
+    void shortcutTogglesWindowAndKeepsDraft()
+    {
+        QVERIFY(database_->setSetting("global_shortcut_enabled", "false"));
+        MainWindow window;
+        auto *shortcut = window.findChild<GlobalShortcut *>();
+        auto *closeToTray = window.findChild<QAbstractButton *>("closeToTrayEnabled");
+        auto *tray = window.findChild<QSystemTrayIcon *>();
+        QVERIFY(shortcut && closeToTray && tray && tray->contextMenu());
+        closeToTray->setChecked(false);
+        auto *showAction = tray->contextMenu()->actions().first();
+        auto toggle = [&] { emit shortcut->activated(); };
+        toggle();
+        QTRY_VERIFY(window.isActiveWindow());
+        button(window, QStringLiteral("添加日记"))->click();
+        auto *title = window.findChild<QLineEdit *>("diaryTitle");
+        QVERIFY(title && title->isVisible());
+        title->setFocus();
+        QTRY_VERIFY(title->hasFocus());
+        QTest::keyClicks(title, "unfinished");
+        title->setCursorPosition(3);
+        toggle();
+        QVERIFY(!window.isVisible());
+        QVERIFY(!QApplication::activeModalWidget());
+        QWidget other;
+        other.show();
+        other.activateWindow();
+        QTRY_VERIFY(other.isActiveWindow());
+        toggle();
+        QTRY_VERIFY(title->hasFocus());
+        QCOMPARE(title->text(), QStringLiteral("unfinished"));
+        QCOMPARE(title->cursorPosition(), 3);
+        QVERIFY(title->isUndoAvailable());
+        showAction->trigger();
+        QVERIFY(window.mainWindowVisible());
+
+        other.activateWindow();
+        QTRY_VERIFY(other.isActiveWindow());
+        toggle();
+        QTRY_VERIFY(window.isActiveWindow());
+        QVERIFY(window.mainWindowVisible());
+        window.showMinimized();
+        toggle();
+        QTRY_VERIFY(window.isActiveWindow() && window.mainWindowVisible());
+
+        QDialog prompt(&window);
+        prompt.setModal(true);
+        prompt.show();
+        QTRY_COMPARE(QApplication::activeModalWidget(), &prompt);
+        toggle();
+        QVERIFY(prompt.isVisible() && window.isVisible());
+    }
+
+    void shortcutPreferencesAndLetterEditingRemainIsolated()
     {
         {
             MainWindow window;
-            auto *check = window.findChild<QCheckBox *>(QStringLiteral("globalShortcutCheck"));
+            window.showMainWindow();
+            button(window, QStringLiteral("设置"))->click();
+            window.activateWindow();
+            QTRY_VERIFY(window.isActiveWindow());
+            auto *toggle = window.findChild<QAbstractButton *>("globalShortcutEnabled");
+            auto *modifier = window.findChild<QButtonGroup *>("globalShortcutModifier");
+            auto *letter = window.findChild<QLineEdit *>("globalShortcutLetter");
+            auto *status = window.findChild<QLabel *>("globalShortcutStatus");
+            auto *manage = window.findChild<QPushButton *>("manageSkinsButton");
             auto *shortcut = window.findChild<GlobalShortcut *>();
-            auto *label = window.findChild<QLabel *>(QStringLiteral("globalShortcutStatus"));
-            QVERIFY(check && shortcut && label);
-            QVERIFY(check->isChecked());
-            QVERIFY(!shortcut->isRegistered());
-            QVERIFY(label->text().contains(QStringLiteral("测试环境")));
-            QSignalSpy spy(shortcut, &GlobalShortcut::activated);
+            QVERIFY(toggle && modifier && letter && status && manage && shortcut);
+            QVERIFY(toggle->isChecked() && !shortcut->isRegistered() && status->isHidden());
+            QVERIFY(!window.findChild<QPushButton *>("globalShortcutApply"));
+            QSignalSpy activations(shortcut, &GlobalShortcut::activated);
             qintptr result = 123;
             QVERIFY(!shortcut->nativeEventFilter("windows_dispatcher_MSG", nullptr, &result));
-            QCOMPARE(spy.count(), 0);
+            QCOMPARE(activations.count(), 0);
             QCOMPARE(result, qintptr(123));
-            check->setChecked(false);
-            QVERIFY(label->text().contains(QStringLiteral("已禁用")));
-            QVERIFY(!button(window, QStringLiteral("重试注册 Alt+X"))->isEnabled());
-        }
-        {
-            MainWindow window;
-            auto *check = window.findChild<QCheckBox *>(QStringLiteral("globalShortcutCheck"));
-            QVERIFY(check && !check->isChecked());
-            check->setChecked(true);
-            QVERIFY(button(window, QStringLiteral("重试注册 Alt+X"))->isEnabled());
-            button(window, QStringLiteral("重试注册 Alt+X"))->click();
-            QVERIFY(!window.findChild<GlobalShortcut *>()->isRegistered());
+
+            QTest::mouseClick(toggle, Qt::LeftButton);
+            QVERIFY(!shortcut->enabled());
+            modifier->button(int(Qt::ControlModifier))->click();
+            QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Ctrl+X"));
+            letter->setFocus();
+            QTRY_VERIFY(letter->hasFocus());
+            QTest::mouseClick(letter, Qt::LeftButton);
+            QCOMPARE(letter->selectedText(), QStringLiteral("X"));
+            QTest::keyClicks(letter, "v");
+            QVERIFY(letter->toolTip().contains(QStringLiteral("右键")) && status->isHidden());
+            QTest::keyClicks(letter, "j");
+            QCOMPARE(letter->text(), QStringLiteral("J"));
+            QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Ctrl+J"));
+
+            QTest::keyClick(letter, Qt::Key_Backspace);
+            QTest::keyClicks(letter, "1!");
+            letter->insert(QStringLiteral("汉"));
+            letter->insert(QStringLiteral("ab"));
+            QVERIFY(letter->text().isEmpty());
+            manage->setFocus();
+            QTRY_VERIFY(manage->hasFocus());
+            QCOMPARE(letter->text(), QStringLiteral("J"));
+            QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Ctrl+J"));
         }
         MainWindow restored;
-        QVERIFY(restored.findChild<QCheckBox *>(QStringLiteral("globalShortcutCheck"))->isChecked());
+        auto *toggle = restored.findChild<QAbstractButton *>("globalShortcutEnabled");
+        auto *shortcut = restored.findChild<GlobalShortcut *>();
+        auto *modifier = restored.findChild<QButtonGroup *>("globalShortcutModifier");
+        auto *letter = restored.findChild<QLineEdit *>("globalShortcutLetter");
+        QVERIFY(toggle && shortcut && modifier && letter && !toggle->isChecked());
+        QCOMPARE(shortcut->binding(), QKeyCombination(Qt::ControlModifier, Qt::Key_J));
+        toggle->click();
+        QVERIFY(toggle->isChecked() && !shortcut->isRegistered());
+        QCOMPARE(database_->setting("global_shortcut_enabled"), QStringLiteral("true"));
+        modifier->button(int(Qt::AltModifier))->click();
+        QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Alt+J"));
+        QTest::keyClicks(letter, "k");
+        QCOMPARE(shortcut->binding(), QKeyCombination(Qt::AltModifier, Qt::Key_K));
+        QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Alt+K"));
+    }
+
+    void shortcutSettingsWriteFailure()
+    {
+        QVERIFY(database_->setSetting("global_shortcut_enabled", "false"));
+        MainWindow window;
+        auto *enable = window.findChild<QAbstractButton *>("globalShortcutEnabled");
+        auto *letter = window.findChild<QLineEdit *>("globalShortcutLetter");
+        auto *modifier = window.findChild<QButtonGroup *>("globalShortcutModifier");
+        auto *status = window.findChild<QLabel *>("globalShortcutStatus");
+        auto *shortcut = window.findChild<GlobalShortcut *>();
+        QVERIFY(enable && letter && modifier && status && shortcut);
+        const QString connection = QStringLiteral("blocked-shortcut-settings");
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", connection);
+            db.setDatabaseName(database_->databasePath());
+            QVERIFY(db.open());
+            QSqlQuery query(db);
+            QVERIFY(query.exec("CREATE TRIGGER fail_shortcut BEFORE INSERT ON app_settings "
+                               "WHEN NEW.key IN ('global_shortcut_enabled','global_shortcut_binding') "
+                               "BEGIN SELECT RAISE(ABORT,'blocked shortcut setting'); END"));
+            QTest::keyClicks(letter, "j");
+            QCOMPARE(GlobalShortcut::text(shortcut->binding()), QStringLiteral("Alt+X"));
+            QCOMPARE(letter->text(), QStringLiteral("X"));
+            QVERIFY(!status->isHidden() && status->text().contains("blocked shortcut setting"));
+            QVERIFY(database_->setting("global_shortcut_binding").isEmpty());
+            modifier->button(int(Qt::ControlModifier))->click();
+            QCOMPARE(modifier->checkedId(), int(Qt::AltModifier));
+            QCOMPARE(GlobalShortcut::text(shortcut->binding()), QStringLiteral("Alt+X"));
+            QVERIFY(database_->setting("global_shortcut_binding").isEmpty());
+            enable->click();
+            QVERIFY(!enable->isChecked() && !shortcut->enabled());
+            QCOMPARE(enable->text(), QStringLiteral("关闭"));
+            QVERIFY(!status->isHidden() && status->text().contains("blocked shortcut setting"));
+            QCOMPARE(database_->setting("global_shortcut_enabled"), QStringLiteral("false"));
+        }
+        QSqlDatabase::removeDatabase(connection);
     }
 
     void rules_data()
@@ -1835,16 +1998,22 @@ private slots:
 
     void calendarRecordSymbolsAndFutureDates_data()
     {
-        QTest::addColumn<QString>("preset");
-        QTest::newRow("mist") << QStringLiteral("mist");
-        QTest::newRow("paper") << QStringLiteral("paper");
-        QTest::newRow("precision") << QStringLiteral("precision");
+        QTest::addColumn<QString>("palette");
+        QTest::addColumn<QString>("layout");
+        QTest::newRow("light-standard") << QStringLiteral("mist") << QStringLiteral("standard");
+        QTest::newRow("dark-compact") << TestSkinFixture::Id << QStringLiteral("compact");
     }
     void calendarRecordSymbolsAndFutureDates()
     {
-        QFETCH(QString, preset);
-        UiTheme::apply(*qApp, preset);
-        const auto restoreTheme = qScopeGuard([] { UiTheme::apply(*qApp, QStringLiteral("mist")); });
+        QFETCH(QString, palette);
+        QFETCH(QString, layout);
+        UiTheme::setInstalledThemes({TestSkinFixture::theme()});
+        UiTheme::apply(*qApp, palette, layout);
+        const auto restoreTheme = qScopeGuard([] {
+            UiTheme::setInstalledThemes({});
+            UiTheme::apply(*qApp, "mist", "standard");
+        });
+        QCOMPARE(UiTheme::paletteId(), palette);
         CalendarCellProbe probe;
         const QDate today=QDate::currentDate();
         probe.setCurrentPage(today.year(),today.month());
@@ -1859,7 +2028,7 @@ private slots:
         QVERIFY(countColor(both,QColor(UiTheme::IndexSurface))>200);
         QVERIFY(countColor(both,QColor(UiTheme::Muted))>0);
         // The diary is solid; the reminder ring leaves the index surface visible.
-        const int markerY = preset == QStringLiteral("precision") ? 46 : 50;
+        const int markerY = layout == QStringLiteral("compact") ? 46 : 50;
         QCOMPARE(both.pixelColor(33,markerY),QColor(UiTheme::DiaryMarker));
         QCOMPARE(both.pixelColor(45,markerY),QColor(UiTheme::IndexSurface));
         QVERIFY(both.pixelColor(47,markerY)!=QColor(UiTheme::IndexSurface));

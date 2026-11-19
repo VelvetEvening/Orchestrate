@@ -20,7 +20,7 @@ public:
             format.setForeground(QColor(UiTheme::Text)); format.setFontWeight(QFont::DemiBold);
         } else if (text.startsWith('+')) { format.setForeground(QColor(UiTheme::Success)); format.setBackground(QColor(UiTheme::SuccessBackground)); }
         else if (text.startsWith('-')) { format.setForeground(QColor(UiTheme::Danger)); format.setBackground(QColor(UiTheme::DangerBackground)); }
-        else if (text.startsWith(QStringLiteral("@@"))) { format.setForeground(QColor(UiTheme::Accent)); format.setBackground(QColor(UiTheme::Selection)); }
+        else if (text.startsWith(QStringLiteral("@@"))) { format.setForeground(UiTheme::SelectionText); format.setBackground(UiTheme::Selection); }
         else return;
         setFormat(0, text.size(), format);
     }

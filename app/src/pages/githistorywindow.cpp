@@ -40,8 +40,9 @@ void tableStyle(QTableView *table) {
 struct Edge { int from; int to; bool upper; int color; };
 struct GraphRow { int lane = 0; int color = 0; QList<Edge> edges; };
 QColor laneColor(int lane) {
-    const char *colors[]{UiTheme::Accent, UiTheme::Success, UiTheme::Warning, "#805889", "#32747b", UiTheme::Danger};
-    return QColor(colors[lane % 6]);
+    const QColor colors[]{UiTheme::Accent, UiTheme::Success, UiTheme::Warning,
+                          UiTheme::GraphSecondary, UiTheme::GraphTertiary, UiTheme::Danger};
+    return colors[lane % 6];
 }
 }
 
@@ -348,7 +349,10 @@ void GitHistoryWindow::displayBranches()
         const int row = branches_->rowCount(); branches_->insertRow(row);
         const QStringList texts{branch.name,Git::branchStateText(branch.state),branch.localId.isEmpty() ? QStringLiteral("—") : branch.localId.left(12),branch.remoteId.isEmpty() ? QStringLiteral("—") : branch.remoteId.left(12)};
         for(int col=0;col<4;++col) { auto *item=new QTableWidgetItem(texts[col]); item->setToolTip(col==2 ? branch.localId : col==3 ? branch.remoteId : texts[col]); branches_->setItem(row,col,item); }
-        branches_->item(row,1)->setForeground(QColor(branch.state==Git::BranchState::Equal ? UiTheme::Success : branch.state==Git::BranchState::Different ? UiTheme::Warning : UiTheme::Accent));
+        const char *color = branch.state == Git::BranchState::Equal ? "success"
+            : branch.state == Git::BranchState::Different ? "warning" : "accent";
+        auto *model = branches_->model();
+        UiTheme::setItemForeground(model, model->index(row, 1), color);
     }
     if (!compareRefresh_->isEnabled()) return;
     if (!comparisonError_.isEmpty()) {

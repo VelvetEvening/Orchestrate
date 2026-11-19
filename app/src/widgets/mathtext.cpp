@@ -1,4 +1,6 @@
 #include "mathtext.h"
+#include "ui/theme.h"
+#include <QPainter>
 #include <QTextBlock>
 #include <QTextCursor>
 #include <QTextDocument>
@@ -10,6 +12,18 @@ bool escaped(const QString &text, qsizetype pos)
     while (pos > 0 && text.at(--pos) == '\\') ++count;
     return count % 2;
 }
+}
+
+QImage MathText::displayImage(const QImage &raster, const QSize &size)
+{
+    auto image = raster.scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+        .convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    if (!image.isNull()) {
+        QPainter painter(&image);
+        painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        painter.fillRect(image.rect(), UiTheme::Text);
+    }
+    return image;
 }
 
 QVector<MathText::Span> MathText::spans(const QString &source)
