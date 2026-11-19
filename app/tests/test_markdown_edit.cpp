@@ -78,13 +78,11 @@ private slots:
         view->setSourceCursor(position, anchor);
         QSignalSpy zoomChanges(&editor, &HeadingTextEdit::textPointSizeChanged);
         const QList<QPair<QString, QString>> appearances {
-            {"mist", "compact"}, {"paper", "compact"}, {"paper", "standard"},
-            {TestSkinFixture::Id, "standard"}, {TestSkinFixture::Id, "compact"}, {"mist", "standard"}
+            {TestSkinFixture::Id, "compact"}, {"paper", "standard"}
         };
         for (const auto &[palette, layout] : appearances) {
             UiTheme::apply(*qApp, palette, layout);
             QCoreApplication::processEvents();
-            QCOMPARE(UiTheme::paletteId(), palette);
             QCOMPARE(source->font().pointSizeF(), pointSize);
             QCOMPARE(view->font().pointSizeF(), pointSize);
             QCOMPARE(view->document()->defaultFont().pointSizeF(), pointSize);

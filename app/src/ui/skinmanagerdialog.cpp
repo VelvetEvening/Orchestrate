@@ -374,7 +374,6 @@ void SkinManagerDialog::download(QTreeWidgetItem *item)
     if (!item || item->isHidden() || !item->data(StatusColumn, ActionEnabledRole).toBool() || library_.isBusy()) return;
     const auto id = item->data(NameColumn, SkinIdRole).toString();
     downloadingId_ = id;
-    downloadErrors_.remove(id);
     showStatus({});
     updateActions();
     library_.installTheme(id);

@@ -30,12 +30,12 @@ ctest --test-dir app/build-qt --output-on-failure --no-tests=error
 
    ```powershell
    ./app/package.ps1
-   python app/tests/verify_package.py 4.1.1 9
+   python app/tests/verify_package.py 4.2.0 9
    ```
 
 4. 确认 CI、包验收及必要的原生交互检查通过，为已验收提交打标签，发布 ZIP 与 `.zip.sha256`。Release 说明取自同版本的 `CHANGELOG.md` 条目。
 
-打包从 `git archive HEAD` 全新构建，只安装应用、更新器、内置工具、运行库及许可证。ZIP 含 `build-info.json` 和逐文件校验清单；本机另存 `.build.json`。同名 ZIP 不覆盖，可用 `-OutputDir` 指定仓库内另一忽略目录。
+打包从 `git archive HEAD` 全新构建，包含应用、更新器、内置工具、运行库及许可证。ZIP 含 `build-info.json` 和逐文件校验清单，本机另存 `.build.json`。如用 `-OutputDir` 将 ZIP 写到仓库内的其他忽略目录，验收时用 `--archive` 指定该 ZIP。
 
 成功后自动清理本次 `work-*`；失败保留现场，`-KeepWork` 可显式保留。`verify_package.py` 核对版本、源码提交、文件哈希、离线公式、无 SDK 环境的启动退出及数据库结构。
 

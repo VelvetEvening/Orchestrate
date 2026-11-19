@@ -5,13 +5,13 @@ QDialog, QMessageBox, QInputDialog { background: @surface@; }
 QLabel { background: transparent; }
 QFrame#sidebar { background: @sidebar@; border: none; }
 QFrame#windowHeader { background: @header@; border: none; border-bottom: 1px solid @border@; }
-QWidget[workspaceSurface="content"], QWidget[workspaceSurface="section"] {
+QWidget[workspaceSurface="content"] {
     background: @surface@; border: none; border-radius: 0;
 }
 QWidget[workspaceSurface="index"], QWidget[workspaceSurface="inset"] {
     background: @indexSurface@; border: none; border-radius: 0;
 }
-QWidget[workspaceSurface="section"], QWidget#updateWidget[workspaceSurface="section"] {
+QWidget[workspaceSurface="section"] {
     background: @surface@; border: none; border-bottom: 1px solid @border@; border-radius: 0;
 }
 QLabel#contentTitle, QLabel#objectTitle { color: @text@; font-size: 20px; font-weight: 600; }

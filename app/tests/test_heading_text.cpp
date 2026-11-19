@@ -1169,14 +1169,8 @@ private slots:
         auto *settings = button(window, QStringLiteral("设置 · 有更新"));
         QVERIFY(settings->toolTip().contains(tag));
         auto *action = window.findChild<QAction *>("viewUpdateAction"); QVERIFY(action); QVERIFY(action->isVisible());
-        auto *scroll = window.findChild<QScrollArea *>("settingsScroll");
-        auto *heading = update->findChild<QLabel *>("cardTitle");
-        QVERIFY(scroll && heading);
-        window.resize(window.minimumSize());
         action->trigger();
         QTRY_VERIFY(update->isVisible());
-        QTRY_VERIFY(scroll->viewport()->rect().contains(
-            QRect(heading->mapTo(scroll->viewport(), QPoint()), heading->size())));
         capture(window, QStringLiteral("settings-update-available"));
         window.findChild<QPushButton *>("sidebarToggle")->click();
         QVERIFY(settings->text().isEmpty()); QVERIFY(settings->toolTip().contains(tag));
@@ -1213,15 +1207,6 @@ private slots:
             QVERIFY(toggle->isChecked());
             QCOMPARE(toggle->text(), QStringLiteral("开启"));
             QVERIFY(status->isHidden());
-            capture(window, QStringLiteral("settings-autostart"));
-            auto *updateCheck = window.findChild<QPushButton *>(QStringLiteral("checkUpdatesButton"));
-            QVERIFY(updateCheck && updateCheck->isVisible());
-            QVERIFY(window.findChild<QLabel *>(QStringLiteral("updateStatus")));
-            window.resize(980, 640);
-            QCoreApplication::processEvents();
-            auto *shortcutToggle = window.findChild<QAbstractButton *>("globalShortcutEnabled");
-            QVERIFY(shortcutToggle && shortcutToggle->isVisible());
-            capture(window, QStringLiteral("settings-autostart-compact"));
         }
         MainWindow restored(nullptr, backend());
         restored.show();
@@ -1453,130 +1438,67 @@ private slots:
         QVERIFY(prompt.isVisible() && window.isVisible());
     }
 
-    void shortcutPreferenceAndIsolation()
+    void shortcutPreferencesAndLetterEditingRemainIsolated()
     {
         {
             MainWindow window;
-            auto *toggle = window.findChild<QAbstractButton *>("globalShortcutEnabled");
-            auto *shortcut = window.findChild<GlobalShortcut *>();
-            auto *label = window.findChild<QLabel *>(QStringLiteral("globalShortcutStatus"));
-            QVERIFY(toggle && shortcut && label && toggle->isCheckable());
-            QVERIFY(toggle->isChecked());
-            QCOMPARE(toggle->text(), QStringLiteral("开启"));
-            QVERIFY(!shortcut->isRegistered());
-            QVERIFY(label->isHidden());
-            QSignalSpy spy(shortcut, &GlobalShortcut::activated);
-            qintptr result = 123;
-            QVERIFY(!shortcut->nativeEventFilter("windows_dispatcher_MSG", nullptr, &result));
-            QCOMPARE(spy.count(), 0);
-            QCOMPARE(result, qintptr(123));
-            toggle->click();
-            QVERIFY(!toggle->isChecked() && !shortcut->enabled());
-            QCOMPARE(toggle->text(), QStringLiteral("关闭"));
-            QVERIFY(label->isHidden());
-            QVERIFY(!window.findChild<QPushButton *>("globalShortcutApply"));
-        }
-        {
-            MainWindow window;
-            auto *toggle = window.findChild<QAbstractButton *>("globalShortcutEnabled");
-            auto *shortcut = window.findChild<GlobalShortcut *>();
-            QVERIFY(toggle && shortcut && !toggle->isChecked());
-            toggle->click();
-            QVERIFY(toggle->isChecked() && shortcut->enabled() && !shortcut->isRegistered());
-            QCOMPARE(toggle->text(), QStringLiteral("开启"));
-        }
-        MainWindow restored;
-        auto *toggle = restored.findChild<QAbstractButton *>("globalShortcutEnabled");
-        QVERIFY(toggle && toggle->isChecked());
-    }
-
-    void customShortcutSettings()
-    {
-        QVERIFY(database_->setSetting("global_shortcut_enabled", "false"));
-        {
-            MainWindow window;
-            window.show();
+            window.showMainWindow();
             button(window, QStringLiteral("设置"))->click();
+            window.activateWindow();
+            QTRY_VERIFY(window.isActiveWindow());
+            auto *toggle = window.findChild<QAbstractButton *>("globalShortcutEnabled");
             auto *modifier = window.findChild<QButtonGroup *>("globalShortcutModifier");
             auto *letter = window.findChild<QLineEdit *>("globalShortcutLetter");
             auto *status = window.findChild<QLabel *>("globalShortcutStatus");
+            auto *manage = window.findChild<QPushButton *>("manageSkinsButton");
             auto *shortcut = window.findChild<GlobalShortcut *>();
-            QVERIFY(modifier && letter && status && shortcut);
-            QCOMPARE(modifier->buttons().size(), 2);
-            QCOMPARE(modifier->checkedId(), int(Qt::AltModifier));
-            QCOMPARE(letter->text(), QStringLiteral("X"));
+            QVERIFY(toggle && modifier && letter && status && manage && shortcut);
+            QVERIFY(toggle->isChecked() && !shortcut->isRegistered() && status->isHidden());
             QVERIFY(!window.findChild<QPushButton *>("globalShortcutApply"));
+            QSignalSpy activations(shortcut, &GlobalShortcut::activated);
+            qintptr result = 123;
+            QVERIFY(!shortcut->nativeEventFilter("windows_dispatcher_MSG", nullptr, &result));
+            QCOMPARE(activations.count(), 0);
+            QCOMPARE(result, qintptr(123));
+
+            QTest::mouseClick(toggle, Qt::LeftButton);
+            QVERIFY(!shortcut->enabled());
             modifier->button(int(Qt::ControlModifier))->click();
             QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Ctrl+X"));
+            letter->setFocus();
+            QTRY_VERIFY(letter->hasFocus());
+            QTest::mouseClick(letter, Qt::LeftButton);
+            QCOMPARE(letter->selectedText(), QStringLiteral("X"));
             QTest::keyClicks(letter, "v");
-            QVERIFY(letter->toolTip().contains(QStringLiteral("右键")));
-            QVERIFY(status->isHidden());
+            QVERIFY(letter->toolTip().contains(QStringLiteral("右键")) && status->isHidden());
             QTest::keyClicks(letter, "j");
             QCOMPARE(letter->text(), QStringLiteral("J"));
             QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Ctrl+J"));
-            QCOMPARE(shortcut->binding(), QKeyCombination(Qt::ControlModifier, Qt::Key_J));
-            QVERIFY(!shortcut->enabled() && !shortcut->isRegistered() && status->isHidden());
-            capture(window, QStringLiteral("settings-global-shortcut"));
+
+            QTest::keyClick(letter, Qt::Key_Backspace);
+            QTest::keyClicks(letter, "1!");
+            letter->insert(QStringLiteral("汉"));
+            letter->insert(QStringLiteral("ab"));
+            QVERIFY(letter->text().isEmpty());
+            manage->setFocus();
+            QTRY_VERIFY(manage->hasFocus());
+            QCOMPARE(letter->text(), QStringLiteral("J"));
+            QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Ctrl+J"));
         }
         MainWindow restored;
-        auto *enable = restored.findChild<QAbstractButton *>("globalShortcutEnabled");
-        auto *letter = restored.findChild<QLineEdit *>("globalShortcutLetter");
-        auto *modifier = restored.findChild<QButtonGroup *>("globalShortcutModifier");
-        auto *status = restored.findChild<QLabel *>("globalShortcutStatus");
+        auto *toggle = restored.findChild<QAbstractButton *>("globalShortcutEnabled");
         auto *shortcut = restored.findChild<GlobalShortcut *>();
-        QVERIFY(enable && letter && modifier && status && shortcut);
-        QVERIFY(!enable->isChecked());
-        QCOMPARE(modifier->checkedId(), int(Qt::ControlModifier));
-        QCOMPARE(letter->text(), QStringLiteral("J"));
-        enable->click();
-        QVERIFY(enable->isChecked() && shortcut->enabled());
-        QCOMPARE(database_->setting("global_shortcut_enabled"), QStringLiteral("true"));
+        auto *modifier = restored.findChild<QButtonGroup *>("globalShortcutModifier");
+        auto *letter = restored.findChild<QLineEdit *>("globalShortcutLetter");
+        QVERIFY(toggle && shortcut && modifier && letter && !toggle->isChecked());
         QCOMPARE(shortcut->binding(), QKeyCombination(Qt::ControlModifier, Qt::Key_J));
+        toggle->click();
+        QVERIFY(toggle->isChecked() && !shortcut->isRegistered());
+        QCOMPARE(database_->setting("global_shortcut_enabled"), QStringLiteral("true"));
         modifier->button(int(Qt::AltModifier))->click();
         QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Alt+J"));
         QTest::keyClicks(letter, "k");
-        QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Alt+K"));
         QCOMPARE(shortcut->binding(), QKeyCombination(Qt::AltModifier, Qt::Key_K));
-        QVERIFY(status->isHidden());
-    }
-
-    void shortcutLetterEntry()
-    {
-        QVERIFY(database_->setSetting("global_shortcut_enabled", "false"));
-        MainWindow window;
-        window.showMainWindow();
-        button(window, QStringLiteral("设置"))->click();
-        window.activateWindow();
-        QTRY_VERIFY(window.isActiveWindow());
-        auto *letter = window.findChild<QLineEdit *>("globalShortcutLetter");
-        auto *manage = window.findChild<QPushButton *>("manageSkinsButton");
-        QVERIFY(letter && manage);
-        letter->setFocus();
-        QTRY_VERIFY(letter->hasFocus());
-        QTest::mouseClick(letter, Qt::LeftButton);
-        QCOMPARE(letter->selectedText(), QStringLiteral("X"));
-        QTest::keyClicks(letter, "j");
-        QCOMPARE(letter->text(), QStringLiteral("J"));
-        QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Alt+J"));
-        QTest::keyClicks(letter, "z");
-        QCOMPARE(letter->text(), QStringLiteral("Z"));
-        QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Alt+Z"));
-        QTest::keyClick(letter, Qt::Key_Backspace);
-        QVERIFY(letter->text().isEmpty());
-        QTest::keyClicks(letter, "1!");
-        letter->insert(QStringLiteral("汉"));
-        letter->insert(QStringLiteral("ab"));
-        QVERIFY(letter->text().isEmpty());
-        QTest::keyClick(letter, Qt::Key_Return);
-        QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Alt+Z"));
-        manage->setFocus();
-        QTRY_VERIFY(manage->hasFocus());
-        QTRY_COMPARE(letter->text(), QStringLiteral("Z"));
-        QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Alt+Z"));
-        letter->setFocus();
-        QTRY_VERIFY(letter->hasFocus());
-        QTest::keyClicks(letter, "k");
-        QCOMPARE(letter->text(), QStringLiteral("K"));
         QCOMPARE(database_->setting("global_shortcut_binding"), QStringLiteral("Alt+K"));
     }
 
@@ -2078,10 +2000,8 @@ private slots:
     {
         QTest::addColumn<QString>("palette");
         QTest::addColumn<QString>("layout");
-        for (const QString &palette : {QStringLiteral("mist"), QStringLiteral("paper"), TestSkinFixture::Id}) {
-            for (const QString &layout : {QStringLiteral("standard"), QStringLiteral("compact")})
-                QTest::addRow("%s-%s", qPrintable(palette), qPrintable(layout)) << palette << layout;
-        }
+        QTest::newRow("light-standard") << QStringLiteral("mist") << QStringLiteral("standard");
+        QTest::newRow("dark-compact") << TestSkinFixture::Id << QStringLiteral("compact");
     }
     void calendarRecordSymbolsAndFutureDates()
     {

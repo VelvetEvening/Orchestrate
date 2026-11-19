@@ -28,7 +28,6 @@ extern const QColor &ControlBorder;
 extern const QColor &Accent;
 extern const QColor &Selection;
 extern const QColor &SelectionText;
-extern const QColor &Hover;
 extern const QColor &Focus;
 // Calendar record markers are informational, not success/warning status.
 extern const QColor &DiaryMarker;
@@ -36,16 +35,13 @@ extern const QColor &ReminderMarker;
 extern const QColor &Success;
 extern const QColor &SuccessBackground;
 extern const QColor &Warning;
-extern const QColor &WarningBackground;
 extern const QColor &Danger;
 extern const QColor &DangerBackground;
-extern const QColor &DangerHoverBorder;
 extern const QColor &Disabled;
 extern const QColor &GraphSecondary;
 extern const QColor &GraphTertiary;
 
 QString paletteId();
-bool isDark();
 QString layoutId();
 bool isCompact();
 void setInstalledThemes(const QList<SkinTheme> &themes);

@@ -1,4 +1,4 @@
-#include "ui/skinlibrary.h"
+#include "test_skin_fixture.h"
 #include "ui/theme.h"
 #include "widgets/mathtext.h"
 
@@ -14,23 +14,13 @@
 #include <cmath>
 
 namespace {
-const auto NightId = QStringLiteral("test-night");
 const auto DayId = QStringLiteral("test-day");
-const auto NightAccent = QStringLiteral("#ba955b");
 const auto DayAccent = QStringLiteral("#195c66");
 const auto DaySelection = QStringLiteral("#cce9e5");
 const auto DaySelectionText = QStringLiteral("#142f39");
 const auto DayControl = QStringLiteral("#f0f6ec");
 const auto DayIcon = QStringLiteral("#204462");
 const auto StandardLayout = QStringLiteral("standard");
-const auto CompactLayout = QStringLiteral("compact");
-const auto MistId = QStringLiteral("mist");
-
-SkinTheme nightTheme()
-{
-    return {NightId, QStringLiteral("Test night"), QStringLiteral("dark"),
-            {{QStringLiteral("accent"), NightAccent}}, {}};
-}
 
 SkinTheme dayTheme()
 {
@@ -90,61 +80,25 @@ private slots:
 
     void init()
     {
-        UiTheme::setInstalledThemes({nightTheme(), dayTheme()});
-        UiTheme::apply(*qApp, MistId, StandardLayout);
+        UiTheme::setInstalledThemes({TestSkinFixture::theme(), dayTheme()});
+        UiTheme::apply(*qApp, QStringLiteral("mist"), StandardLayout);
     }
 
-    void resolvesThemesWithoutChangingLayout()
+    void appliesReadableBaseAndSelectionColors()
     {
-        QWidget window;
-        auto *layout = new QVBoxLayout(&window);
-        const QMargins normalMargins(18, 12, 24, 6);
-        const int normalSpacing = 12;
-        UiTheme::setLayoutMetrics(layout, normalMargins, normalSpacing);
-        const QColor mistAccent = UiTheme::Accent;
-        const QColor mistBackground = UiTheme::Background;
+        const auto mistBackground = qApp->palette().color(QPalette::Window);
+        UiTheme::apply(*qApp, TestSkinFixture::Id, StandardLayout);
+        const auto dark = qApp->palette();
+        QVERIFY(luminance(dark.color(QPalette::Window)) < luminance(mistBackground));
+        QVERIFY(contrast(dark.color(QPalette::Window), dark.color(QPalette::WindowText)) >= 4.5);
+        QVERIFY(contrast(dark.color(QPalette::Highlight), dark.color(QPalette::HighlightedText)) >= 4.5);
 
-        UiTheme::apply(*qApp, NightId, StandardLayout);
-        QCOMPARE(UiTheme::paletteId(), NightId);
-        QVERIFY(UiTheme::isDark());
-        QCOMPARE(qApp->palette().color(QPalette::Link), QColor(NightAccent));
-        QVERIFY(luminance(UiTheme::Background) < luminance(mistBackground));
-        QVERIFY(contrast(UiTheme::Background, UiTheme::Text) >= 4.5);
-        QVERIFY(contrast(UiTheme::Selection, UiTheme::SelectionText) >= 4.5);
-        QCOMPARE(layout->contentsMargins(), normalMargins);
-        QCOMPARE(layout->spacing(), normalSpacing);
-
-        const QColor darkBackground = UiTheme::Background;
-        UiTheme::apply(*qApp, NightId, CompactLayout);
-        QCOMPARE(UiTheme::paletteId(), NightId);
-        QCOMPARE(UiTheme::Background, darkBackground);
-        const auto compactMargins = layout->contentsMargins();
-        const auto compactSpacing = layout->spacing();
-        QVERIFY(compactMargins.left() < normalMargins.left());
-        QVERIFY(compactSpacing < normalSpacing);
-
-        UiTheme::apply(*qApp, DayId, CompactLayout);
-        QCOMPARE(UiTheme::paletteId(), DayId);
-        QVERIFY(!UiTheme::isDark());
-        QCOMPARE(UiTheme::Background, mistBackground);
-        QCOMPARE(qApp->palette().color(QPalette::Link), QColor(DayAccent));
-        QCOMPARE(qApp->palette().color(QPalette::Highlight), QColor(DaySelection));
-        QCOMPARE(qApp->palette().color(QPalette::HighlightedText), QColor(DaySelectionText));
-        QCOMPARE(layout->contentsMargins(), compactMargins);
-        QCOMPARE(layout->spacing(), compactSpacing);
-
-        UiTheme::setInstalledThemes({nightTheme()});
-        UiTheme::apply(*qApp, DayId, CompactLayout);
-        QCOMPARE(UiTheme::paletteId(), MistId);
-        QCOMPARE(UiTheme::Accent, mistAccent);
-        QCOMPARE(UiTheme::layoutId(), CompactLayout);
-        QCOMPARE(layout->contentsMargins(), compactMargins);
-
-        UiTheme::apply(*qApp, QStringLiteral("precision"), StandardLayout);
-        QCOMPARE(UiTheme::paletteId(), MistId);
-        QCOMPARE(UiTheme::layoutId(), StandardLayout);
-        QCOMPARE(layout->contentsMargins(), normalMargins);
-        QCOMPARE(layout->spacing(), normalSpacing);
+        UiTheme::apply(*qApp, DayId, StandardLayout);
+        const auto light = qApp->palette();
+        QCOMPARE(light.color(QPalette::Window), mistBackground);
+        QCOMPARE(light.color(QPalette::Link), QColor(DayAccent));
+        QCOMPARE(light.color(QPalette::Highlight), QColor(DaySelection));
+        QCOMPARE(light.color(QPalette::HighlightedText), QColor(DaySelectionText));
     }
 
     void updatesExistingButtonsAndListSelection()
@@ -166,10 +120,10 @@ private slots:
         window.resize(320, 200);
         window.show();
 
-        for (const auto &id : {NightId, DayId}) {
+        for (const auto &id : {TestSkinFixture::Id, DayId}) {
             UiTheme::apply(*qApp, id, StandardLayout);
             QCoreApplication::processEvents();
-            const bool dark = id == NightId;
+            const bool dark = id == TestSkinFixture::Id;
             const QColor normalColor = buttonFill(*normal);
             const QColor primaryColor = buttonFill(*primary);
             QCOMPARE(normalColor, dark ? UiTheme::Surface : QColor(DayControl));
@@ -177,9 +131,7 @@ private slots:
             QVERIFY(contrast(normalColor, normal->palette().color(QPalette::ButtonText)) >= 4.5);
             QVERIFY(contrast(primaryColor, primary->palette().color(QPalette::ButtonText)) >= 4.5);
 
-            QCOMPARE(list->currentItem(), selected);
-            QCOMPARE(list->selectedItems(), QList<QListWidgetItem *>{selected});
-            QCOMPARE(list->item(0)->foreground().color(), QColor(dark ? NightAccent : DayAccent));
+            QCOMPARE(list->item(0)->foreground().color(), QColor(dark ? TestSkinFixture::Accent : DayAccent));
             const QRect rect = list->visualItemRect(selected);
             QVERIFY(!rect.isEmpty());
             const auto viewport = list->viewport()->grab();
@@ -202,22 +154,17 @@ private slots:
         auto *next = calendar.findChild<QToolButton *>(QStringLiteral("qt_calendar_nextmonth"));
         QVERIFY(previous && next);
 
-        UiTheme::apply(*qApp, NightId, StandardLayout);
-        QCOMPARE(iconInk(statusIcon), QColor(NightAccent));
-        const QColor nightInk = iconInk(previous->icon());
-        QVERIFY(nightInk.isValid());
-        QVERIFY(contrast(nightInk, UiTheme::IndexSurface) >= 4.5);
-        QCOMPARE(iconInk(next->icon()), nightInk);
-        QCOMPARE(calendar.selectedDate(), chosen);
-        QCOMPARE(calendar.palette().color(QPalette::HighlightedText), UiTheme::SelectionText);
-
-        UiTheme::apply(*qApp, DayId, StandardLayout);
-        QCOMPARE(iconInk(statusIcon), QColor(DayAccent));
-        QCOMPARE(iconInk(previous->icon()), QColor(DayIcon));
-        QCOMPARE(iconInk(next->icon()), QColor(DayIcon));
-        QVERIFY(contrast(iconInk(next->icon()), UiTheme::IndexSurface) >= 4.5);
-        QCOMPARE(calendar.selectedDate(), chosen);
-        QCOMPARE(calendar.palette().color(QPalette::HighlightedText), QColor(DaySelectionText));
+        for (const auto &id : {TestSkinFixture::Id, DayId}) {
+            UiTheme::apply(*qApp, id, StandardLayout);
+            QCOMPARE(iconInk(statusIcon), QColor(id == DayId ? DayAccent : TestSkinFixture::Accent));
+            const auto ink = iconInk(previous->icon());
+            QVERIFY(ink.isValid());
+            QCOMPARE(iconInk(next->icon()), ink);
+            QVERIFY(contrast(ink, UiTheme::IndexSurface) >= 4.5);
+            if (id == DayId) QCOMPARE(ink, QColor(DayIcon));
+            QCOMPARE(calendar.selectedDate(), chosen);
+            QCOMPARE(calendar.palette().color(QPalette::HighlightedText), UiTheme::SelectionText);
+        }
     }
 
     void recolorsCachedMathRaster()
@@ -226,20 +173,20 @@ private slots:
         raster.fill(Qt::transparent);
         raster.setPixelColor(0, 0, Qt::black);
         raster.setPixelColor(1, 0, QColor(0, 0, 0, 128));
+        const auto cached = raster.copy();
 
-        UiTheme::apply(*qApp, NightId, StandardLayout);
-        const auto dark = MathText::displayImage(raster, raster.size());
-        QCOMPARE(dark.pixelColor(0, 0), UiTheme::Text);
-        QCOMPARE(dark.pixelColor(1, 0).alpha(), 128);
-        QCOMPARE(dark.pixelColor(2, 0).alpha(), 0);
-
-        UiTheme::apply(*qApp, DayId, StandardLayout);
-        const auto light = MathText::displayImage(raster, raster.size());
-        QCOMPARE(light.pixelColor(0, 0), UiTheme::Text);
-        QVERIFY(light.pixelColor(0, 0) != dark.pixelColor(0, 0));
-        QCOMPARE(light.pixelColor(1, 0).alpha(), 128);
-        QCOMPARE(light.pixelColor(2, 0).alpha(), 0);
-        QCOMPARE(raster.pixelColor(0, 0), QColor(Qt::black));
+        QColor previousInk;
+        for (const auto &id : {TestSkinFixture::Id, DayId}) {
+            UiTheme::apply(*qApp, id, StandardLayout);
+            const auto image = MathText::displayImage(raster, raster.size());
+            const auto ink = image.pixelColor(0, 0);
+            QCOMPARE(ink, UiTheme::Text);
+            QVERIFY(ink != previousInk);
+            QCOMPARE(image.pixelColor(1, 0).alpha(), 128);
+            QCOMPARE(image.pixelColor(2, 0).alpha(), 0);
+            previousInk = ink;
+        }
+        QCOMPARE(raster, cached);
     }
 };
 

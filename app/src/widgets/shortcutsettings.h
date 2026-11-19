@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QKeySequence>
 #include <QWidget>
 
 class AppDatabase;
@@ -15,7 +14,6 @@ public:
     ShortcutSettings(GlobalShortcut &shortcut, AppDatabase &database, QWidget *parent);
 
 private:
-    QKeyCombination selection() const;
     void applyBinding();
     void applyEnabled(bool enabled);
     void refresh();

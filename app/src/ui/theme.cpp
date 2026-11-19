@@ -408,23 +408,19 @@ const QColor &ControlBorder = currentColor(Role::ControlBorder);
 const QColor &Accent = currentColor(Role::Accent);
 const QColor &Selection = currentColor(Role::Selection);
 const QColor &SelectionText = currentColor(Role::SelectionText);
-const QColor &Hover = currentColor(Role::Hover);
 const QColor &Focus = currentColor(Role::Focus);
 const QColor &DiaryMarker = currentColor(Role::DiaryMarker);
 const QColor &ReminderMarker = currentColor(Role::ReminderMarker);
 const QColor &Success = currentColor(Role::Success);
 const QColor &SuccessBackground = currentColor(Role::SuccessBackground);
 const QColor &Warning = currentColor(Role::Warning);
-const QColor &WarningBackground = currentColor(Role::WarningBackground);
 const QColor &Danger = currentColor(Role::Danger);
 const QColor &DangerBackground = currentColor(Role::DangerBackground);
-const QColor &DangerHoverBorder = currentColor(Role::DangerHoverBorder);
 const QColor &Disabled = currentColor(Role::Disabled);
 const QColor &GraphSecondary = currentColor(Role::GraphSecondary);
 const QColor &GraphTertiary = currentColor(Role::GraphTertiary);
 
 QString paletteId() { return active.id; }
-bool isDark() { return active.dark; }
 bool isCompact() { return compactLayout; }
 QString layoutId()
 {
@@ -465,7 +461,7 @@ static void applyPalette(QApplication &app)
         palette.setColor(group, QPalette::LinkVisited, Accent);
         palette.setColor(group, QPalette::Accent, Accent);
         palette.setColor(group, QPalette::Light, Surface);
-        palette.setColor(group, QPalette::Midlight, Hover);
+        palette.setColor(group, QPalette::Midlight, currentColor(Role::Hover));
         palette.setColor(group, QPalette::Mid, ControlBorder);
         palette.setColor(group, QPalette::Dark, Muted);
         palette.setColor(group, QPalette::Shadow, Border);

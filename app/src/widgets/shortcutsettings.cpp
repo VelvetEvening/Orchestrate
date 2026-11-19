@@ -11,6 +11,7 @@
 #include <QHash>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMouseEvent>
@@ -157,17 +158,11 @@ ShortcutSettings::ShortcutSettings(GlobalShortcut &shortcut, AppDatabase &databa
     connect(enabled_, &QPushButton::toggled, this, &ShortcutSettings::applyEnabled);
 }
 
-QKeyCombination ShortcutSettings::selection() const
-{
-    const QString letter = letter_->text().toUpper();
-    return QKeyCombination(Qt::KeyboardModifier(modifier_->checkedId()),
-                           letter.isEmpty() ? Qt::Key_unknown : Qt::Key(letter.front().unicode()));
-}
-
 void ShortcutSettings::applyBinding()
 {
     if (!letter_->hasAcceptableInput()) return;
-    const auto binding = selection();
+    const auto key = Qt::Key(letter_->text().at(0).toUpper().unicode());
+    const QKeyCombination binding(Qt::KeyboardModifier(modifier_->checkedId()), key);
     if (binding == shortcut_.binding()) {
         if (shortcut_.hasError()) shortcut_.apply(shortcut_.enabled(), binding);
         else refresh();
@@ -200,6 +195,7 @@ void ShortcutSettings::refresh()
     const auto warning = editingWarning(binding);
     if (!warning.isEmpty()) hint += QLatin1Char('\n') + warning;
     letter_->setToolTip(hint);
-    status_->setText(shortcut_.hasError() ? shortcut_.status() : QString());
-    status_->setVisible(shortcut_.hasError());
+    const auto error = shortcut_.status();
+    status_->setText(error);
+    status_->setVisible(!error.isEmpty());
 }

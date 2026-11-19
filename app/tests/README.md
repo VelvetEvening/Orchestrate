@@ -16,23 +16,15 @@ Remove-Item Env:ORCHESTRATE_TEST_STRESS
 | --- | --- |
 | 数据与内置身份 | `builtin_identity`、`database_migration`、`database_schema` |
 | 工具接入 | `manifest_parser`、`automation_contract`、`configurable_tools`、`builtin_acceptance`、`adapter_example`、`tool_copy` |
-| 内容与窗口 | `markdown_edit`、`math_preview`、`heading_text`、`clipboard`、`workspace_navigation`、`git_history` |
-| 皮肤安装与渲染 | `skin_library`、`theme_rendering` |
-| 启动、快捷键与更新界面 | `autostart`、`global_shortcut`、`startup_visibility`、`release_info`、`update_checker` |
+| 文本与内容 | `markdown_edit`、`math_preview`、`clipboard`、`git_history` |
+| 主窗口与设置 | `workspace_navigation` 验证导航、草稿、皮肤管理及旧偏好迁移。`heading_text` 验证编辑、设置控件和托盘入口。 |
+| 皮肤文件与绘制 | `skin_library` 验证目录、安装、取消和损坏包。`theme_rendering` 检查浅深色下的实际绘制。 |
+| Windows 集成 | `autostart`、`global_shortcut`、`startup_visibility`。快捷键占用与回滚在私有桌面验证。 |
+| 更新检查 | `release_info` 验证版本与资产，`update_checker` 验证查询和更新界面。 |
 | 更新器 | `update_backup`、`portable_update`、`update_tasks`、`update_startup` |
 | 定时关机 | `shutdown_process_identity`、`shutdown_result_codes`、`shutdown_task_settings`、`shutdown_disable` |
 
-容易重叠的场景按下表定位。
-
-| 要验证的行为 | 负责的套件与入口 |
-| --- | --- |
-| 工具声明是否合法 | `manifest_parser` 直接检查字段、路径和错误输入。 |
-| 用户如何接入和运行工具 | `automation_contract` 从“接入工具”按钮验证注册、执行和重读。SSH 使用本地模拟程序，WSL 可选择真实发行版。`configurable_tools` 验证目录识别、默认接入、自选命令和参数配置。 |
-| 切换配色、布局和侧栏 | `workspace_navigation` 验证布局、皮肤管理、旧版偏好迁移及重开窗口后的恢复。`markdown_edit` 检查编辑器光标、字号和撤销记录。`heading_text` 检查日历符号。 |
-| 草稿与窗口关闭 | `workspace_navigation` 按日记、提醒、剪贴板检查各自字段的保存与丢弃。主窗口关闭和收起到托盘共用一个草稿用例。剪贴板的设置菜单、容量与去重由 `clipboard` 验证。 |
-| 发现新版本 | `heading_text` 验证主窗口的侧栏提示和托盘入口。`update_checker` 验证更新说明的延迟加载、全文滚动、空说明和外部资源处理。 |
-
-日常生命周期测试保留所有操作分支，减少重复轮数；压力模式恢复 12 次主窗口重建、1200 次页面切换和 40 轮内容生命周期。断言不变。
+压力模式使用相同断言，增加窗口重建、页面切换和内容生命周期的重复次数。
 
 ## 隔离与诊断
 
