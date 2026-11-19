@@ -22,9 +22,10 @@ endfunction()
 
 add_library(OrchestrateUi STATIC src/ui/theme.cpp src/ui/theme.h
     src/ui/appearancechoice.cpp
+    src/ui/skinlibrary.cpp src/ui/skinlibrary.h
     src/ui/contentworkspace.cpp src/ui/contentworkspace.h
     resources/ui/uitheme.qrc resources/resources.qrc)
-target_link_libraries(OrchestrateUi PUBLIC Qt6::Widgets)
+target_link_libraries(OrchestrateUi PUBLIC Qt6::Widgets Qt6::Network)
 target_include_directories(OrchestrateUi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 if(WIN32)
     target_link_libraries(OrchestrateUi PRIVATE dwmapi)
@@ -106,6 +107,7 @@ add_library(OrchestrateApplication STATIC
     src/platform/clipboardpaste.cpp src/platform/clipboardpaste.h
     src/mainwindow.cpp
     src/mainwindow.h
+    src/ui/skinmanagerdialog.cpp src/ui/skinmanagerdialog.h
     src/widgets/shortcutsettings.cpp
     src/widgets/shortcutsettings.h
     src/pages/calendarpage.cpp

@@ -520,7 +520,7 @@ void ProjectsPage::refreshWorkRecords()
     const auto expanded = database_->setting(expandedFoldersKey(current_.id)).split(',');
     QHash<int, QTreeWidgetItem *> folderItems;
     QIcon folderIcon = UiTheme::icon(QStringLiteral("folder"));
-    const QIcon starredIcon(QStringLiteral(":/icons/star.svg"));
+    const auto starredIcon = UiTheme::icon(QStringLiteral("star"));
     for (const auto &folder : folders) {
         auto *item = new QTreeWidgetItem(workList_, {folder.name});
         item->setData(0,Qt::UserRole,folder.id);
@@ -717,7 +717,7 @@ void ProjectsPage::showRecordContextMenu(const QPoint &position)
             menu.addSeparator();
             const int folderId = item->data(0,Qt::UserRole).toInt();
             const bool starred = item->data(0,StarredRole).toBool();
-            auto *star = menu.addAction(QIcon(QStringLiteral(":/icons/star.svg")),
+            auto *star = menu.addAction(UiTheme::icon(QStringLiteral("star")),
                 starred ? QStringLiteral("取消重点标记") : QStringLiteral("标记重点并置顶"), this, [this,folderId,starred] {
                     QString error;
                     if (!database_->setRecordFolderStarred(folderId,!starred,&error)) { showError(error); return; }

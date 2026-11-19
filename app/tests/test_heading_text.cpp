@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "test_support.h"
+#include "test_skin_fixture.h"
 #include "platform/fileaccess.h"
 #include "pages/collaborationrecorddialog.h"
 #include "update/updatewidget.h"
@@ -2007,7 +2008,7 @@ private slots:
     {
         QTest::addColumn<QString>("palette");
         QTest::addColumn<QString>("layout");
-        for (const QString &palette : {QStringLiteral("mist"), QStringLiteral("paper"), QStringLiteral("precision")}) {
+        for (const QString &palette : {QStringLiteral("mist"), QStringLiteral("paper"), TestSkinFixture::Id}) {
             for (const QString &layout : {QStringLiteral("standard"), QStringLiteral("compact")})
                 QTest::addRow("%s-%s", qPrintable(palette), qPrintable(layout)) << palette << layout;
         }
@@ -2016,8 +2017,13 @@ private slots:
     {
         QFETCH(QString, palette);
         QFETCH(QString, layout);
+        UiTheme::setInstalledThemes({TestSkinFixture::theme()});
         UiTheme::apply(*qApp, palette, layout);
-        const auto restoreTheme = qScopeGuard([] { UiTheme::apply(*qApp, "mist", "standard"); });
+        const auto restoreTheme = qScopeGuard([] {
+            UiTheme::setInstalledThemes({});
+            UiTheme::apply(*qApp, "mist", "standard");
+        });
+        QCOMPARE(UiTheme::paletteId(), palette);
         CalendarCellProbe probe;
         const QDate today=QDate::currentDate();
         probe.setCurrentPage(today.year(),today.month());

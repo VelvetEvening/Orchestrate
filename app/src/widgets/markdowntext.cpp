@@ -81,8 +81,7 @@ public:
         const qreal base = document.defaultFont().pointSizeF();
         const qreal scale = style.fontPointSize() > 0 && base > 0 ? style.fontPointSize() / base : 1;
         const QSizeF size(original.width() / 3.0 * scale, original.height() / 3.0 * scale);
-        const QImage image = original.scaled(qMax(1, qRound(size.width() * dpr)),
-            qMax(1, qRound(size.height() * dpr)), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        const auto image = MathText::displayImage(original, (size * dpr).toSize().expandedTo(QSize(1, 1)));
         QByteArray png;
         QBuffer buffer(&png);
         buffer.open(QIODevice::WriteOnly);

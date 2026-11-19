@@ -12,16 +12,19 @@ class QCloseEvent;
 class QFrame;
 class QLabel;
 class QMenu;
+class QNetworkAccessManager;
 class QPushButton;
 class QStackedWidget;
 class QSystemTrayIcon;
+class SkinLibrary;
 
 class MainWindow final : public QMainWindow
 {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget *parent = nullptr, std::unique_ptr<AutoStart> autoStart = nullptr);
+    explicit MainWindow(QWidget *parent = nullptr, std::unique_ptr<AutoStart> autoStart = nullptr,
+                        QNetworkAccessManager *skinNetwork = nullptr);
     ~MainWindow() override = default;
     bool ready() const { return database_.isOpen(); }
     bool mainWindowVisible() const;
@@ -34,11 +37,14 @@ protected:
 #endif
 
 private:
+    class NavigationSidebar;
     void toggleMainWindow();
     bool savePendingChanges();
     void buildUi();
     void buildNavigation(QWidget *parent);
     QFrame *makeAppearanceSection(QWidget *parent);
+    void applyAppearance(const QString &palette, const QString &layout);
+    void openSkinManager();
     void buildTray();
     void switchToPage(int index, bool confirmLeave = true);
     void toggleSidebar();
@@ -53,7 +59,8 @@ private:
     QCheckBox *autoStartCheck_ = nullptr;
     QLabel *autoStartStatus_ = nullptr;
     QPushButton *systemStartupButton_ = nullptr;
-    QFrame *sidebar_ = nullptr;
+    NavigationSidebar *sidebar_ = nullptr;
+    SkinLibrary *skinLibrary_ = nullptr;
     GlobalShortcut *globalShortcut_ = nullptr;
     QPushButton *sidebarToggleButton_ = nullptr;
     QStackedWidget *pageStack_ = nullptr;

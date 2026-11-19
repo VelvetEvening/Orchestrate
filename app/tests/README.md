@@ -1,6 +1,6 @@
 # 测试
 
-Windows 共 28 个 CTest 套件，套件内还有多个用例及数据行。生产代码只编译一次，测试与应用链接相同的静态库。
+生产代码只编译一次，测试与应用链接相同的静态库。用 `ctest --test-dir app/build-qt -N` 查看当前构建的套件。
 
 ```powershell
 # 日常功能回归；单模块修改可用 -R 选择相关套件。
@@ -17,6 +17,7 @@ Remove-Item Env:ORCHESTRATE_TEST_STRESS
 | 数据与内置身份 | `builtin_identity`、`database_migration`、`database_schema` |
 | 工具接入 | `manifest_parser`、`automation_contract`、`configurable_tools`、`builtin_acceptance`、`adapter_example`、`tool_copy` |
 | 内容与窗口 | `markdown_edit`、`math_preview`、`heading_text`、`clipboard`、`workspace_navigation`、`git_history` |
+| 皮肤安装与渲染 | `skin_library`、`theme_rendering` |
 | 启动、快捷键与更新界面 | `autostart`、`global_shortcut`、`startup_visibility`、`release_info`、`update_checker` |
 | 更新器 | `update_backup`、`portable_update`、`update_tasks`、`update_startup` |
 | 定时关机 | `shutdown_process_identity`、`shutdown_result_codes`、`shutdown_task_settings`、`shutdown_disable` |
@@ -27,7 +28,7 @@ Remove-Item Env:ORCHESTRATE_TEST_STRESS
 | --- | --- |
 | 工具声明是否合法 | `manifest_parser` 直接检查字段、路径和错误输入。 |
 | 用户如何接入和运行工具 | `automation_contract` 从“接入工具”按钮验证注册、执行和重读。SSH 使用本地模拟程序，WSL 可选择真实发行版。`configurable_tools` 验证目录识别、默认接入、自选命令和参数配置。 |
-| 切换配色、布局和侧栏 | `workspace_navigation` 验证六种组合的控件与行高、旧版偏好兼容及重开窗口后的恢复。`markdown_edit` 检查编辑器光标、字号和撤销记录。`heading_text` 检查日历符号。 |
+| 切换配色、布局和侧栏 | `workspace_navigation` 验证布局、皮肤管理、旧版偏好迁移及重开窗口后的恢复。`markdown_edit` 检查编辑器光标、字号和撤销记录。`heading_text` 检查日历符号。 |
 | 草稿与窗口关闭 | `workspace_navigation` 按日记、提醒、剪贴板检查各自字段的保存与丢弃。主窗口关闭和收起到托盘共用一个草稿用例。剪贴板的设置菜单、容量与去重由 `clipboard` 验证。 |
 | 发现新版本 | `heading_text` 验证主窗口的侧栏提示和托盘入口。`update_checker` 验证更新说明的延迟加载、全文滚动、空说明和外部资源处理。 |
 

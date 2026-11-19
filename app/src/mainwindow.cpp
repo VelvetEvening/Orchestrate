@@ -7,6 +7,8 @@
 #include "pages/clipboardpage.h"
 #include "platform/globalshortcut.h"
 #include "platform/clipboardpaste.h"
+#include "ui/skinlibrary.h"
+#include "ui/skinmanagerdialog.h"
 #include "widgets/shortcutsettings.h"
 #include "update/updatewidget.h"
 
@@ -16,11 +18,15 @@
 #include <QComboBox>
 #include <QCloseEvent>
 #include <QDesktopServices>
+#include <QDir>
+#include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPixmap>
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QSignalBlocker>
@@ -47,8 +53,10 @@ namespace {
 
 constexpr int ExpandedSidebarWidth = 168;
 constexpr int CollapsedSidebarWidth = 72;
+constexpr int MaxSkinLabelWidth = 220;
 const QString PaletteSetting = QStringLiteral("appearance_palette");
 const QString LayoutSetting = QStringLiteral("appearance_layout");
+const QString DefaultPalette = QStringLiteral("mist");
 
 QFrame *makeSection(QWidget *parent)
 {
@@ -57,10 +65,66 @@ QFrame *makeSection(QWidget *parent)
     return card;
 }
 
+void fillPaletteChoices(QComboBox *choice, const QList<SkinTheme> &installed)
+{
+    const QSignalBlocker blocker(choice);
+    choice->clear();
+    choice->addItem(UiTheme::paletteSwatch(DefaultPalette), QStringLiteral("云白 × 雾蓝"), DefaultPalette);
+    choice->addItem(UiTheme::paletteSwatch("paper"), QStringLiteral("暖白 × 陶褐"), QStringLiteral("paper"));
+    for (const SkinTheme &skin : installed) {
+        const QString label = choice->fontMetrics().elidedText(skin.name, Qt::ElideRight, MaxSkinLabelWidth);
+        choice->addItem(UiTheme::paletteSwatch(skin.id), label, skin.id);
+        const int row = choice->count() - 1;
+        choice->setItemData(row, QStringLiteral("<qt>%1</qt>").arg(skin.name.toHtmlEscaped()), Qt::ToolTipRole);
+        choice->setItemData(row, skin.name, Qt::AccessibleTextRole);
+    }
+    choice->setCurrentIndex(choice->findData(UiTheme::paletteId()));
+    choice->setToolTip(choice->currentData(Qt::ToolTipRole).toString());
+}
+
 } // namespace
 
+class MainWindow::NavigationSidebar final : public QFrame
+{
+public:
+    using QFrame::QFrame;
 
-MainWindow::MainWindow(QWidget *parent, std::unique_ptr<AutoStart> autoStart)
+    void setArtworkPath(const QString &path)
+    {
+        if (path == artworkPath_) return;
+        artworkPath_ = path;
+        artwork_ = path.isEmpty() ? QPixmap() : QPixmap(path);
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override
+    {
+        QFrame::paintEvent(event);
+        if (artwork_.isNull() || width() <= CollapsedSidebarWidth) return;
+        // Keep artwork in the stretch between the navigation entries and Settings.
+        for (int i = 0; i < layout()->count(); ++i) {
+            const auto *spacer = layout()->itemAt(i)->spacerItem();
+            if (!spacer) continue;
+            const QRect gap = spacer->geometry();
+            if (gap.height() <= 0) return;
+            const QSize size = artwork_.size().scaled(width(), gap.height(), Qt::KeepAspectRatio);
+            const int top = qBound(gap.top(), qRound(height() * 0.72 - size.height() * 0.52),
+                                   gap.bottom() + 1 - size.height());
+            QPainter painter(this);
+            painter.setRenderHint(QPainter::SmoothPixmapTransform);
+            painter.setOpacity(0.76);
+            painter.drawPixmap(QRect((width() - size.width()) / 2, top, size.width(), size.height()), artwork_);
+            return;
+        }
+    }
+
+private:
+    QString artworkPath_;
+    QPixmap artwork_;
+};
+
+MainWindow::MainWindow(QWidget *parent, std::unique_ptr<AutoStart> autoStart, QNetworkAccessManager *skinNetwork)
     : QMainWindow(parent), autoStart_(autoStart ? std::move(autoStart) : std::make_unique<AutoStart>())
 {
     setWindowTitle(QStringLiteral("Orchestrate"));
@@ -81,10 +145,16 @@ MainWindow::MainWindow(QWidget *parent, std::unique_ptr<AutoStart> autoStart)
         return;
     }
 
-    // Read each new preference independently so changing one preserves the other legacy choice.
-    const QString legacyPreset = database_.setting(QStringLiteral("appearance_preset"), QStringLiteral("mist"));
+    const QString skinDirectory = QFileInfo(database_.databasePath()).dir().filePath(QStringLiteral("skins"));
+    skinLibrary_ = new SkinLibrary(skinDirectory, this, SkinLibrary::defaultCatalogUrl(), skinNetwork);
+    UiTheme::setInstalledThemes(skinLibrary_->installedThemes());
+
+    // Read each preference independently so a retired color retains its saved layout density.
+    const QString legacyPreset = database_.setting(QStringLiteral("appearance_preset"), DefaultPalette);
     const QString legacyLayout = legacyPreset == QStringLiteral("precision") ? QStringLiteral("compact") : QStringLiteral("standard");
-    UiTheme::apply(*qApp, database_.setting(PaletteSetting, legacyPreset), database_.setting(LayoutSetting, legacyLayout));
+    const QString savedPalette = database_.setting(PaletteSetting, legacyPreset);
+    applyAppearance(savedPalette, database_.setting(LayoutSetting, legacyLayout));
+    if (savedPalette != UiTheme::paletteId()) database_.setSetting(PaletteSetting, UiTheme::paletteId());
 
     globalShortcut_ = new GlobalShortcut(database_.setting("global_shortcut_enabled", "true") == "true",
                                          database_.setting("global_shortcut_binding"), this);
@@ -142,9 +212,10 @@ void MainWindow::buildUi()
     auto *bodyLayout = new QHBoxLayout;
     bodyLayout->setContentsMargins(0, 0, 0, 0);
     bodyLayout->setSpacing(0);
-    sidebar_ = new QFrame(root);
+    sidebar_ = new NavigationSidebar(root);
     sidebar_->setObjectName(QStringLiteral("sidebar"));
     buildNavigation(sidebar_);
+    sidebar_->setArtworkPath(UiTheme::sidebarImagePath());
     bodyLayout->addWidget(sidebar_);
 
     pageStack_ = new QStackedWidget(root);
@@ -237,11 +308,15 @@ QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
     row->addWidget(title);
     row->addStretch(1);
 
+    auto *manage = new QPushButton(QStringLiteral("管理皮肤…"), section);
+    manage->setObjectName(QStringLiteral("manageSkinsButton"));
+    row->addWidget(manage);
+    row->addSpacing(12);
+    connect(manage, &QPushButton::clicked, this, &MainWindow::openSkinManager);
+
     auto *palette = new QComboBox(section);
     palette->setObjectName(QStringLiteral("appearancePalette"));
-    palette->addItem(UiTheme::paletteSwatch("mist"), QStringLiteral("云白 × 雾蓝"), QStringLiteral("mist"));
-    palette->addItem(UiTheme::paletteSwatch("paper"), QStringLiteral("暖白 × 陶褐"), QStringLiteral("paper"));
-    palette->addItem(UiTheme::paletteSwatch("precision"), QStringLiteral("冷灰 × 墨蓝"), QStringLiteral("precision"));
+    fillPaletteChoices(palette, UiTheme::installedThemes());
 
     auto *layout = new QComboBox(section);
     layout->setObjectName(QStringLiteral("appearanceLayout"));
@@ -266,13 +341,41 @@ QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
                 QMessageBox::warning(this, QStringLiteral("无法保存外观设置"), error);
                 return;
             }
-            UiTheme::apply(*qApp, palette->currentData().toString(), layout->currentData().toString());
+            applyAppearance(palette->currentData().toString(), layout->currentData().toString());
         });
     };
     addChoice(palette, QStringLiteral("配色"), PaletteSetting, UiTheme::paletteId);
     row->addSpacing(12);
     addChoice(layout, QStringLiteral("布局"), LayoutSetting, UiTheme::layoutId);
+    connect(palette, &QComboBox::currentIndexChanged, palette, [palette] {
+        palette->setToolTip(palette->currentData(Qt::ToolTipRole).toString());
+    });
+    connect(skinLibrary_, &SkinLibrary::installedChanged, section, [this, palette] {
+        const auto installed = skinLibrary_->installedThemes();
+        UiTheme::setInstalledThemes(installed);
+        applyAppearance(UiTheme::paletteId(), UiTheme::layoutId());
+        fillPaletteChoices(palette, installed);
+    });
     return section;
+}
+
+void MainWindow::applyAppearance(const QString &palette, const QString &layout)
+{
+    UiTheme::apply(*qApp, palette, layout);
+    if (sidebar_) sidebar_->setArtworkPath(UiTheme::sidebarImagePath());
+}
+
+void MainWindow::openSkinManager()
+{
+    auto *dialog = new SkinManagerDialog(*skinLibrary_, [this](const QString &id, QString *error) {
+        if (id != UiTheme::paletteId()) return skinLibrary_->removeTheme(id, error);
+        return skinLibrary_->removeTheme(id, error, [this](QString *saveError) {
+            return database_.setSetting(PaletteSetting, DefaultPalette, saveError);
+        });
+    }, this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->open();
+    dialog->refreshCatalog();
 }
 
 void MainWindow::buildTray()
@@ -452,7 +555,7 @@ void MainWindow::setAvailableUpdate(const QString &tag)
     settings->setToolTip(tag.isEmpty() ? text : QStringLiteral("设置：有新版本 %1").arg(tag));
     settings->setAccessibleName(settings->toolTip());
     settings->setIcon(tag.isEmpty() ? UiTheme::icon(QStringLiteral("settings"))
-                                   : QIcon(QStringLiteral(":/icons/update-available.svg")));
+                                   : UiTheme::icon(QStringLiteral("update-available")));
     if (updateAction_) {
         updateAction_->setText(QStringLiteral("查看更新（%1）").arg(tag));
         updateAction_->setVisible(!tag.isEmpty());

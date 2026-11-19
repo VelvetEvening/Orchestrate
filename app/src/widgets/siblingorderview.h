@@ -170,9 +170,11 @@ protected:
         Base::paintEvent(event);
         if (indicatorY_ < 0 && containerIndicator_.isEmpty()) return;
         QPainter painter(this->viewport());
-        painter.setPen(QPen(QColor(UiTheme::Focus), 2));
+        painter.setPen(QPen(UiTheme::Focus, 2));
         if (!containerIndicator_.isEmpty()) {
-            painter.fillRect(containerIndicator_, QColor(120, 149, 188, 28));
+            auto tint = UiTheme::Focus;
+            tint.setAlpha(28);
+            painter.fillRect(containerIndicator_, tint);
             painter.drawRect(containerIndicator_.adjusted(1, 1, -1, -1));
             return;
         }

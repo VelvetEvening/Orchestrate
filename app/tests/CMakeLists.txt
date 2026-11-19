@@ -210,6 +210,19 @@ foreach(application_test AutomationContractTest BuiltinAcceptanceTest HeadingTex
     target_link_libraries(${application_test} PRIVATE OrchestrateApplication)
 endforeach()
 
+add_executable(SkinLibraryTest test_skin_library.cpp)
+target_link_libraries(SkinLibraryTest PRIVATE OrchestrateUi Qt6::Test)
+add_test(NAME skin_library COMMAND SkinLibraryTest)
+
+add_executable(ThemeRenderingTest test_theme_rendering.cpp)
+target_link_libraries(ThemeRenderingTest PRIVATE OrchestrateText Qt6::Test)
+add_test(NAME theme_rendering COMMAND ThemeRenderingTest)
+
+set_tests_properties(skin_library theme_rendering PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
+if(WIN32)
+    set_property(TEST skin_library theme_rendering APPEND PROPERTY ENVIRONMENT "PATH=${test_path}")
+endif()
+
 get_property(test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 foreach(test_target IN LISTS test_targets)
     get_target_property(test_type ${test_target} TYPE)

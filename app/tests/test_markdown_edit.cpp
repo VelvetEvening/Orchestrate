@@ -3,6 +3,7 @@
 #include "widgets/mathpreview.h"
 #include "widgets/textlayoutguard.h"
 #include "ui/theme.h"
+#include "test_skin_fixture.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QDir>
@@ -12,6 +13,7 @@
 #include <QContextMenuEvent>
 #include <QInputMethodEvent>
 #include <QPlainTextEdit>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTextBlock>
 #include <QTextTable>
@@ -45,6 +47,11 @@ private slots:
         QFETCH(bool, reading);
         QFETCH(bool, sourceMode);
         QFETCH(qreal, pointSize);
+        UiTheme::setInstalledThemes({TestSkinFixture::theme()});
+        const auto restoreTheme = qScopeGuard([] {
+            UiTheme::setInstalledThemes({});
+            UiTheme::apply(*qApp, "mist", "standard");
+        });
         UiTheme::apply(*qApp, "mist", "standard");
         HeadingTextEdit editor;
         editor.resize(640, 480);
@@ -72,11 +79,12 @@ private slots:
         QSignalSpy zoomChanges(&editor, &HeadingTextEdit::textPointSizeChanged);
         const QList<QPair<QString, QString>> appearances {
             {"mist", "compact"}, {"paper", "compact"}, {"paper", "standard"},
-            {"precision", "standard"}, {"precision", "compact"}, {"mist", "standard"}
+            {TestSkinFixture::Id, "standard"}, {TestSkinFixture::Id, "compact"}, {"mist", "standard"}
         };
         for (const auto &[palette, layout] : appearances) {
             UiTheme::apply(*qApp, palette, layout);
             QCoreApplication::processEvents();
+            QCOMPARE(UiTheme::paletteId(), palette);
             QCOMPARE(source->font().pointSizeF(), pointSize);
             QCOMPARE(view->font().pointSizeF(), pointSize);
             QCOMPARE(view->document()->defaultFont().pointSizeF(), pointSize);

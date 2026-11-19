@@ -16,6 +16,7 @@ public:
         QFont dateFont = font();
         dateFont.setPointSize(11);
         setFont(dateFont);
+        setProperty("themeCalendarToday", true);
         UiTheme::applyCalendarPalette(this);
     }
     void setRecordDates(const QSet<QDate> &diaries, const QSet<QDate> &reminders)
@@ -43,7 +44,7 @@ protected:
             painter->setBrush(QColor(selected ? UiTheme::Selection : UiTheme::IndexSurface));
             painter->setPen(QPen(QColor(today ? UiTheme::Focus : UiTheme::Selection), 1));
             painter->drawRoundedRect(tile, compact ? 5 : 10, compact ? 5 : 10);
-            foreground = QColor(UiTheme::Accent);
+            foreground = selected ? UiTheme::SelectionText : UiTheme::Accent;
         }
         QFont textFont = font();
         textFont.setBold(selected || today);

@@ -28,7 +28,7 @@ public:
         painter->save();
         painter->translate(mark.topLeft());
         painter->setRenderHint(QPainter::Antialiasing);
-        painter->setPen(QPen(QColor(UiTheme::Accent), 1.7, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter->setPen(QPen(UiTheme::SelectionText, 1.7, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         painter->drawPolyline(QPolygonF{{2, 7}, {5.5, 10.5}, {12, 4}});
         painter->restore();
     }

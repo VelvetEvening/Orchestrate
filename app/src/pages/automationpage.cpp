@@ -124,7 +124,7 @@ QString resultLabel(const QString &result, const QString &toolId = QString())
 
 struct StatusAppearance {
     const char *badgeRole;
-    const char *color;
+    QColor color;
 };
 
 StatusAppearance statusAppearance(const QString &result)
@@ -171,6 +171,19 @@ protected:
     }
 };
 
+class CommandPlayIcon final : public QWidget {
+public:
+    using QWidget::QWidget;
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        icon_.paint(&painter, rect().adjusted(2, 2, -2, -2));
+    }
+private:
+    const QIcon icon_ = UiTheme::icon(QStringLiteral("play"));
+};
+
 QWidget *makeCommandRow(const AppDatabase::ToolCommand &command, QWidget *parent)
 {
     auto *row = new QWidget(parent);
@@ -179,10 +192,8 @@ QWidget *makeCommandRow(const AppDatabase::ToolCommand &command, QWidget *parent
     layout->setContentsMargins(14, 9, 14, 9);
     layout->setSpacing(12);
 
-    auto *icon = new QLabel(row);
-    icon->setPixmap(UiTheme::icon(QStringLiteral("play")).pixmap(18, 18));
+    auto *icon = new CommandPlayIcon(row);
     icon->setFixedSize(22, 22);
-    icon->setAlignment(Qt::AlignCenter);
     layout->addWidget(icon, 0, Qt::AlignTop);
 
     auto *content = new QVBoxLayout;

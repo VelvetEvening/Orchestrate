@@ -277,7 +277,7 @@ void CalendarPage::refreshReminderList()
             QFont font = item->font();
             font.setStrikeOut(true);
             item->setFont(font);
-            item->setForeground(QColor(UiTheme::Muted));
+            UiTheme::setItemForeground(reminderList_->model(), reminderList_->indexFromItem(item), "muted");
         }
     }
     EmptyViewHint::update(reminderList_, reminderList_->count() ? QString()
