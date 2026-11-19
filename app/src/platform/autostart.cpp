@@ -127,7 +127,7 @@ AutoStart::State AutoStart::state() const
         // Reading state never changes Windows' approval data.
         result.disabledByWindows = disabledMarker(approval);
         if (result.disabledByWindows)
-            notices.prepend(QStringLiteral("启动项已被 Windows 禁用。请在系统启动应用设置中启用 Orchestrate。"));
+            notices.prepend(QStringLiteral("启动项已被 Windows 禁用。请在系统启动应用设置中启用 %1。").arg(QGuiApplication::applicationDisplayName()));
         if (approvalStore.status() != QSettings::NoError)
             notices.append(QStringLiteral("无法读取 Windows 的启动许可状态，可在系统启动应用设置中核对。"));
     }

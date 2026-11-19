@@ -1,5 +1,6 @@
 #include "ui/theme.h"
 #include "mainwindow.h"
+#include "version.h"
 
 #include "pages/calendarpage.h"
 #include "pages/automationpage.h"
@@ -134,7 +135,7 @@ private:
 MainWindow::MainWindow(QWidget *parent, std::unique_ptr<AutoStart> autoStart, QNetworkAccessManager *skinNetwork)
     : QMainWindow(parent), autoStart_(autoStart ? std::move(autoStart) : std::make_unique<AutoStart>())
 {
-    setWindowTitle(QStringLiteral("Orchestrate"));
+    setWindowTitle(QApplication::applicationDisplayName());
     UiTheme::install(*qApp);
     setMinimumSize(980, 640);
     resize(1180, 760);
@@ -214,6 +215,13 @@ void MainWindow::buildUi()
     sidebarToggleButton_->setCursor(Qt::PointingHandCursor);
     headerLayout->addWidget(sidebarToggleButton_);
     headerLayout->addStretch(1);
+#if ORCHESTRATE_DEV_BUILD
+    auto *buildName = new QLabel(windowTitle(), header);
+    buildName->setObjectName(QStringLiteral("devBuildName"));
+    buildName->setAttribute(Qt::WA_TransparentForMouseEvents);
+    UiTheme::setRole(buildName, "muted");
+    headerLayout->addWidget(buildName);
+#endif
     rootLayout->addWidget(header);
     connect(sidebarToggleButton_, &QPushButton::clicked, this, &MainWindow::toggleSidebar);
 
@@ -468,7 +476,7 @@ QScrollArea *MainWindow::makeSettingsPage()
     connect(updateWidget_, &UpdateWidget::updateAvailableChanged, this, &MainWindow::setAvailableUpdate);
     connect(updateWidget_, &UpdateWidget::updateNotificationRequested, this, [this](const QString &tag) {
         if (trayIcon_ && trayIcon_->isVisible() && QSystemTrayIcon::supportsMessages())
-            trayIcon_->showMessage(QStringLiteral("Orchestrate 有新版本"),
+            trayIcon_->showMessage(QStringLiteral("%1 有新版本").arg(QApplication::applicationDisplayName()),
                 QStringLiteral("%1 已发布。打开“设置 → 版本与更新”查看说明并下载。").arg(tag),
                 QSystemTrayIcon::Information, 8000);
     });
@@ -485,17 +493,18 @@ QScrollArea *MainWindow::makeSettingsPage()
 
 void MainWindow::buildTray()
 {
+    const QString appName = QApplication::applicationDisplayName();
     trayIcon_ = new QSystemTrayIcon(QApplication::windowIcon(), this);
-    trayIcon_->setToolTip(QStringLiteral("Orchestrate"));
+    trayIcon_->setToolTip(appName);
 
     trayMenu_ = new QMenu(this);
-    showAction_ = trayMenu_->addAction(QStringLiteral("打开 Orchestrate"));
+    showAction_ = trayMenu_->addAction(QStringLiteral("打开 %1").arg(appName));
     updateAction_ = trayMenu_->addAction(QStringLiteral("查看更新"));
     updateAction_->setObjectName(QStringLiteral("viewUpdateAction"));
     updateAction_->setVisible(false);
     connect(updateAction_, &QAction::triggered, this, &MainWindow::openUpdatesPage);
     trayMenu_->addSeparator();
-    quitAction_ = trayMenu_->addAction(QStringLiteral("退出 Orchestrate"));
+    quitAction_ = trayMenu_->addAction(QStringLiteral("退出 %1").arg(appName));
     trayIcon_->setContextMenu(trayMenu_);
 
     connect(showAction_, &QAction::triggered, this, &MainWindow::showMainWindow);
@@ -726,7 +735,7 @@ void MainWindow::installUpdate()
         }
     }
     if (QMessageBox::question(this, QStringLiteral("安装更新"),
-            QStringLiteral("安装更新将退出并重启 Orchestrate。引用本目录的计划任务会临时暂停，结束后恢复原状态。个人数据会保留；新版启动确认且任务恢复后，自动清理本次旧版备份及临时文件。失败或恢复未完成则保留恢复材料。\n\n是否继续？"),
+            QStringLiteral("安装更新将退出并重启 %1。引用本目录的计划任务会临时暂停，结束后恢复原状态。个人数据会保留；新版启动确认且任务恢复后，自动清理本次旧版备份及临时文件。失败或恢复未完成则保留恢复材料。\n\n是否继续？").arg(QApplication::applicationDisplayName()),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes) return;
     if (!savePendingChanges()) return;
     auto *update = findChild<UpdateWidget *>();

@@ -20,7 +20,9 @@ cmake --build app/build-qt --parallel 3
 ctest --test-dir app/build-qt --output-on-failure --no-tests=error
 ```
 
-开发构建统一放在 `app/build-qt`；只构建客户端可加 `-DBUILD_TESTING=OFF`。测试开关、套件职责及隔离规则见[测试说明](tests/README.md)。从终端启动程序可复用上述 Qt 环境；独立部署使用 `app/deploy.ps1`。
+默认生成的开发版为 `app/build-qt/orchestrate-dev.exe`，可复用上述 Qt 环境运行，也可执行 `app/deploy.ps1` 后直接双击。只构建客户端可加 `-DBUILD_TESTING=OFF`。测试开关、套件职责及隔离规则见[测试说明](tests/README.md)。
+
+发布脚本使用 `-DORCHESTRATE_DEV_BUILD=OFF` 生成 `Orchestrate.exe`。在本地验证正式版名称时，可在单独的构建目录使用同一选项。
 
 ## 发布
 

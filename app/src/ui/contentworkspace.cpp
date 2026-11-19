@@ -12,8 +12,13 @@
 #include <QVBoxLayout>
 
 namespace {
+QString appTitleSuffix()
+{
+    return QStringLiteral(" · ") + QApplication::applicationDisplayName();
+}
+
 QString contentTitle(const QString &title) {
-    const QString suffix=QStringLiteral(" · Orchestrate");
+    const QString suffix = appTitleSuffix();
     return title.endsWith(suffix) ? title.chopped(suffix.size()) : title;
 }
 }
@@ -160,7 +165,7 @@ void ContentWorkspace::showEntry(const EntryPtr &entry) {
     target->setCurrentWidget(entry->frame); entry->page->show();
     if (!entry->host) emit activationRequested();
     if (entry->host) {
-        entry->host->setWindowTitle(contentTitle(entry->page->windowTitle()) + QStringLiteral(" · Orchestrate"));
+        entry->host->setWindowTitle(contentTitle(entry->page->windowTitle()) + appTitleSuffix());
         if (entry->host->isMinimized()) entry->host->showNormal(); else entry->host->show();
         entry->host->raise(); entry->host->activateWindow();
     }
@@ -242,7 +247,7 @@ void ContentWorkspace::updateHeader(const EntryPtr &entry) {
     entry->pop->setText(entry->host ? QStringLiteral("收回主窗口") : QStringLiteral("独立打开"));
     entry->back->setVisible(!entry->host || entry->key!=entry->host->rootKey);
     if (entry->host && entry->host->stack->currentWidget()==entry->frame)
-        entry->host->setWindowTitle(contentTitle(entry->page->windowTitle())+QStringLiteral(" · Orchestrate"));
+        entry->host->setWindowTitle(contentTitle(entry->page->windowTitle()) + appTitleSuffix());
 }
 void ContentWorkspace::detach(const EntryPtr &entry) {
     auto *host=new ContentWindow(this); host->rootKey=entry->key;

@@ -2,6 +2,12 @@ cmake_minimum_required(VERSION 3.21)
 
 project(Orchestrate VERSION 4.2.0 LANGUAGES CXX)
 
+option(ORCHESTRATE_DEV_BUILD "Use the development executable and display name" ON)
+if(ORCHESTRATE_DEV_BUILD)
+    set(ORCHESTRATE_APP_NAME "orchestrate-dev")
+else()
+    set(ORCHESTRATE_APP_NAME "${PROJECT_NAME}")
+endif()
 configure_file(src/version.h.in generated/version.h @ONLY)
 
 set(CMAKE_AUTOMOC ON)
@@ -129,11 +135,19 @@ if(WIN32)
 endif()
 
 qt_add_executable(Orchestrate WIN32 src/main.cpp)
+set_target_properties(Orchestrate PROPERTIES OUTPUT_NAME "${ORCHESTRATE_APP_NAME}")
 
 if (WIN32)
+    add_custom_target(DeployOrchestrate
+        COMMAND Qt6::windeployqt "$<IF:$<CONFIG:Debug>,--debug,--release>"
+                --no-translations --compiler-runtime "$<TARGET_FILE:Orchestrate>"
+        DEPENDS Orchestrate OrchestrateMath
+        COMMENT "Deploying Qt for ${ORCHESTRATE_APP_NAME}"
+        VERBATIM
+    )
     target_sources(Orchestrate PRIVATE resources/app.rc)
     # MinGW's resource compiler does not track included headers in Ninja.
-    # Rebuild Explorer's version resource whenever the CMake version changes.
+    # Rebuild Explorer's resource when the version or build name changes.
     set_property(SOURCE resources/app.rc APPEND PROPERTY OBJECT_DEPENDS
         "${CMAKE_CURRENT_BINARY_DIR}/generated/version.h")
     # 标题栏配色通过 DWM 设置
@@ -151,7 +165,6 @@ target_include_directories(Orchestrate PRIVATE
 if (WIN32)
     set_target_properties(Orchestrate PROPERTIES
         WIN32_EXECUTABLE TRUE
-        OUTPUT_NAME "Orchestrate"
         VERSION "${PROJECT_VERSION}"
     )
 endif()

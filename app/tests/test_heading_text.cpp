@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "version.h"
 #include "test_support.h"
 #include "test_skin_fixture.h"
 #include "platform/fileaccess.h"
@@ -377,9 +378,12 @@ private slots:
             const auto frame = window.screen()->grabWindow(window.winId()).toImage();
             frame.save(fixture("artifacts/native-caption-" + stage + ".png"));
             const qreal scale = frame.devicePixelRatio();
+            int sampleEnd = window.width() - 180;
+            if (auto *buildName = window.findChild<QLabel *>("devBuildName"))
+                sampleEnd = qMin(sampleEnd, buildName->mapTo(&window, QPoint()).x());
             int matching = 0, total = 0;
             for (int y = qRound(8*scale); y < qRound(24*scale); ++y) {
-                for (int x = qRound(80*scale); x < qRound((window.width()-180)*scale); ++x) {
+                for (int x = qRound(80*scale); x < qRound(sampleEnd*scale); ++x) {
                     ++total;
                     const QColor expected(UiTheme::Sidebar);
                     if (frame.pixelColor(x,y).rgb() == expected.rgb()) ++matching;
@@ -454,7 +458,23 @@ private slots:
         QVERIFY(toggle && header && sidebar);
         QCOMPARE(navigation.size(), 5);
         QVERIFY(window.findChildren<QLabel *>("pageTitle").isEmpty());
-        QVERIFY(header->findChildren<QLabel *>().isEmpty());
+        const QString name = QStringLiteral(ORCHESTRATE_APP_NAME);
+        QCOMPARE(window.windowTitle(), name);
+        const auto headerLabels = header->findChildren<QLabel *>();
+        QCOMPARE(headerLabels.size(), ORCHESTRATE_DEV_BUILD ? 1 : 0);
+        if (ORCHESTRATE_DEV_BUILD) {
+            QCOMPARE(headerLabels.first()->objectName(), QStringLiteral("devBuildName"));
+            QCOMPARE(headerLabels.first()->text(), name);
+            QVERIFY(headerLabels.first()->isVisible());
+        }
+        const auto *tray = window.findChild<QSystemTrayIcon *>();
+        QVERIFY(tray && tray->contextMenu());
+        if (QSystemTrayIcon::isSystemTrayAvailable())
+            QCOMPARE(tray->toolTip(), name);
+        else
+            QVERIFY(!tray->isVisible());
+        QVERIFY(menuAction(*tray->contextMenu(), QStringLiteral("打开 %1").arg(name)));
+        QVERIFY(menuAction(*tray->contextMenu(), QStringLiteral("退出 %1").arg(name)));
         QCOMPARE(header->findChildren<QPushButton *>().size(), 1);
         for (const QSize size : {QSize(1180,760), QSize(980,640)}) {
             window.resize(size);
@@ -3109,6 +3129,7 @@ int main(int argc, char **argv)
     app.setQuitOnLastWindowClosed(false);
     app.setOrganizationName(QStringLiteral("OrchestrateHeadingTests"));
     app.setApplicationName(QUuid::createUuid().toString(QUuid::Id128));
+    app.setApplicationDisplayName(QStringLiteral(ORCHESTRATE_APP_NAME));
     QStandardPaths::setTestModeEnabled(true);
     if (QFileInfo(QCoreApplication::applicationDirPath()).fileName() != QStringLiteral("heading-text-test")) return 2;
     // This fixture has no automation tools; startup cannot execute/read real tools.

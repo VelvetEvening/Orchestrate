@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "test_skin_fixture.h"
+#include "version.h"
 #include "test_support.h"
 #include "ui/contentworkspace.h"
 #include "ui/theme.h"
@@ -1261,6 +1262,7 @@ static int runResourceProbe(QApplication &app) {
 }
 int main(int argc,char **argv) {
     QApplication app(argc,argv); app.setApplicationName("WorkspaceNavigationTest"); app.setOrganizationName("OrchestrateTests");
+    app.setApplicationDisplayName(QStringLiteral(ORCHESTRATE_APP_NAME));
     QStandardPaths::setTestModeEnabled(true); app.setStyle("Fusion");
     for (const auto &font:{"msyh.ttc","msyhbd.ttc","segoeui.ttf","consola.ttf"}) QFontDatabase::addApplicationFont(QStringLiteral("C:/Windows/Fonts/")+font);
     UiTheme::install(app); QDir().mkpath(app.applicationDirPath()+"/artifacts");

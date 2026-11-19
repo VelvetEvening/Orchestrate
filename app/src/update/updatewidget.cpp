@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QJsonDocument>
 #include <QLabel>
 #include <QNetworkAccessManager>
@@ -97,7 +98,7 @@ UpdateWidget::UpdateWidget(QWidget *parent, UpdateChecker *checker) : QWidget(pa
     auto *title = new QLabel(QStringLiteral("版本与更新"), this);
     title->setObjectName(QStringLiteral("cardTitle"));
     layout->addWidget(title);
-    auto *version = new QLabel(QStringLiteral("Orchestrate %1").arg(QCoreApplication::applicationVersion()), this);
+    auto *version = new QLabel(QStringLiteral("%1 %2").arg(QGuiApplication::applicationDisplayName(), QCoreApplication::applicationVersion()), this);
     version->setObjectName(QStringLiteral("installedVersion"));
     layout->addWidget(version);
     auto *options = new QGridLayout;

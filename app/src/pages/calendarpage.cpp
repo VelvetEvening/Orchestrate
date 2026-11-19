@@ -19,6 +19,7 @@
 #include <QFont>
 #include <QFormLayout>
 #include <QFrame>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -505,7 +506,7 @@ void CalendarPage::checkDueReminders()
             message += QStringLiteral("\n") + reminder.content.trimmed();
         }
         if (trayIcon_ != nullptr && trayIcon_->isVisible()) {
-            trayIcon_->showMessage(QStringLiteral("Orchestrate 提醒"), message,
+            trayIcon_->showMessage(QStringLiteral("%1 提醒").arg(QGuiApplication::applicationDisplayName()), message,
                                    QSystemTrayIcon::Information, 8000);
         }
     }
