@@ -56,16 +56,16 @@ protected:
         const bool checked = isChecked();
         const QColor trackColor = checked ? UiTheme::Accent : UiTheme::ControlBorder;
         const QColor stroke = isEnabled() ? trackColor : UiTheme::Disabled;
-        const QRectF track(10, (height() - 14) / 2.0, 25, 14);
+        const QRectF track(9, (height() - 16) / 2.0, 30, 16);
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setPen(stroke);
         painter.setBrush(checked ? stroke : UiTheme::Surface);
-        painter.drawRoundedRect(track, 7, 7);
-        const qreal thumbLeft = checked ? track.right() - 11 : track.left() + 3;
+        painter.drawRoundedRect(track, 8, 8);
+        const qreal thumbLeft = checked ? track.right() - 14 : track.left() + 2;
         painter.setPen(Qt::NoPen);
         painter.setBrush(checked ? UiTheme::Surface : stroke);
-        painter.drawEllipse(QRectF(thumbLeft, track.top() + 3, 8, 8));
+        painter.drawEllipse(QRectF(thumbLeft, track.top() + 2, 12, 12));
     }
 };
 

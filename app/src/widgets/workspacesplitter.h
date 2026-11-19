@@ -32,8 +32,8 @@ private:
         {
             QPainter painter(this);
             const bool horizontal = orientation() == Qt::Horizontal;
-            QColor leading(horizontal ? UiTheme::IndexSurface : UiTheme::Surface);
-            QColor trailing(horizontal ? UiTheme::Surface : UiTheme::IndexSurface);
+            QColor leading(UiTheme::IndexSurface);
+            QColor trailing(UiTheme::Surface);
             if (horizontal && layoutDirection() == Qt::RightToLeft)
                 qSwap(leading, trailing);
             const QRect line = horizontal

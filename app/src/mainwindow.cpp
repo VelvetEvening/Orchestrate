@@ -59,7 +59,6 @@ constexpr int ExpandedSidebarWidth = 168;
 constexpr int CollapsedSidebarWidth = 72;
 constexpr int MaxSkinLabelWidth = 220;
 constexpr int SettingsPageIndex = 4;
-constexpr int SettingsColumnWidth = 624;
 const QString PaletteSetting = QStringLiteral("appearance_palette");
 const QString LayoutSetting = QStringLiteral("appearance_layout");
 const QString CloseToTraySetting = QStringLiteral("close_to_tray");
@@ -72,6 +71,46 @@ QFrame *makeSection(QWidget *parent)
     UiTheme::setSurface(card, "section");
     return card;
 }
+
+class SettingsScroll final : public QScrollArea
+{
+public:
+    SettingsScroll(QWidget *page, QBoxLayout *sections, QWidget *parent)
+        : QScrollArea(parent), sections_(sections)
+    {
+        setObjectName(QStringLiteral("settingsScroll"));
+        setWidgetResizable(true);
+        setFrameShape(QFrame::NoFrame);
+        setWidget(page);
+    }
+
+protected:
+    bool viewportEvent(QEvent *event) override
+    {
+        if (event->type() == QEvent::Resize) arrangeSections();
+        return QScrollArea::viewportEvent(event);
+    }
+
+    bool eventFilter(QObject *object, QEvent *event) override
+    {
+        if (object == widget() && event->type() == QEvent::LayoutRequest) arrangeSections();
+        return QScrollArea::eventFilter(object, event);
+    }
+
+private:
+    void arrangeSections()
+    {
+        if (!widget()) return;
+        const auto margins = widget()->layout()->contentsMargins();
+        const int available = viewport()->width() - margins.left() - margins.right();
+        const int widest = qMax(sections_->itemAt(0)->minimumSize().width(),
+                                sections_->itemAt(1)->minimumSize().width());
+        const int required = qMax(864, 2 * widest + sections_->spacing());
+        sections_->setDirection(available >= required ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom);
+    }
+
+    QBoxLayout *sections_;
+};
 
 void fillPaletteChoices(QComboBox *choice, const QList<SkinTheme> &installed)
 {
@@ -110,6 +149,14 @@ protected:
     {
         QFrame::paintEvent(event);
         if (artwork_.isNull() || width() <= CollapsedSidebarWidth) return;
+        QPainter painter(this);
+        QLinearGradient wash(0, 0, width(), height());
+        QColor shade = UiTheme::Surface;
+        shade.setAlpha(0);
+        wash.setColorAt(0, shade);
+        shade.setAlpha(166);
+        wash.setColorAt(1, shade);
+        painter.fillRect(rect().adjusted(0, 0, -1, 0), wash);
         // Keep artwork in the stretch between the navigation entries and Settings.
         for (int i = 0; i < layout()->count(); ++i) {
             const auto *spacer = layout()->itemAt(i)->spacerItem();
@@ -119,7 +166,6 @@ protected:
             const QSize size = artwork_.size().scaled(width(), gap.height(), Qt::KeepAspectRatio);
             const int top = qBound(gap.top(), qRound(height() * 0.72 - size.height() * 0.52),
                                    gap.bottom() + 1 - size.height());
-            QPainter painter(this);
             painter.setRenderHint(QPainter::SmoothPixmapTransform);
             painter.setOpacity(0.76);
             painter.drawPixmap(QRect((width() - size.width()) / 2, top, size.width(), size.height()), artwork_);
@@ -268,7 +314,7 @@ void MainWindow::buildNavigation(QWidget *parent)
         button->setCheckable(true);
         button->setAutoExclusive(true);
         button->setIcon(UiTheme::icon(icons.at(i)));
-        button->setIconSize(QSize(19, 19));
+        button->setIconSize(QSize(22, 22));
         button->setToolTip(labels.at(i));
         button->setCursor(Qt::PointingHandCursor);
         button->setAccessibleName(labels.at(i));
@@ -319,10 +365,13 @@ QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
     auto *section = makeSection(parent);
     section->setObjectName(QStringLiteral("settingsAppearanceSection"));
     auto *body = new QVBoxLayout(section);
-    UiTheme::setLayoutMetrics(body, {0, 20, 0, 22}, 10);
+    UiTheme::setLayoutMetrics(body, {0, 0, 0, 20}, 16);
+    auto *heading = new QHBoxLayout;
     auto *title = new QLabel(QStringLiteral("风格与布局"), section);
     title->setObjectName(QStringLiteral("cardTitle"));
-    body->addWidget(title);
+    heading->addWidget(title, 1);
+    body->addLayout(heading);
+    body->addWidget(UiTheme::createAppearancePreview(section));
     auto *options = new QGridLayout;
     SettingsForm::configure(*options);
     body->addLayout(options);
@@ -362,7 +411,7 @@ QFrame *MainWindow::makeAppearanceSection(QWidget *parent)
     manage->setLayoutDirection(Qt::RightToLeft);
     manage->setIconSize(QSize(12, 12));
     manage->setCursor(Qt::PointingHandCursor);
-    options->addWidget(manage, 0, SettingsForm::AccessoryColumn, Qt::AlignLeft | Qt::AlignAbsolute | Qt::AlignVCenter);
+    heading->addWidget(manage);
     QWidget::setTabOrder(manage, palette);
     QWidget::setTabOrder(palette, layout);
     connect(manage, &QPushButton::clicked, this, [this, manage] { openSkinManager(manage); });
@@ -405,8 +454,9 @@ void MainWindow::openSkinManager(QWidget *source)
 QFrame *MainWindow::makeRuntimeSection(QWidget *parent)
 {
     auto *section = makeSection(parent);
+    section->setObjectName(QStringLiteral("settingsRuntimeSection"));
     auto *body = new QVBoxLayout(section);
-    UiTheme::setLayoutMetrics(body, {0, 20, 0, 22}, 10);
+    UiTheme::setLayoutMetrics(body, {0, 0, 0, 20}, 12);
     auto *title = new QLabel(QStringLiteral("运行与托盘"), section);
     title->setObjectName(QStringLiteral("cardTitle"));
     body->addWidget(title);
@@ -454,24 +504,25 @@ QScrollArea *MainWindow::makeSettingsPage()
 {
     auto *page = new QWidget(pageStack_);
     page->setObjectName(QStringLiteral("settingsPage"));
-    auto *pageLayout = new QHBoxLayout(page);
-    UiTheme::setLayoutMetrics(pageLayout, {32, 4, 32, 24}, 0);
-    auto *column = new QWidget(page);
-    column->setMaximumWidth(SettingsColumnWidth);
-    pageLayout->addWidget(column, 1);
+    auto *pageLayout = new QVBoxLayout(page);
+    UiTheme::setLayoutMetrics(pageLayout, {32, 30, 32, 24}, 0);
+    auto *sections = new QBoxLayout(QBoxLayout::TopToBottom);
+    sections->setSpacing(28);
+    pageLayout->addLayout(sections);
     pageLayout->addStretch();
+    sections->addWidget(makeAppearanceSection(page), 1, Qt::AlignTop);
 
-    auto *body = new QVBoxLayout(column);
-    body->setContentsMargins(0, 0, 0, 0);
-    body->setSpacing(0);
-    body->addWidget(makeAppearanceSection(column));
-    body->addWidget(makeRuntimeSection(column));
+    auto *system = new QWidget(page);
+    auto *body = new QVBoxLayout(system);
+    UiTheme::setLayoutMetrics(body, {0, 0, 0, 0}, 20);
+    body->addWidget(makeRuntimeSection(system));
+    sections->addWidget(system, 1, Qt::AlignTop);
 
-    updateWidget_ = new UpdateWidget(column);
+    updateWidget_ = new UpdateWidget(system);
     updateWidget_->setAccessibleName(QStringLiteral("版本与更新"));
     updateWidget_->setFocusPolicy(Qt::ClickFocus);
     UiTheme::setSurface(updateWidget_, "content");
-    UiTheme::setLayoutMetrics(updateWidget_->layout(), {0, 20, 0, 0}, 9);
+    UiTheme::setLayoutMetrics(updateWidget_->layout(), {0, 0, 0, 0}, 12);
     connect(updateWidget_, &UpdateWidget::installRequested, this, &MainWindow::installUpdate);
     connect(updateWidget_, &UpdateWidget::updateAvailableChanged, this, &MainWindow::setAvailableUpdate);
     connect(updateWidget_, &UpdateWidget::updateNotificationRequested, this, [this](const QString &tag) {
@@ -481,14 +532,7 @@ QScrollArea *MainWindow::makeSettingsPage()
                 QSystemTrayIcon::Information, 8000);
     });
     body->addWidget(updateWidget_);
-    body->addStretch();
-
-    auto *scroll = new QScrollArea(pageStack_);
-    scroll->setObjectName(QStringLiteral("settingsScroll"));
-    scroll->setWidgetResizable(true);
-    scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setWidget(page);
-    return scroll;
+    return new SettingsScroll(page, sections, pageStack_);
 }
 
 void MainWindow::buildTray()

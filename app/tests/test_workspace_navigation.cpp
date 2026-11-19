@@ -254,8 +254,10 @@ private slots:
         QVERIFY(paletteRect.bottom() < layoutRect.top());
         QCOMPARE(paletteRect.left(), layoutRect.left());
         QCOMPARE(paletteRect.right(), layoutRect.right());
-        QVERIFY(manageRect.right() < paletteRect.left());
-        QVERIFY(qAbs(manageRect.center().y() - paletteRect.center().y()) <= 1);
+        auto *preview = window.findChild<QWidget *>("appearancePreview");
+        QVERIFY(preview && manageRect.bottom() < pageRect(preview).top());
+        QVERIFY(pageRect(preview).bottom() < paletteRect.top());
+        QCOMPARE(manageRect.right(), paletteRect.right());
         for (auto *choice : {palette, layout}) {
             QVERIFY(scroll->viewport()->rect().contains(QRect(choice->mapTo(scroll->viewport(), QPoint()), choice->size())));
             QStyleOptionComboBox option;
@@ -271,6 +273,24 @@ private slots:
             QCOMPARE(toggle->text(), toggle->isChecked() ? QStringLiteral("开启") : QStringLiteral("关闭"));
             QCOMPARE(pageRect(toggle).right(), paletteRect.right());
         }
+
+        auto *appearance = window.findChild<QFrame *>("settingsAppearanceSection");
+        auto *runtime = window.findChild<QFrame *>("settingsRuntimeSection");
+        QVERIFY(appearance && runtime);
+        QVERIFY(pageRect(runtime).top() > pageRect(appearance).bottom());
+        window.activateWindow();
+        QTRY_VERIFY(window.isActiveWindow());
+        layout->setFocus();
+        QTRY_VERIFY(layout->hasFocus());
+        window.resize(1180, 760);
+        QTRY_VERIFY(pageRect(runtime).left() > pageRect(appearance).right());
+        QCOMPARE(pageRect(runtime).top(), pageRect(appearance).top());
+        QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
+        QCOMPARE(QApplication::focusWidget(), layout);
+        capture(window, "settings-wide");
+        window.resize(window.minimumSize());
+        QTRY_VERIFY(pageRect(runtime).top() > pageRect(appearance).bottom());
+        QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
 
         const auto expandedIcon = sidebarToggle->icon().pixmap(24, 24).toImage();
         const int expandedHeight = navigation.at(4)->height();

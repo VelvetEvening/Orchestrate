@@ -25,6 +25,7 @@
 #include <QShowEvent>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QStyledItemDelegate>
 #include <QTabBar>
 #include <QTimer>
 #include <QTreeWidgetItemIterator>
@@ -93,6 +94,39 @@ QString itemTitle(const AppDatabase::ClipboardItem &item)
     const auto text=item.text.simplified();
     return text.isEmpty() ? ClipboardContent::kindName(item.kind) : text.left(100);
 }
+
+class ClipboardTimeDelegate final : public QStyledItemDelegate
+{
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+protected:
+    void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override
+    {
+        QStyledItemDelegate::initStyleOption(option, index);
+        option->palette.setColor(QPalette::Text, UiTheme::Muted);
+        option->font.setPointSizeF(9);
+        option->fontMetrics = QFontMetrics(option->font);
+        option->displayAlignment = Qt::AlignRight | Qt::AlignVCenter;
+    }
+};
+
+class ClipboardImagePreview final : public QLabel
+{
+public:
+    using QLabel::QLabel;
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        const auto image = pixmap();
+        if (image.isNull()) return;
+        const auto native = image.deviceIndependentSize().toSize();
+        const auto fit = native.scaled(size().boundedTo(native), Qt::KeepAspectRatio);
+        const QRect target = QStyle::alignedRect(layoutDirection(), Qt::AlignCenter, fit, rect());
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        painter.drawPixmap(target, image);
+    }
+};
 }
 
 ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent)
@@ -101,10 +135,15 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent)
     setObjectName("clipboardPage");
     UiTheme::setSurface(this, "content");
     monitor_=new ClipboardMonitor(database_,this);
-    auto *layout=new QVBoxLayout(this); layout->setContentsMargins(24,22,24,24); layout->setSpacing(14);
+    auto *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
 
-    auto *tabRow=new QHBoxLayout;
-    auto *dropTabs=new ClipboardTabs(this);
+    auto *tabStrip = new QFrame(this);
+    tabStrip->setObjectName(QStringLiteral("clipboardTabStrip"));
+    auto *tabRow = new QHBoxLayout(tabStrip);
+    UiTheme::setLayoutMetrics(tabRow, {24, 12, 24, 10}, 12);
+    auto *dropTabs=new ClipboardTabs(tabStrip);
     tabs_=dropTabs; tabs_->setObjectName("clipboardTabs"); tabs_->setMovable(true); tabs_->setExpanding(false);
     tabs_->setDrawBase(false);
     tabs_->setIconSize(QSize(16,16));
@@ -112,19 +151,33 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent)
     tabs_->setAccessibleName(QStringLiteral("剪贴板标签页"));
 
     tabRow->addWidget(tabs_,1);
-    auto *newTab=new QPushButton(QStringLiteral("新建标签页"),this); tabRow->addWidget(newTab); layout->addLayout(tabRow);
-    UiTheme::setRole(newTab, "quiet");
-    auto *searchRow=new QHBoxLayout;
-    search_=new QLineEdit(this); search_->setObjectName("clipboardSearch"); search_->setPlaceholderText(QStringLiteral("搜索内容、标题或文件夹"));
-    search_->setClearButtonEnabled(true); search_->setAccessibleName(QStringLiteral("搜索剪贴板内容")); searchRow->addWidget(search_,1);
-    auto *newFolder=new QPushButton(QStringLiteral("新建文件夹"),this); newFolder->setObjectName("clipboardNewFolder");
-    UiTheme::setRole(newFolder, "quiet");
-    searchRow->addWidget(newFolder); layout->addLayout(searchRow);
+    auto *newTab = new QPushButton(UiTheme::icon("plus"), QStringLiteral("新建标签页"), tabStrip);
+    tabRow->addWidget(newTab);
+    layout->addWidget(tabStrip);
 
-    auto *contentSplit=new WorkspaceSplitter(Qt::Vertical,this);
-    items_=new SiblingOrderTree(contentSplit); items_->setObjectName("clipboardItems"); dropTabs->tree=items_;
+    contentSplit_ = new WorkspaceSplitter(Qt::Vertical, this);
+    auto *indexPane = new QWidget(contentSplit_);
+    UiTheme::setSurface(indexPane, "index");
+    auto *indexLayout = new QVBoxLayout(indexPane);
+    UiTheme::setLayoutMetrics(indexLayout, {18, 16, 18, 12}, 12);
+    auto *searchRow = new QHBoxLayout;
+    search_=new QLineEdit(indexPane); search_->setObjectName("clipboardSearch"); search_->setPlaceholderText(QStringLiteral("搜索内容、标题或文件夹"));
+    search_->addAction(UiTheme::icon("search"), QLineEdit::LeadingPosition);
+    search_->setClearButtonEnabled(true); search_->setAccessibleName(QStringLiteral("搜索剪贴板内容")); searchRow->addWidget(search_,1);
+    auto *newFolder=new QPushButton(QStringLiteral("新建文件夹"),indexPane); newFolder->setObjectName("clipboardNewFolder");
+    searchRow->addWidget(newFolder);
+    indexLayout->addLayout(searchRow);
+
+    items_=new SiblingOrderTree(indexPane); items_->setObjectName("clipboardItems"); dropTabs->tree=items_;
     synchronizeTreeAccessibility(items_);
-    items_->setHeaderHidden(true); items_->header()->setStretchLastSection(true);
+    items_->setHeaderLabels({QStringLiteral("内容"), QStringLiteral("创建时间")});
+    items_->setHeaderHidden(true);
+    items_->header()->setStretchLastSection(false);
+    items_->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    items_->header()->setSectionResizeMode(1, QHeaderView::Fixed);
+    items_->setColumnWidth(1, 76);
+    items_->setItemDelegateForColumn(1, new ClipboardTimeDelegate(items_));
+    items_->setAllColumnsShowFocus(true);
     items_->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
     items_->setContextMenuPolicy(Qt::CustomContextMenu); items_->setMinimumHeight(120); items_->setWordWrap(false);
@@ -132,21 +185,43 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent)
     items_->setIndentation(20); items_->setIconSize(QSize(16,16));
     items_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff); items_->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     items_->setAccessibleName(QStringLiteral("剪贴板内容与文件夹"));
+    indexLayout->addWidget(items_, 1);
 
-    previewPane_=new QWidget(contentSplit); UiTheme::setSurface(previewPane_, "inset");
-    auto *previewLayout=new QVBoxLayout(previewPane_); previewLayout->setContentsMargins(0,12,0,0);
-    previewImage_=label(QString(),"clipboardImage",previewPane_); previewImage_->setAlignment(Qt::AlignCenter); previewImage_->setMinimumSize(1,1);
-    previewImage_->setMaximumHeight(220); previewImage_->hide(); previewLayout->addWidget(previewImage_);
+    previewPane_ = new QWidget(contentSplit_);
+    UiTheme::setSurface(previewPane_, "content");
+    auto *previewLayout = new QVBoxLayout(previewPane_);
+    UiTheme::setLayoutMetrics(previewLayout, {22, 16, 22, 16}, 10);
+    auto *previewHeading = new QHBoxLayout;
+    previewHeading->addWidget(label(QStringLiteral("内容预览"), "cardTitle", previewPane_), 1);
+    previewMeta_ = label({}, "clipboardPreviewMeta", previewPane_);
+    UiTheme::setRole(previewMeta_, "muted");
+    previewHeading->addWidget(previewMeta_);
+    previewLayout->addLayout(previewHeading);
+    previewImage_ = new ClipboardImagePreview(previewPane_);
+    previewImage_->setObjectName(QStringLiteral("clipboardImage"));
+    previewImage_->setAccessibleName(QStringLiteral("图片预览"));
+    previewImage_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    previewImage_->setMinimumHeight(48);
+    previewLayout->addWidget(previewImage_, 1);
+    previewImage_->hide();
     previewText_=new TextLayoutGuard::Edit(previewPane_); previewText_->setObjectName("clipboardPreview"); previewText_->setReadOnly(true);
     previewText_->setMinimumHeight(65); previewText_->setAccessibleName(QStringLiteral("条目内容预览")); previewLayout->addWidget(previewText_,1);
     previewPane_->hide();
-    contentSplit->setSizes({330,170}); contentSplit->setStretchFactor(0,3); contentSplit->setStretchFactor(1,2); layout->addWidget(contentSplit,1);
+    contentSplit_->setStretchFactor(0, 1);
+    contentSplit_->setStretchFactor(1, 1);
+    connect(contentSplit_, &QSplitter::splitterMoved, this, [this] {
+        auto &sizes = contentSplit_->orientation() == Qt::Horizontal ? horizontalSizes_ : verticalSizes_;
+        sizes = contentSplit_->sizes();
+    });
+    layout->addWidget(contentSplit_, 1);
 
-    auto *actions=new QHBoxLayout; actions->setSpacing(6);
+    auto *actionBar = new QFrame(this);
+    actionBar->setObjectName(QStringLiteral("clipboardActionBar"));
+    auto *actions = new QHBoxLayout(actionBar);
+    UiTheme::setLayoutMetrics(actions, {24, 10, 24, 12}, 8);
     auto *create=new QPushButton(QStringLiteral("新建"),this); create->setObjectName("clipboardNewItem");
     UiTheme::setRole(create, "primary");
     edit_=new QPushButton(QStringLiteral("编辑"),this); edit_->setObjectName("clipboardEditItem");
-    UiTheme::setRole(edit_, "quiet");
     remove_=new QPushButton(QStringLiteral("删除"),this); remove_->setObjectName("clipboardDeleteItems"); UiTheme::setRole(remove_, "danger");
     auto *settings=new QPushButton(QStringLiteral("设置"),this);
     settings->setObjectName("clipboardSettings");
@@ -178,7 +253,7 @@ ClipboardPage::ClipboardPage(AppDatabase *database, QWidget *parent)
     auto *history=settingsMenu->addAction(QStringLiteral("历史设置…"));
     settings->setMenu(settingsMenu);
     actions->addWidget(create); actions->addWidget(edit_); actions->addWidget(remove_); actions->addStretch(); actions->addWidget(settings);
-    layout->addLayout(actions);
+    layout->addWidget(actionBar);
     status_=label(QString(),"clipboardStatus",this); status_->setWordWrap(true);  status_->hide(); layout->addWidget(status_);
 
     refreshTimer_=new QTimer(this); refreshTimer_->setSingleShot(true); refreshTimer_->setInterval(100);
@@ -289,6 +364,21 @@ QList<int> ClipboardPage::selectedIds() const
     return ids;
 }
 void ClipboardPage::showEvent(QShowEvent *event) { QWidget::showEvent(event); if (dirty_) refreshItems(); }
+void ClipboardPage::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    arrangePreview();
+}
+
+void ClipboardPage::arrangePreview(bool opening)
+{
+    const auto direction = width() >= 900 ? Qt::Horizontal : Qt::Vertical;
+    if (!opening && contentSplit_->orientation() == direction) return;
+    contentSplit_->setOrientation(direction);
+    if (!previewPane_->isHidden())
+        contentSplit_->setSizes(direction == Qt::Horizontal ? horizontalSizes_ : verticalSizes_);
+}
+
 void ClipboardPage::report(const QString &message) { status_->setText(message); status_->setVisible(!message.isEmpty()); }
 
 void ClipboardPage::refreshTabs(int selected)
@@ -365,7 +455,12 @@ void ClipboardPage::refreshItems()
         QHash<int,QTreeWidgetItem *> folderNodes;
         QSet<int> matchedFolders;
         for (const auto &entry : entries) matchedFolders.insert(entry.folderId);
-        QIcon folderIcon=UiTheme::icon(QStringLiteral("folder"));
+        static const QIcon folderIcon = UiTheme::icon("folder");
+        static const QIcon textIcon = UiTheme::icon("note");
+        static const QIcon imageIcon = UiTheme::icon("picture");
+        static const QIcon filesIcon = UiTheme::icon("files");
+        items_->setRootIsDecorated(!folders.isEmpty());
+        const auto today = QDate::currentDate();
         const auto savedExpanded=database_->setting(expandedKey(currentTab),QStringLiteral("*")).split(',');
         for (const auto &folder : folders) {
             if (!search.isEmpty() && !matchedFolders.contains(folder.id) && !folder.name.contains(search,Qt::CaseInsensitive)) continue;
@@ -385,6 +480,12 @@ void ClipboardPage::refreshItems()
             auto *parent=folderNodes.value(entry.folderId);
             auto *item=parent ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(items_);
             item->setText(0,caption); item->setData(0,Qt::UserRole,entry.id);
+            item->setIcon(0, entry.kind == "image" ? imageIcon : entry.kind == "files" ? filesIcon : textIcon);
+            const auto created = entry.createdAt.toLocalTime();
+            const auto dateFormat = created.date() == today ? "HH:mm"
+                : created.date().year() == today.year() ? "MM/dd" : "yyyy/MM";
+            item->setText(1, created.toString(QLatin1String(dateFormat)));
+            item->setToolTip(1, created.toString(QStringLiteral("yyyy-MM-dd HH:mm")));
             item->setData(0,TabRole,entry.tabId); item->setData(0,FolderIdRole,entry.folderId);
             item->setData(0,SiblingOrderScopeRole,QStringLiteral("items.%1.%2").arg(entry.tabId).arg(entry.folderId));
             item->setToolTip(0,caption);
@@ -403,16 +504,22 @@ void ClipboardPage::updatePreview()
     const auto ids=selectedIds();
     edit_->setEnabled(ids.size()==1); remove_->setEnabled(!ids.isEmpty());
     previewImage_->hide(); previewText_->show();
+    const bool opening = ids.size() == 1 && previewPane_->isHidden();
     previewPane_->setVisible(ids.size()==1);
+    if (opening) arrangePreview(true);
     if (ids.size()!=1) {
         previewText_->clear(); return;
     }
     QString error; const auto item=database_->clipboardItem(ids.first(),&error);
     if (!item.id) { report(error); previewText_->clear(); previewPane_->hide(); return; }
+    QStringList metadata{ClipboardContent::kindName(item.kind)};
+    if (item.createdAt.isValid())
+        metadata << item.createdAt.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm"));
+    previewMeta_->setText(metadata.join(QStringLiteral("  ·  ")));
     previewText_->setToolTip(item.text.size()>200000 ? QStringLiteral("预览前 20 万字，复制保留完整内容。") : QString());
     TextLayoutGuard::setPlainText(previewText_,item.text.left(200000));
     if (item.kind=="image") {
-        const auto image=ClipboardContent::previewImage(item.payload,QSize(qMax(100,previewText_->width()-20),210));
+        const auto image=ClipboardContent::previewImage(item.payload, QSize(1024, 1024));
         previewImage_->setPixmap(QPixmap::fromImage(image)); previewImage_->setVisible(!image.isNull());
         previewText_->setVisible(!item.text.isEmpty());
     }

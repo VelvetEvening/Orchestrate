@@ -6,6 +6,11 @@
     <file>icons/toolbox.svg</file>
     <file>icons/clipboard.svg</file>
     <file>icons/settings.svg</file>
+    <file>icons/plus.svg</file>
+    <file>icons/search.svg</file>
+    <file>icons/note.svg</file>
+    <file>icons/picture.svg</file>
+    <file>icons/files.svg</file>
     <file>icons/panel-left-expand.svg</file>
     <file>icons/panel-left-collapse.svg</file>
     <file>icons/chevron-left.svg</file>

@@ -3,7 +3,7 @@ QWidget { color: @text@; selection-background-color: @selection@; selection-colo
 QMainWindow, QWidget#root, QWidget#settingsPage { background: @surface@; }
 QDialog, QMessageBox, QInputDialog { background: @surface@; }
 QLabel { background: transparent; }
-QFrame#sidebar { background: @sidebar@; border: none; }
+QFrame#sidebar { background: @sidebar@; border: none; border-right: 1px solid @border@; }
 QFrame#windowHeader { background: @header@; border: none; border-bottom: 1px solid @border@; }
 QWidget[workspaceSurface="content"] {
     background: @surface@; border: none; border-radius: 0;
@@ -34,7 +34,8 @@ QWidget#updateWidget {
     background: @surface@; border: 1px solid @border@; border-radius: 10px;
 }
 QPushButton, QToolButton {
-    background: @controlSurface@; color: @controlText@; border: 1px solid @controlBorder@;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 @buttonTop@, stop:0.4 @controlSurface@, stop:0.65 @controlSurface@, stop:1 @buttonBottom@);
+    color: @controlText@; border: 1px solid @buttonEdge@; border-bottom-color: @controlBorder@;
     border-radius: @controlRadius@; padding: @controlPadding@; min-height: 20px;
 }
 QPushButton:hover, QToolButton:hover { background: @controlHover@; border-color: @focus@; }
@@ -56,7 +57,7 @@ QPushButton[uiRole="quiet"]:disabled, QToolButton[uiRole="quiet"]:disabled {
     color: @disabled@; background: @background@; border-color: @border@;
 }
 QPushButton#primaryButton, QPushButton[uiRole="primary"], QToolButton[uiRole="primary"], QPushButton:default {
-    background: @primaryBackground@; color: @primaryText@; border-color: @primaryBorder@; font-weight: 600;
+    background: @primaryBackground@; color: @primaryText@; border-color: @primaryBorder@; border-bottom-color: @primaryEdge@; font-weight: 600;
 }
 QPushButton#primaryButton:hover, QPushButton[uiRole="primary"]:hover, QToolButton[uiRole="primary"]:hover, QPushButton:default:hover { background: @primaryHover@; border-color: @primaryHoverBorder@; }
 QPushButton#primaryButton:pressed, QPushButton[uiRole="primary"]:pressed, QToolButton[uiRole="primary"]:pressed, QPushButton:default:pressed { background: @primaryPressed@; border-color: @focus@; }
@@ -66,11 +67,12 @@ QPushButton#dangerButton, QPushButton[uiRole="danger"], QToolButton[uiRole="dang
 QPushButton#dangerButton:hover, QPushButton[uiRole="danger"]:hover, QToolButton[uiRole="danger"]:hover, QPushButton#deleteProjectButton:hover { background: @dangerBackground@; border-color: @dangerHoverBorder@; }
 QPushButton#dangerButton:focus, QPushButton[uiRole="danger"]:focus, QToolButton[uiRole="danger"]:focus, QPushButton#deleteProjectButton:focus { border-color: @danger@; }
 QPushButton[uiRole="danger"]:disabled, QToolButton[uiRole="danger"]:disabled, QPushButton#dangerButton:disabled, QPushButton#deleteProjectButton:disabled { color: @disabled@; background: transparent; border-color: transparent; }
-QPushButton#navButton { color: @text@; background: transparent; border: 1px solid transparent; text-align: left; padding: @navPadding@; font-size: 14px; border-radius: @navRadius@; }
+QPushButton#navButton { color: @text@; background: transparent; border: 1px solid transparent; border-left-width: 3px; text-align: left; padding: @navPadding@; min-height: 24px; font-size: 14px; border-radius: @navRadius@; }
 QPushButton#navButton[uiRole="collapsedNav"] { text-align: center; padding-left: 0; padding-right: 0; }
 QPushButton#navButton:hover { background: @navHover@; }
-QPushButton#navButton:checked { background: @selection@; color: @selectionText@; border-color: @border@; font-weight: 600; }
+QPushButton#navButton:checked { background: @selection@; color: @selectionText@; border-color: @border@; border-left-color: @accent@; font-weight: 600; }
 QPushButton#navButton:focus { border-color: @focus@; }
+QPushButton#navButton:checked:focus { border-left-color: @accent@; }
 QPushButton#sidebarToggle { background: transparent; padding: 0; min-width: 32px; max-width: 32px; min-height: 28px; max-height: 28px; border-color: transparent; }
 QPushButton#sidebarToggle:hover { background: @navHover@; }
 QPushButton#sidebarToggle:pressed { background: @selection@; }
@@ -83,22 +85,31 @@ QLineEdit:hover, QComboBox:hover, QAbstractSpinBox:hover { border-color: @focus@
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QAbstractSpinBox:focus, QComboBox:focus { border-color: @accent@; }
 QLineEdit:disabled, QAbstractSpinBox:disabled, QComboBox:disabled { color: @disabled@; background: @background@; border-color: @border@; }
 QLineEdit[readOnly="true"] { background: @background@; border-color: @border@; }
-QLineEdit#recordSearch, QLineEdit#clipboardSearch { background: @indexSurface@; border-color: transparent; }
-QLineEdit#recordSearch:hover, QLineEdit#clipboardSearch:hover { border-color: @border@; }
+QLineEdit#recordSearch { background: @indexSurface@; border-color: transparent; }
+QLineEdit#clipboardSearch { background: @surface@; border-color: @buttonEdge@; }
+QLineEdit#clipboardSearch QToolButton { background: transparent; border: none; min-height: 0; padding: 0; }
+QLineEdit#recordSearch:hover, QLineEdit#clipboardSearch:hover { border-color: @controlBorder@; }
 QLineEdit#recordSearch:focus, QLineEdit#clipboardSearch:focus { border-color: @focus@; }
 QPlainTextEdit#headingSource, QTextEdit#headingPreview { padding: 12px 14px; }
 QTextEdit#headingPreview { border-color: @border@; }
 QTextEdit#headingPreview:focus { border-color: @accent@; }
-QPlainTextEdit#clipboardPreview { background: @indexSurface@; border: none; border-radius: 0; padding: 12px; }
-QTreeWidget#clipboardItems, QPlainTextEdit#clipboardPreview, QPlainTextEdit#clipboardItemBody { font-size: 18pt; }
+QFrame#clipboardTabStrip { background: @surface@; border: none; border-bottom: 1px solid @border@; }
+QFrame#clipboardActionBar { background: @surface@; border: none; border-top: 1px solid @border@; }
+QPushButton#clipboardNewItem { min-width: 48px; }
+QLabel#clipboardPreviewMeta { color: @muted@; font-size: 12px; }
+QPlainTextEdit#clipboardPreview { background: @surface@; border: 1px solid transparent; border-radius: 4px; padding: 2px 0; }
+QPlainTextEdit#clipboardPreview:focus { border-color: @focus@; }
+QTreeWidget#clipboardItems { font-size: @clipboardListSize@; }
+QPlainTextEdit#clipboardPreview, QPlainTextEdit#clipboardItemBody { font-size: 12pt; }
 QComboBox { background: @controlSurface@; color: @controlText@; padding-right: 28px; min-height: 20px; }
 QComboBox#appearancePalette { min-width: 7em; }
 QComboBox#appearanceLayout { min-width: 3em; }
 QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: center right; width: 26px; border: none; }
 QComboBox::down-arrow { image: url(@chevronDownIcon@); width: 12px; height: 12px; }
 QComboBox QAbstractItemView { background: @surface@; border: 1px solid @controlBorder@; padding: 4px; selection-background-color: @selection@; selection-color: @selectionText@; }
-QComboBox[uiRole="appearanceChoice"] { combobox-popup: 0; combobox-list-mousetracking: 1; }
+QComboBox[uiRole="appearanceChoice"] { combobox-popup: 0; combobox-list-mousetracking: 1; min-height: 24px; border-color: @buttonEdge@; border-bottom-color: @controlBorder@; }
 QComboBox[uiRole="appearanceChoice"]:hover { background: @hover@; }
+QComboBox[uiRole="appearanceChoice"]:focus { border-color: @accent@; }
 QComboBox[uiRole="appearanceChoice"]:on { background: @controlSurface@; border-color: @accent@; }
 QComboBox[uiRole="appearanceChoice"]::down-arrow:on { image: url(@chevronUpIcon@); }
 QFrame[uiRole="appearancePopup"] { background: transparent; border: none; }
@@ -136,7 +147,8 @@ QTreeWidget#toolTree::item { padding: @toolItemPadding@; }
 QListWidget#projectList::item, QTreeWidget#workRecordList::item { min-height: @recordMinHeight@; padding-top: 0; padding-bottom: 0; }
 QListWidget#diaryList::item { min-height: @diaryMinHeight@; padding-top: 0; padding-bottom: 0; }
 QListWidget#diaryCollectionList::item { min-height: @collectionMinHeight@; padding-top: 0; padding-bottom: 0; }
-QTreeWidget#clipboardItems::item { min-height: 30px; padding: 8px 12px; }
+QTreeWidget#clipboardItems::item { min-height: @clipboardRowHeight@; padding: 0 6px; border: none; border-bottom: 1px solid @border@; border-radius: 0; }
+QTreeWidget#clipboardItems::item:focus { border-bottom-color: @focus@; }
 QTreeWidget::branch { background: transparent; }
 QTreeWidget::branch:has-children:closed { image: url(@chevronRightIcon@); }
 QTreeWidget::branch:has-children:open { image: url(@chevronDownIcon@); }
@@ -151,12 +163,12 @@ QTabBar#projectStatusTabs::tab:first { border-top-left-radius: 6px; border-botto
 QTabBar#projectStatusTabs::tab:last { border-top-right-radius: 6px; border-bottom-right-radius: 6px; margin-left: -1px; }
 QTabBar#projectStatusTabs::tab:selected { color: @selectionText@; background: @selection@; }
 QTabBar#projectStatusTabs::tab:focus { border-color: @accent@; }
-QTabBar#clipboardTabs { font-size: 11pt; }
-QTabBar#clipboardTabs::tab { background: @background@; color: @text@; border: 1px solid @controlBorder@; border-radius: 6px; margin-top: 4px; margin-right: -8px; padding: 6px 20px; min-height: 22px; max-width: 220px; }
+QTabBar#clipboardTabs { font-size: 10pt; }
+QTabBar#clipboardTabs::tab { background: transparent; color: @muted@; border: 1px solid transparent; border-bottom-width: 2px; border-radius: 0; margin-right: 6px; padding: @tabPadding@; min-height: 22px; max-width: 220px; }
 QTabBar#clipboardTabs::tab:last { margin-right: 0; }
-QTabBar#clipboardTabs::tab:hover { background: @hover@; border-color: @focus@; }
-QTabBar#clipboardTabs::tab:selected { background: @selection@; color: @selectionText@; border-color: @focus@; margin-top: 0; padding-top: 8px; padding-bottom: 8px; }
-QTabBar#clipboardTabs::tab:focus { border-color: @accent@; }
+QTabBar#clipboardTabs::tab:hover { background: @hover@; color: @text@; }
+QTabBar#clipboardTabs::tab:selected { background: @surface@; color: @accent@; border-bottom-color: @accent@; font-weight: 600; }
+QTabBar#clipboardTabs::tab:focus { border-color: @focus@; }
 QTabBar#clipboardTabs::scroller { width: 64px; }
 QTabBar#clipboardTabs QToolButton { padding: 0; }
 QTabWidget::pane { border: 1px solid @border@; border-radius: 6px; background: @surface@; }
@@ -238,26 +250,27 @@ QLineEdit#globalShortcutLetter {
     color: @accent@; font-weight: 600;
 }
 QPushButton[uiRole="settingsToggle"] {
-    background: transparent; border-color: transparent; color: @text@;
-    text-align: right; padding-left: 40px;
+    background: transparent; border-color: transparent; color: @muted@;
+    text-align: right; padding: 4px 7px 4px 38px;
 }
-QPushButton[uiRole="settingsToggle"]:checked:enabled { color: @accent@; }
+QPushButton[uiRole="settingsToggle"]:checked:enabled { color: @text@; }
 QPushButton[uiRole="settingsToggle"]:hover:enabled { background: @hover@; }
 QPushButton[uiRole="settingsToggle"]:pressed:enabled { background: @selection@; }
 QPushButton[uiRole="settingsToggle"]:focus { border-color: @focus@; }
 QPushButton[uiRole="settingsToggle"]:disabled { color: @disabled@; }
 
-/* The settings content column has its own reading sizes. */
+/* Keep labels at a common reading size in both settings arrangements. */
 QWidget#settingsPage QLabel, QWidget#settingsPage QComboBox,
 QWidget#settingsPage QPushButton, QWidget#settingsPage QToolButton, QWidget#settingsPage QLineEdit,
 QWidget#settingsPage QAbstractItemView[uiRole="appearanceOptions"], QWidget#settingsPage QTextBrowser#releaseNotes {
-    font-size: 15px;
+    font-size: 14px;
 }
-QWidget#settingsPage QLabel#cardTitle { font-size: 20px; }
+QWidget#settingsPage QLabel#cardTitle { font-size: 20px; min-height: 32px; }
+QWidget#appearancePreview { min-height: @appearancePreviewHeight@; max-height: @appearancePreviewHeight@; }
 QWidget#settingsPage QLabel#autoStartStatus, QWidget#settingsPage QLabel#globalShortcutStatus,
 QWidget#settingsPage QLabel#closeToTrayStatus, QWidget#settingsPage QLabel#automaticUpdatesStatus { font-size: 14px; }
 QWidget#settingsPage QLabel#installedVersion, QWidget#settingsPage QLabel#updateStatus,
-QWidget#settingsPage QLabel#previousUpdateResult { font-size: 14px; color: @muted@; }
+QWidget#settingsPage QLabel#previousUpdateResult { font-size: 13px; color: @muted@; }
 QWidget#settingsPage QWidget#updateWidget { border: none; border-radius: 0; }
 QWidget#settingsPage QPushButton#manageSkinsButton {
     background: transparent; border-color: transparent; color: @accent@;

@@ -124,7 +124,9 @@ QImage ClipboardContent::previewImage(const QByteArray &payload, const QSize &si
     auto png=QByteArray::fromBase64(data.value("png").toString().toLatin1());
     if (png.isEmpty() || png.size()>MaximumBytes || !validImage(png)) return {};
     QBuffer buffer(&png); buffer.open(QIODevice::ReadOnly);
-    QImageReader reader(&buffer,"PNG"); reader.setScaledSize(reader.size().scaled(size,Qt::KeepAspectRatio));
+    QImageReader reader(&buffer,"PNG");
+    const auto original = reader.size();
+    reader.setScaledSize(original.scaled(size.boundedTo(original), Qt::KeepAspectRatio));
     return reader.read();
 }
 

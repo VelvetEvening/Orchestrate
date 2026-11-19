@@ -11,6 +11,7 @@ class QPlainTextEdit;
 class QPushButton;
 class QTabBar;
 class QTimer;
+class WorkspaceSplitter;
 
 class ClipboardPage final : public QWidget {
     Q_OBJECT
@@ -23,6 +24,7 @@ signals:
     void hideRequested(bool pasteToPreviousWindow, quint32 clipboardSequence);
 protected:
     void showEvent(QShowEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 private:
     int tabId() const;
     QList<int> selectedIds() const;
@@ -31,6 +33,7 @@ private:
     void saveExpandedFolders();
     void selectFolder(int id);
     void updatePreview();
+    void arrangePreview(bool opening = false);
     void editItem(bool creating);
     void copySelected();
     void deleteSelected();
@@ -47,7 +50,11 @@ private:
     SiblingOrderTree *items_;
     QLineEdit *search_;
     QLabel *status_;
+    WorkspaceSplitter *contentSplit_;
+    QList<int> horizontalSizes_{560, 400};
+    QList<int> verticalSizes_{330, 170};
     QWidget *previewPane_;
+    QLabel *previewMeta_;
     QLabel *previewImage_;
     QPlainTextEdit *previewText_;
     QPushButton *edit_;
