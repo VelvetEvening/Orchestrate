@@ -24,13 +24,14 @@ int main(int argc, char *argv[])
     }
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("Orchestrate"));
-    QApplication::setApplicationDisplayName(QStringLiteral("Orchestrate"));
+    QApplication::setApplicationDisplayName(QStringLiteral(ORCHESTRATE_APP_NAME));
     QApplication::setApplicationVersion(QStringLiteral(ORCHESTRATE_VERSION));
     QApplication::setOrganizationName(QStringLiteral("Orchestrate"));
 
     InstanceLock instance(QCoreApplication::applicationDirPath());
     if (!instance.acquired()) {
-        QMessageBox::information(nullptr, QStringLiteral("Orchestrate"), QStringLiteral("此目录的 Orchestrate 已在运行或正在更新。请从系统托盘打开。"));
+        QMessageBox::information(nullptr, app.applicationDisplayName(),
+            QStringLiteral("此目录的 %1 已在运行或正在更新。请从系统托盘打开。").arg(app.applicationDisplayName()));
         return 1;
     }
 

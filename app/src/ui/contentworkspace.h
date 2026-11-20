@@ -1,5 +1,6 @@
 #pragma once
 
+#include "pagetransition.h"
 #include <QDialog>
 #include <QHash>
 #include <QPointer>
@@ -45,7 +46,7 @@ private:
     struct Entry;
     using EntryPtr = std::shared_ptr<Entry>;
     EntryPtr entryFor(QWidget *source) const;
-    void showEntry(const EntryPtr &entry);
+    void showEntry(const EntryPtr &entry, PageTransition::Direction direction);
     void returnFrom(const EntryPtr &entry, bool confirmLeave = true);
     void remove(const EntryPtr &entry);
     void detach(const EntryPtr &entry);

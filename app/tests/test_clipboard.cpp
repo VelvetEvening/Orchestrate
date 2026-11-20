@@ -7,6 +7,7 @@
 #include <QAction>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QComboBox>
 #include <QCryptographicHash>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -24,6 +25,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QSpinBox>
+#include <QSplitter>
 #include <QStackedWidget>
 #include <QStandardPaths>
 #include <QStyleFactory>
@@ -617,6 +619,10 @@ private slots:
             QVERIFY(db->saveClipboardItem(&entry,&error));
             ClipboardPage page(db.get()); page.show();
             select(page.findChild<QTreeWidget *>("clipboardItems"),entry.id);
+            auto *picture = page.findChild<QLabel *>("clipboardImage");
+            QVERIFY(picture);
+            QCOMPARE(picture->isVisible(), entry.kind == "image");
+            if (entry.kind == "image") QCOMPARE(picture->pixmap().size(), image.size());
             bool readOnly=false;
             QTimer::singleShot(0,&page,[&] {
                 auto *dialog=page.findChild<QDialog *>("clipboardEditor");
@@ -848,8 +854,46 @@ private slots:
         // A successful monitoring toggle clears the transient error, without status copy.
         auto *listening=window.findChild<QAction *>("clipboardListening"); QVERIFY(listening); listening->setChecked(true); listening->setChecked(false);
         QVERIFY(!page->findChild<QLabel *>("clipboardStatus")->isVisible());
+        auto *split = page->findChild<QSplitter *>("workspaceSplit");
+        auto *preview = page->findChild<QPlainTextEdit *>("clipboardPreview");
+        auto *density = window.findChild<QComboBox *>("appearanceLayout");
+        auto *sidebarToggle = window.findChild<QPushButton *>("sidebarToggle");
+        QVERIFY(split && preview && density && sidebarToggle);
+        QCOMPARE(split->orientation(), Qt::Horizontal);
+        QVERIFY(split->sizes().at(1) > split->width() / 4);
+        QCOMPARE(items->font().pointSizeF(), 11.0);
+        QCOMPARE(preview->font().pointSizeF(), 12.0);
+        const auto *current = items->currentItem();
+        QVERIFY(current);
+        const int standardHeight = items->visualItemRect(current).height();
         TestSupport::capture(window, "clipboard-desktop");
-        window.resize(980,640); TestSupport::capture(window, "clipboard-compact");
+        window.resize(1020, 640);
+        QTRY_COMPARE(split->orientation(), Qt::Vertical);
+        TestSupport::capture(window, "clipboard-compact");
+
+        // The same window width straddles the preview breakpoint when the sidebar changes width.
+        const int navHeight = nav->height();
+        QTest::mouseClick(sidebarToggle, Qt::LeftButton);
+        QTRY_COMPARE(split->orientation(), Qt::Horizontal);
+        QCOMPARE(items->currentItem(), current);
+        QCOMPARE(preview->toPlainText(), a.text);
+        QVERIFY(nav->isChecked() && nav->text().isEmpty());
+        QCOMPARE(nav->height(), navHeight);
+        QCOMPARE(nav->accessibleName(), QStringLiteral("剪贴板"));
+        QCOMPARE(sidebarToggle->accessibleName(), QStringLiteral("展开侧边栏"));
+
+        QTest::mouseClick(sidebarToggle, Qt::LeftButton);
+        QTRY_COMPARE(split->orientation(), Qt::Vertical);
+        QCOMPARE(nav->height(), navHeight);
+        QCOMPARE(nav->text(), QStringLiteral("剪贴板"));
+        QCOMPARE(sidebarToggle->accessibleName(), QStringLiteral("收起侧边栏"));
+        density->setCurrentIndex(density->findData("compact"));
+        QTRY_VERIFY(items->visualItemRect(current).height() < standardHeight);
+        QCOMPARE(items->font().pointSizeF(), 10.0);
+        QCOMPARE(preview->font().pointSizeF(), 12.0);
+        QVERIFY(preview->isVisible());
+        QCOMPARE(preview->toPlainText(), a.text);
+        QCOMPARE(items->currentItem(), current);
         if (qEnvironmentVariableIsSet("ORCHESTRATE_CLIPBOARD_LAYOUT_REVIEW")) {
             qInfo() << "Clipboard layout: list point size" << items->font().pointSizeF()
                 << "preview point size" << page->findChild<QPlainTextEdit *>("clipboardPreview")->font().pointSizeF()
@@ -871,6 +915,7 @@ private slots:
             saveEditor(dialog);
         });
         page->findChild<QPushButton *>("clipboardNewItem")->click(); QTRY_VERIFY(editorSeen);
+        QCOMPARE(window.findChild<QPlainTextEdit *>("clipboardItemBody")->font().pointSizeF(), 12.0);
         QCOMPARE(window.findChild<QDialog *>("clipboardEditor")->findChild<QLabel *>("clipboardEditorError")->text(),QStringLiteral("已保存"));
         if (qEnvironmentVariableIsSet("ORCHESTRATE_CLIPBOARD_LAYOUT_REVIEW")) {
             QTest::qWait(30); window.grab().save(qApp->applicationDirPath()+"/artifacts/clipboard-editor.png");

@@ -15,12 +15,16 @@ protected:
     QVariant loadResource(int, const QUrl &) override { return {}; }
 };
 bool fail(QString *error, const QString &message) { if (error) *error=message; return false; }
+bool validImageSize(const QSize &size)
+{
+    return size.isValid() && qint64(size.width()) * size.height() <= ClipboardContent::MaximumPixels;
+}
+
 bool validImage(const QByteArray &bytes)
 {
     QBuffer buffer; buffer.setData(bytes); buffer.open(QIODevice::ReadOnly);
     QImageReader reader(&buffer,"PNG");
-    const auto size=reader.size();
-    return size.isValid() && qint64(size.width())*size.height()<=ClipboardContent::MaximumPixels;
+    return validImageSize(reader.size());
 }
 }
 
@@ -122,9 +126,12 @@ QImage ClipboardContent::previewImage(const QByteArray &payload, const QSize &si
 {
     const auto data=QJsonDocument::fromJson(payload).object();
     auto png=QByteArray::fromBase64(data.value("png").toString().toLatin1());
-    if (png.isEmpty() || png.size()>MaximumBytes || !validImage(png)) return {};
+    if (png.isEmpty() || png.size()>MaximumBytes) return {};
     QBuffer buffer(&png); buffer.open(QIODevice::ReadOnly);
-    QImageReader reader(&buffer,"PNG"); reader.setScaledSize(reader.size().scaled(size,Qt::KeepAspectRatio));
+    QImageReader reader(&buffer,"PNG");
+    const auto original = reader.size();
+    if (!validImageSize(original)) return {};
+    reader.setScaledSize(original.scaled(size.boundedTo(original), Qt::KeepAspectRatio));
     return reader.read();
 }
 

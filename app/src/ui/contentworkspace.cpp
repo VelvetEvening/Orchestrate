@@ -12,8 +12,15 @@
 #include <QVBoxLayout>
 
 namespace {
+using PageTransition::Direction;
+
+QString appTitleSuffix()
+{
+    return QStringLiteral(" · ") + QApplication::applicationDisplayName();
+}
+
 QString contentTitle(const QString &title) {
-    const QString suffix=QStringLiteral(" · Orchestrate");
+    const QString suffix = appTitleSuffix();
     return title.endsWith(suffix) ? title.chopped(suffix.size()) : title;
 }
 }
@@ -96,7 +103,7 @@ bool ContentWorkspace::activate(const QString &key, QWidget *source) {
         if (!origin || (origin!=entry && !descendant(origin,key))) entry->parentKey=origin ? origin->key : QString();
         entry->returnFocus=QApplication::focusWidget();
     }
-    showEntry(entry); return true;
+    showEntry(entry, Direction::Forward); return true;
 }
 bool ContentWorkspace::eventFilter(QObject *object,QEvent *event) {
     if (event->type()==QEvent::KeyPress && static_cast<QKeyEvent*>(event)->key()==Qt::Key_Escape) {
@@ -148,19 +155,20 @@ void ContentWorkspace::present(const QString &key, QDialog *page, QWidget *sourc
     connect(close,&QPushButton::clicked,this,[this,entry]{ closePage(entry->key); });
     connect(page,&QWidget::windowTitleChanged,this,[this,entry]{ updateHeader(entry); });
     connect(page,&QDialog::finished,this,[this,entry]{ if (!destroying_) remove(entry); });
-    updateHeader(entry); showEntry(entry);
+    updateHeader(entry); showEntry(entry, Direction::Forward);
 }
-void ContentWorkspace::showEntry(const EntryPtr &entry) {
+void ContentWorkspace::showEntry(const EntryPtr &entry, Direction direction) {
     if (!entry || !entry->page) return;
     auto *target = entry->host ? entry->host->stack : stack_;
     for (const auto &other : entries_) {
         if (other->frame == target->currentWidget() && other->page
             && other->page->isAncestorOf(QApplication::focusWidget())) other->focus = QApplication::focusWidget();
     }
-    target->setCurrentWidget(entry->frame); entry->page->show();
+    PageTransition::setCurrent(target, entry->frame, direction);
+    entry->page->show();
     if (!entry->host) emit activationRequested();
     if (entry->host) {
-        entry->host->setWindowTitle(contentTitle(entry->page->windowTitle()) + QStringLiteral(" · Orchestrate"));
+        entry->host->setWindowTitle(entry->title->text() + appTitleSuffix());
         if (entry->host->isMinimized()) entry->host->showNormal(); else entry->host->show();
         entry->host->raise(); entry->host->activateWindow();
     }
@@ -178,7 +186,9 @@ void ContentWorkspace::returnFrom(const EntryPtr &entry, bool confirmLeave) {
         auto *guard = dynamic_cast<ContentLeaveGuard *>(entry->page.data());
         if (guard && !guard->confirmLeave()) return;
     }
-    if (parent) showEntry(parent); else stack_->setCurrentWidget(root_);
+    const auto direction = confirmLeave ? Direction::Back : Direction::Instant;
+    if (parent) showEntry(parent, direction);
+    else PageTransition::setCurrent(stack_, root_, direction);
     if (entry->returnFocus && entry->returnFocus->isVisible()) entry->returnFocus->setFocus();
 }
 void ContentWorkspace::back() {
@@ -201,7 +211,7 @@ bool ContentWorkspace::closePage(const QString &key) {
         if (child && descendant(child,key) && !closePage(child->key)) return false;
     }
     entry=entries_.value(key); if (!entry) return true;
-    showEntry(entry);
+    showEntry(entry, Direction::Instant);
     entry->page->reject();
     return !entries_.contains(key);
 }
@@ -218,10 +228,11 @@ void ContentWorkspace::remove(const EntryPtr &entry) {
     const bool current=target->currentWidget()==entry->frame;
     const auto parent=entries_.value(entry->parentKey);
     entries_.remove(entry->key); order_.removeAll(entry->key);
+    PageTransition::cancel(target);
     target->removeWidget(entry->frame); entry->frame->hide(); entry->frame->deleteLater();
     if (current) {
-        if (parent && parent->host==host) showEntry(parent);
-        else if (!host) stack_->setCurrentWidget(root_);
+        if (parent && parent->host==host) showEntry(parent, Direction::Instant);
+        else if (!host) PageTransition::setCurrent(stack_, root_, Direction::Instant);
     }
     if (host && !host->stack->count()) { host->hide(); host->deleteLater(); }
     if (entry->returnFocus && entry->returnFocus->isVisible()) entry->returnFocus->setFocus();
@@ -242,7 +253,7 @@ void ContentWorkspace::updateHeader(const EntryPtr &entry) {
     entry->pop->setText(entry->host ? QStringLiteral("收回主窗口") : QStringLiteral("独立打开"));
     entry->back->setVisible(!entry->host || entry->key!=entry->host->rootKey);
     if (entry->host && entry->host->stack->currentWidget()==entry->frame)
-        entry->host->setWindowTitle(contentTitle(entry->page->windowTitle())+QStringLiteral(" · Orchestrate"));
+        entry->host->setWindowTitle(entry->title->text() + appTitleSuffix());
 }
 void ContentWorkspace::detach(const EntryPtr &entry) {
     auto *host=new ContentWindow(this); host->rootKey=entry->key;
@@ -257,12 +268,14 @@ void ContentWorkspace::detach(const EntryPtr &entry) {
     connect(shortcut,&QShortcut::activated,this,[this,host]{
         for (const auto &item:entries_) if (item->host==host && item->frame==host->stack->currentWidget()) { returnFrom(item); break; }
     });
-    showEntry(entry);
+    showEntry(entry, Direction::Instant);
 }
 void ContentWorkspace::attach(ContentWindow *host,const QString &selected) {
     if (!host) return;
     if (activationGuard_ && !activationGuard_()) return;
     if (!confirmLeaveCurrent()) return;
+    PageTransition::cancel(host->stack);
+    PageTransition::cancel(stack_);
     for (const auto &entry:entries_) if (entry->host==host) {
         host->stack->removeWidget(entry->frame); stack_->addWidget(entry->frame);
         entry->host=nullptr; updateHeader(entry);
@@ -270,7 +283,7 @@ void ContentWorkspace::attach(ContentWindow *host,const QString &selected) {
     host->hide(); host->deleteLater();
     emit activationRequested();
     window()->setWindowState(window()->windowState() & ~Qt::WindowMinimized);
-    window()->show(); window()->raise(); window()->activateWindow(); activate(selected);
+    window()->show(); window()->raise(); window()->activateWindow(); showEntry(entries_.value(selected), Direction::Instant);
 }
 QLabel *DraftDialog::createSaveStatus(const QString &name) {
     saveStatus_ = new QLabel(this);

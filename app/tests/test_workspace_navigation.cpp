@@ -1,7 +1,9 @@
 #include "mainwindow.h"
 #include "test_skin_fixture.h"
+#include "version.h"
 #include "test_support.h"
 #include "ui/contentworkspace.h"
+#include "ui/motion.h"
 #include "ui/theme.h"
 #include "pages/calendarpage.h"
 #include "pages/projectspage.h"
@@ -36,6 +38,7 @@
 #include <QScopeGuard>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSignalSpy>
 #include <QStackedWidget>
 #include <QStyleOptionComboBox>
 #include <QStandardPaths>
@@ -72,15 +75,18 @@ QString skinAssetPath(const QString &id, const QString &filename)
 QTreeWidgetItem *skinRow(QTreeWidget *list, const QString &id)
 {
     for (int index = 0; index < list->topLevelItemCount(); ++index) {
-        auto *row = list->topLevelItem(index);
-        if (row->data(0, Qt::UserRole).toString() == id) return row;
+        const auto *group = list->topLevelItem(index);
+        for (int child = 0; child < group->childCount(); ++child) {
+            auto *row = group->child(child);
+            if (row->data(0, Qt::UserRole).toString() == id) return row;
+        }
     }
     return nullptr;
 }
 
 QPoint skinCellPoint(QTreeWidget *list, QTreeWidgetItem *row, int column = SkinStatusColumn)
 {
-    return list->visualRect(list->model()->index(list->indexOfTopLevelItem(row), column)).center();
+    return list->visualRect(list->indexFromItem(row, column)).center();
 }
 
 QString skinState(QTreeWidget *list, const QString &id)
@@ -104,6 +110,13 @@ bool hasSidebarArtwork(QWidget &sidebar)
         }
     }
     return false;
+}
+
+bool hasNavigationMarker(QWidget &sidebar, const QPushButton &button)
+{
+    const QRect marker(5, button.geometry().center().y() - 2, 3, 5);
+    const QImage sample = sidebar.grab(marker).toImage();
+    return sample.pixelColor(sample.width() / 2, sample.height() / 2) == UiTheme::Accent;
 }
 
 } // namespace
@@ -189,17 +202,20 @@ private slots:
         QVERIFY(QFileInfo(qApp->applicationDirPath()).fileName()=="workspace-navigation-test");
         QVERIFY(!QFileInfo::exists(path) || QDir(path).removeRecursively()); seed();
     }
+
     void appearanceControlsAlignAndPopupAppliesOnlyConfirmedChoice() {
         MainWindow window; prepareWindow(window);
         window.resize(window.minimumSize());
         const auto navigation = window.findChildren<QPushButton *>("navButton");
         auto *palette = window.findChild<QComboBox *>("appearancePalette");
         auto *layout = window.findChild<QComboBox *>("appearanceLayout");
+        auto *motion = window.findChild<QComboBox *>("appearanceMotion");
         auto *manage = window.findChild<QPushButton *>("manageSkinsButton");
         auto *scroll = window.findChild<QScrollArea *>("settingsScroll");
+        auto *sidebar = window.findChild<QWidget *>("sidebar");
         auto *sidebarToggle = window.findChild<QPushButton *>("sidebarToggle");
         auto *calendar = window.findChild<QCalendarWidget *>();
-        QVERIFY(palette && layout && manage && scroll && sidebarToggle && calendar);
+        QVERIFY(palette && layout && motion && manage && scroll && sidebar && sidebarToggle && calendar);
         auto *grid = calendar->findChild<QTableView *>();
         QVERIFY(grid);
         const int standardDateHeight = grid->rowHeight(grid->currentIndex().row());
@@ -210,12 +226,16 @@ private slots:
         QCOMPARE(palette->count(), 2);
         QCOMPARE(palette->currentData().toString(), QStringLiteral("mist"));
         QCOMPARE(layout->currentData().toString(), QStringLiteral("standard"));
+        QCOMPARE(motion->accessibleName(), QStringLiteral("界面动效"));
+        QCOMPARE(motion->currentText(), QStringLiteral("跟随系统"));
 
         manage->setFocus();
         QTest::keyClick(manage, Qt::Key_Tab);
         QCOMPARE(QApplication::focusWidget(), palette);
         QTest::keyClick(palette, Qt::Key_Tab);
         QCOMPARE(QApplication::focusWidget(), layout);
+        QTest::keyClick(layout, Qt::Key_Tab);
+        QCOMPARE(QApplication::focusWidget(), motion);
         capture(window, "appearance-mist-standard");
 
         QTest::keyClick(palette, Qt::Key_Down, Qt::AltModifier);
@@ -242,6 +262,16 @@ private slots:
         QCOMPARE(UiTheme::layoutId(), QStringLiteral("compact"));
         QCOMPARE(UiTheme::paletteId(), QStringLiteral("paper"));
         QVERIFY(!qApp->styleSheet().contains(QLatin1Char('@')));
+        QTRY_VERIFY(hasNavigationMarker(*sidebar, *navigation.last()));
+        const auto *settingsButton = navigation.last();
+        const QImage gear = settingsButton->icon().pixmap(settingsButton->iconSize(), QIcon::Normal, QIcon::On).toImage();
+        QVERIFY(!gear.isNull());
+        QCOMPARE(gear.pixelColor(gear.rect().center()).alpha(), 0);
+        bool hasAccent = false;
+        for (int y = 0; y < gear.height(); ++y)
+            for (int x = 0; x < gear.width(); ++x)
+                hasAccent |= gear.pixelColor(x, y) == UiTheme::Accent;
+        QVERIFY(hasAccent);
         capture(window, "appearance-paper-compact-minimum");
 
         const auto pageRect = [scroll](QWidget *control) {
@@ -249,13 +279,21 @@ private slots:
         };
         const QRect paletteRect = pageRect(palette);
         const QRect layoutRect = pageRect(layout);
+        const QRect motionRect = pageRect(motion);
         const QRect manageRect = pageRect(manage);
         QVERIFY(paletteRect.bottom() < layoutRect.top());
+        QVERIFY(layoutRect.bottom() < motionRect.top());
         QCOMPARE(paletteRect.left(), layoutRect.left());
         QCOMPARE(paletteRect.right(), layoutRect.right());
-        QVERIFY(manageRect.right() < paletteRect.left());
-        QVERIFY(qAbs(manageRect.center().y() - paletteRect.center().y()) <= 1);
-        for (auto *choice : {palette, layout}) {
+        QCOMPARE(motionRect.left(), layoutRect.left());
+        QCOMPARE(motionRect.right(), layoutRect.right());
+        auto *preview = window.findChild<QWidget *>("appearancePreview");
+        QVERIFY(preview && manageRect.bottom() < pageRect(preview).top());
+        QVERIFY(pageRect(preview).right() < paletteRect.left());
+        QVERIFY(pageRect(preview).top() <= paletteRect.top());
+        QVERIFY(layoutRect.bottom() <= pageRect(preview).bottom());
+        QCOMPARE(manageRect.right(), paletteRect.right());
+        for (auto *choice : {palette, layout, motion}) {
             QVERIFY(scroll->viewport()->rect().contains(QRect(choice->mapTo(scroll->viewport(), QPoint()), choice->size())));
             QStyleOptionComboBox option;
             option.initFrom(choice);
@@ -270,6 +308,32 @@ private slots:
             QCOMPARE(toggle->text(), toggle->isChecked() ? QStringLiteral("开启") : QStringLiteral("关闭"));
             QCOMPARE(pageRect(toggle).right(), paletteRect.right());
         }
+
+        auto *appearance = window.findChild<QFrame *>("settingsAppearanceSection");
+        auto *runtime = window.findChild<QFrame *>("settingsRuntimeSection");
+        auto *updates = window.findChild<QWidget *>("updateWidget");
+        QVERIFY(appearance && runtime && updates);
+        QVERIFY(pageRect(runtime).top() > pageRect(appearance).bottom());
+        QVERIFY(pageRect(updates).top() > pageRect(runtime).bottom());
+        window.activateWindow();
+        QTRY_VERIFY(window.isActiveWindow());
+        layout->setFocus();
+        QTRY_VERIFY(layout->hasFocus());
+        const int minimumWindowSectionWidth = appearance->width();
+        window.resize(1180, 760);
+        QTRY_VERIFY(appearance->width() > minimumWindowSectionWidth);
+        QCOMPARE(pageRect(runtime).left(), pageRect(appearance).left());
+        QCOMPARE(pageRect(updates).right(), pageRect(appearance).right());
+        QVERIFY(pageRect(runtime).top() > pageRect(appearance).bottom());
+        QVERIFY(pageRect(updates).top() > pageRect(runtime).bottom());
+        QVERIFY(pageRect(preview).right() < pageRect(palette).left());
+        QCOMPARE(pageRect(manage).right(), pageRect(layout).right());
+        QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
+        QCOMPARE(QApplication::focusWidget(), layout);
+        capture(window, "settings-wide");
+        window.resize(window.minimumSize());
+        QTRY_VERIFY(pageRect(runtime).top() > pageRect(appearance).bottom());
+        QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
 
         const auto expandedIcon = sidebarToggle->icon().pixmap(24, 24).toImage();
         const int expandedHeight = navigation.at(4)->height();
@@ -368,6 +432,60 @@ private slots:
         layout->setCurrentIndex(layout->findData("compact"));
         QCOMPARE(db.setting("appearance_layout"), QStringLiteral("compact"));
     }
+
+    void motionPreferencePersistsAndRecoversFromWriteFailure() {
+        const auto key = QStringLiteral("appearance_motion");
+        AppDatabase db;
+        QVERIFY(db.open());
+        {
+            MainWindow window;
+            QVERIFY(window.ready());
+            prepareWindow(window);
+            window.findChildren<QPushButton *>("navButton").last()->click();
+            auto *motion = window.findChild<QComboBox *>("appearanceMotion");
+            QVERIFY(motion && motion->isVisible());
+            QCOMPARE(UiMotion::instance().preference(), UiMotion::Preference::FollowSystem);
+            if (QGuiApplication::platformName() == QStringLiteral("offscreen")) QVERIFY(!UiMotion::enabled());
+            QTest::keyClick(motion, Qt::Key_End);
+            QCOMPARE(motion->currentText(), QStringLiteral("关闭"));
+            QCOMPARE(db.setting(key), QStringLiteral("off"));
+            QCOMPARE(UiMotion::instance().preference(), UiMotion::Preference::Off);
+        }
+
+        UiMotion::instance().setPreference(UiMotion::Preference::FollowSystem);
+        MainWindow restored;
+        QVERIFY(restored.ready());
+        prepareWindow(restored);
+        restored.findChildren<QPushButton *>("navButton").last()->click();
+        auto *motion = restored.findChild<QComboBox *>("appearanceMotion");
+        auto *status = restored.findChild<QLabel *>("appearanceMotionStatus");
+        QVERIFY(motion && motion->isVisible() && status && !status->isVisible());
+        QCOMPARE(motion->currentData().toString(), QStringLiteral("off"));
+        QCOMPARE(UiMotion::instance().preference(), UiMotion::Preference::Off);
+
+        const auto connection = QStringLiteral("blocked-motion-settings");
+        const auto cleanup = qScopeGuard([&] { QSqlDatabase::removeDatabase(connection); });
+        auto sql = QSqlDatabase::addDatabase("QSQLITE", connection);
+        sql.setDatabaseName(db.databasePath());
+        QVERIFY(sql.open());
+        QSqlQuery query(sql);
+        QVERIFY(query.exec("CREATE TRIGGER reject_motion BEFORE INSERT ON app_settings "
+                           "WHEN NEW.key = 'appearance_motion' BEGIN SELECT RAISE(ABORT, 'blocked motion'); END"));
+        const int followSystem = motion->findData(QStringLiteral("system"));
+        QVERIFY(followSystem >= 0);
+        motion->setCurrentIndex(followSystem);
+        QCOMPARE(motion->currentData().toString(), QStringLiteral("off"));
+        QCOMPARE(db.setting(key), QStringLiteral("off"));
+        QCOMPARE(UiMotion::instance().preference(), UiMotion::Preference::Off);
+        QVERIFY(status->isVisible() && status->text().contains(QStringLiteral("无法保存界面动效设置")));
+
+        QVERIFY(query.exec("DROP TRIGGER reject_motion"));
+        motion->setCurrentIndex(followSystem);
+        QCOMPARE(db.setting(key), QStringLiteral("system"));
+        QCOMPARE(UiMotion::instance().preference(), UiMotion::Preference::FollowSystem);
+        QVERIFY(!status->isVisible());
+    }
+
     void skinLibraryKeepsItsWorkspaceAndDownloadsTheActivatedRow() {
         Network network;
         const QString targetId = QStringLiteral("sample-23");
@@ -390,6 +508,7 @@ private slots:
         auto *workspace = window.findChild<ContentWorkspace *>("settingsWorkspace");
         auto *manage = window.findChild<QPushButton *>("manageSkinsButton");
         QVERIFY(settings && workspace && manage);
+        QCOMPARE(manage->text(), QStringLiteral("主题库"));
         nav.at(4)->click();
         QVERIFY(network.requests.isEmpty());
         manage->setFocus();
@@ -397,6 +516,7 @@ private slots:
         QTRY_COMPARE(workspace->currentKey(), SkinLibraryKey);
         auto *page = workspace->content(SkinLibraryKey);
         QVERIFY(page && page->isVisible() && !page->isWindow() && !page->isModal());
+        QCOMPARE(page->windowTitle(), QStringLiteral("主题库"));
         auto *list = page->findChild<QTreeWidget *>("skinManagerList");
         auto *search = page->findChild<QLineEdit *>("skinSearch");
         auto *refresh = page->findChild<QPushButton *>("skinCatalogRefresh");
@@ -404,7 +524,14 @@ private slots:
         auto *detach = page->parentWidget()->findChild<QPushButton *>("contentDetach");
         QVERIFY(list && search && refresh && back && detach);
         QVERIFY(refresh->text().isEmpty() && !refresh->icon().isNull());
-        QTRY_COMPARE(list->topLevelItemCount(), entries.size());
+        QCOMPARE(list->topLevelItemCount(), 2);
+        auto *builtIn = list->topLevelItem(0);
+        auto *extensions = list->topLevelItem(1);
+        QCOMPARE(builtIn->text(0), QStringLiteral("内置主题"));
+        QCOMPARE(builtIn->childCount(), 2);
+        QCOMPARE(extensions->text(0), QStringLiteral("扩展主题"));
+        QTRY_COMPARE(extensions->childCount(), entries.size());
+        QCOMPARE(skinState(list, QStringLiteral("mist")), QStringLiteral("使用中"));
         auto *target = skinRow(list, targetId);
         QVERIFY(target);
         capture(window, "skin-library-many-minimum");
@@ -438,15 +565,19 @@ private slots:
 
         const auto visibleRows = [list] {
             int count = 0;
-            for (int i = 0; i < list->topLevelItemCount(); ++i)
-                if (!list->topLevelItem(i)->isHidden()) ++count;
+            for (int i = 0; i < list->topLevelItemCount(); ++i) {
+                const auto *group = list->topLevelItem(i);
+                if (group->isHidden()) continue;
+                for (int j = 0; j < group->childCount(); ++j)
+                    if (!group->child(j)->isHidden()) ++count;
+            }
             return count;
         };
         QTest::keyClicks(search, "missing-skin");
         QCOMPARE(visibleRows(), 0);
         auto *empty = page->findChild<QLabel *>("emptyViewHint");
         QVERIFY(empty && empty->isVisible());
-        QCOMPARE(empty->text(), QStringLiteral("没有匹配的皮肤"));
+        QCOMPARE(empty->text(), QStringLiteral("没有匹配的主题"));
         search->selectAll();
         QTest::keyClicks(search, " 2 ");
         QVERIFY(visibleRows() > 1 && visibleRows() < entries.size());
@@ -458,12 +589,12 @@ private slots:
         const QPoint point = skinCellPoint(list, target);
         QVERIFY(list->viewport()->rect().contains(point));
         QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, point);
-        QTRY_COMPARE(skinState(list, targetId), QStringLiteral("已下载"));
+        QTRY_COMPARE(skinState(list, targetId), QStringLiteral("已安装，可启用"));
         QCOMPARE(skinState(list, QStringLiteral("sample-21")), QStringLiteral("可下载"));
         QCOMPARE(network.requests.size(), 2);
         QCOMPARE(network.requests.last().path(), targetManifest);
         search->clear();
-        QCOMPARE(visibleRows(), entries.size());
+        QCOMPARE(visibleRows(), entries.size() + 2);
         refresh->click();
         QTRY_VERIFY(refresh->isEnabled());
         QCOMPARE(network.requests.size(), 3);
@@ -530,6 +661,13 @@ private slots:
             QCOMPARE(workspace->content(SkinLibraryKey), page);
             auto *installed = skinRow(list, id);
             QVERIFY(installed);
+            QCOMPARE(installed->text(SkinStatusColumn), QStringLiteral("启用"));
+            list->setCurrentItem(installed);
+            QTest::keyClick(list, Qt::Key_Return);
+            QCOMPARE(skinState(list, id), QStringLiteral("使用中"));
+            QCOMPARE(UiTheme::paletteId(), id);
+            QCOMPARE(palette->currentData().toString(), id);
+            QCOMPARE(db.setting("appearance_palette"), id);
             const auto checkIcon = UiTheme::icon(QStringLiteral("check")).pixmap(24, 24);
             QVERIFY(!checkIcon.isNull());
             QCOMPARE(installed->icon(SkinStatusColumn).pixmap(24, 24).toImage(), checkIcon.toImage());
@@ -539,15 +677,19 @@ private slots:
             }));
             QCOMPARE(network.requests.size(), 5);
             back->click();
-            palette->setCurrentIndex(palette->findData(id));
-            QCOMPARE(db.setting("appearance_palette"), id);
             QCOMPARE(qApp->palette().color(QPalette::Link), QColor(TestSkinFixture::Accent));
             auto *sidebar = window.findChild<QWidget *>("sidebar");
-            QVERIFY(sidebar && hasSidebarArtwork(*sidebar));
+            auto *sidebarToggle = window.findChild<QPushButton *>("sidebarToggle");
+            QVERIFY(sidebar && sidebarToggle);
+            QCOMPARE(sidebar->width(), 168);
+            QVERIFY(hasSidebarArtwork(*sidebar));
             capture(window, "skin-settings-installed");
-            window.findChild<QPushButton *>("sidebarToggle")->click();
-            QVERIFY(!hasSidebarArtwork(*sidebar));
-            window.findChild<QPushButton *>("sidebarToggle")->click();
+            sidebarToggle->click();
+            QTRY_COMPARE(sidebar->width(), 72);
+            QTRY_VERIFY(!hasSidebarArtwork(*sidebar));
+            sidebarToggle->click();
+            QTRY_COMPARE(sidebar->width(), 168);
+            QTRY_VERIFY(hasSidebarArtwork(*sidebar));
         }
 
         network.requests.clear();
@@ -568,7 +710,7 @@ private slots:
         auto *refresh = page->findChild<QPushButton *>("skinCatalogRefresh");
         QVERIFY(list && status && refresh);
         QTRY_COMPARE(refresh->toolTip(), QStringLiteral("重试目录"));
-        QVERIFY(skinState(list, id).contains(QStringLiteral("正在使用")));
+        QCOMPARE(skinState(list, id), QStringLiteral("使用中"));
         capture(restored, "skin-manager-offline");
         auto *installed = skinRow(list, id);
         QVERIFY(installed);
@@ -587,6 +729,34 @@ private slots:
         sql.setDatabaseName(db.databasePath());
         QVERIFY(sql.open());
         QSqlQuery query(sql);
+        auto *paper = skinRow(list, QStringLiteral("paper"));
+        QVERIFY(paper && !paper->icon(0).isNull() && paper->icon(SkinRemovalColumn).isNull());
+        auto *mist = skinRow(list, QStringLiteral("mist"));
+        QVERIFY(mist && !mist->icon(0).isNull() && mist->icon(SkinRemovalColumn).isNull());
+        QVERIFY(query.exec("CREATE TRIGGER reject_theme_activation BEFORE INSERT ON app_settings "
+                           "WHEN NEW.key = 'appearance_palette' AND NEW.value = 'paper' "
+                           "BEGIN SELECT RAISE(ABORT, 'test failure'); END"));
+        const auto enablePaper = [&] {
+            QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, skinCellPoint(list, paper));
+        };
+        enablePaper();
+        QVERIFY(status->text().contains(QStringLiteral("无法启用主题")));
+        QCOMPARE(db.setting("appearance_palette"), id);
+        QCOMPARE(palette->currentData().toString(), id);
+        QCOMPARE(skinState(list, id), QStringLiteral("使用中"));
+        QVERIFY(query.exec("DROP TRIGGER reject_theme_activation"));
+
+        enablePaper();
+        QCOMPARE(db.setting("appearance_palette"), QStringLiteral("paper"));
+        QCOMPARE(palette->currentData().toString(), QStringLiteral("paper"));
+        QCOMPARE(skinState(list, QStringLiteral("paper")), QStringLiteral("使用中"));
+        QCOMPARE(UiTheme::layoutId(), QStringLiteral("compact"));
+        QVERIFY(status->isHidden());
+        list->setCurrentItem(installed);
+        QTest::keyClick(list, Qt::Key_Return);
+        QCOMPARE(skinState(list, id), QStringLiteral("使用中"));
+        QCOMPARE(network.requests.size(), 1);
+
         QVERIFY(query.exec("CREATE TRIGGER reject_skin_fallback BEFORE INSERT ON app_settings "
                            "WHEN NEW.key = 'appearance_palette' AND NEW.value = 'mist' "
                            "BEGIN SELECT RAISE(ABORT, 'test failure'); END"));
@@ -594,14 +764,15 @@ private slots:
         refresh->click();
         QVERIFY(!refresh->isEnabled());
         QVERIFY(answerLeave(QMessageBox::Yes, requestRemoval, SkinRemovalPrompt));
-        QVERIFY(status->text().contains(QStringLiteral("无法删除皮肤")));
+        QVERIFY(status->text().contains(QStringLiteral("无法删除主题")));
         QCOMPARE(db.setting("appearance_palette"), id);
-        QVERIFY(skinState(list, id).contains(QStringLiteral("正在使用")));
+        QCOMPARE(skinState(list, id), QStringLiteral("使用中"));
         QVERIFY(QFileInfo::exists(manifestPath) && QFileInfo::exists(imagePath));
         QVERIFY(query.exec("DROP TRIGGER reject_skin_fallback"));
 
         QVERIFY(answerLeave(QMessageBox::Yes, requestRemoval, SkinRemovalPrompt));
-        QCOMPARE(list->topLevelItemCount(), 0);
+        QVERIFY(!skinRow(list, id));
+        QCOMPARE(skinState(list, QStringLiteral("mist")), QStringLiteral("使用中"));
         QCOMPARE(palette->currentData().toString(), QStringLiteral("mist"));
         QCOMPARE(db.setting("appearance_palette"), QStringLiteral("mist"));
         QCOMPARE(UiTheme::layoutId(), QStringLiteral("compact"));
@@ -842,9 +1013,20 @@ private slots:
     }
     void collaborationLeaveGuards() {
         MainWindow window; prepareWindow(window);
-        const auto nav = window.findChildren<QPushButton *>("navButton"); nav.at(1)->click();
+        const auto nav = window.findChildren<QPushButton *>("navButton");
+        auto *stack = window.findChild<QStackedWidget *>("pageStack");
+        auto *sidebar = window.findChild<QWidget *>("sidebar");
+        QVERIFY(stack && sidebar);
+        const auto *calendar = stack->currentWidget();
+        nav.at(1)->click();
         auto *projects = window.findChild<ProjectsPage *>();
+        QVERIFY(projects && projects->isVisible());
         auto *workspace = ContentWorkspace::find(projects);
+        QVERIFY(workspace);
+        QCOMPARE(stack->currentWidget(), workspace);
+        if (QGuiApplication::platformName() == QStringLiteral("offscreen"))
+            QVERIFY(!stack->findChild<QWidget *>("pageTransition", Qt::FindDirectChildrenOnly));
+        QTRY_VERIFY(hasNavigationMarker(*sidebar, *nav.at(1)));
         auto *tree = projects->findChild<QTreeWidget *>("workRecordList");
         tree->setCurrentItem(tree->topLevelItem(0)); tree->itemDoubleClicked(tree->currentItem(), 0);
         auto *record = qobject_cast<CollaborationRecordDialog *>(workspace->content(workspace->currentKey()));
@@ -867,10 +1049,14 @@ private slots:
         const auto original = title->text();
         title->setText(original + " unsaved");
         for (int target : {0, 2, 3, 4}) {
+            QSignalSpy rejectedSelection(nav.at(target), &QPushButton::toggled);
             QVERIFY(answerLeave(QMessageBox::Cancel, [&] { nav.at(target)->click(); }));
+            QCOMPARE(rejectedSelection.size(), 0);
             QVERIFY(record->isVisible()); QVERIFY(nav.at(1)->isChecked()); QVERIFY(!nav.at(target)->isChecked());
             QCOMPARE(title->text(), original + " unsaved");
         }
+        QCOMPARE(stack->currentWidget(), workspace);
+        QVERIFY(hasNavigationMarker(*sidebar, *nav.at(1)));
         // Both the visible back button and its keyboard shortcut use the guard.
         QVERIFY(answerLeave(QMessageBox::Cancel, [&] { button(workspace, QStringLiteral("返回"))->click(); }));
         window.activateWindow(); QTest::qWait(30); title->setFocus();
@@ -879,7 +1065,11 @@ private slots:
         QVERIFY(workspace->activate(record->property("contentKey").toString()));
         title->setText(original + " saved on switch");
         QVERIFY(answerLeave(QMessageBox::Save, [&] { nav.at(0)->click(); }));
-        QVERIFY(nav.at(0)->isChecked()); nav.at(1)->click();
+        QCOMPARE(stack->currentWidget(), calendar);
+        QVERIFY(nav.first()->isChecked() && !nav.at(1)->isChecked());
+        QTRY_VERIFY(hasNavigationMarker(*sidebar, *nav.first()));
+        QVERIFY(!hasNavigationMarker(*sidebar, *nav.at(1)));
+        nav.at(1)->click();
         QVERIFY(record->isVisible()); QCOMPARE(record->record().title, title->text());
         QVERIFY(!title->isReadOnly());
 
@@ -1261,6 +1451,7 @@ static int runResourceProbe(QApplication &app) {
 }
 int main(int argc,char **argv) {
     QApplication app(argc,argv); app.setApplicationName("WorkspaceNavigationTest"); app.setOrganizationName("OrchestrateTests");
+    app.setApplicationDisplayName(QStringLiteral(ORCHESTRATE_APP_NAME));
     QStandardPaths::setTestModeEnabled(true); app.setStyle("Fusion");
     for (const auto &font:{"msyh.ttc","msyhbd.ttc","segoeui.ttf","consola.ttf"}) QFontDatabase::addApplicationFont(QStringLiteral("C:/Windows/Fonts/")+font);
     UiTheme::install(app); QDir().mkpath(app.applicationDirPath()+"/artifacts");

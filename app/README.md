@@ -20,17 +20,19 @@ cmake --build app/build-qt --parallel 3
 ctest --test-dir app/build-qt --output-on-failure --no-tests=error
 ```
 
-开发构建统一放在 `app/build-qt`；只构建客户端可加 `-DBUILD_TESTING=OFF`。测试开关、套件职责及隔离规则见[测试说明](tests/README.md)。从终端启动程序可复用上述 Qt 环境；独立部署使用 `app/deploy.ps1`。
+默认生成的开发版为 `app/build-qt/orchestrate-dev.exe`，可复用上述 Qt 环境运行，也可执行 `./app/deploy.ps1` 后直接双击。只构建客户端可加 `-DBUILD_TESTING=OFF`。测试开关、套件职责及隔离规则见[测试说明](tests/README.md)。
+
+发布脚本使用 `-DORCHESTRATE_DEV_BUILD=OFF` 生成 `Orchestrate.exe`。在本地验证正式版名称时，可在单独的构建目录使用同一选项。
 
 ## 发布
 
-1. 更新 CMake 应用版本、首页版本链接和 `CHANGELOG.md`。打包标签默认取自 CMake 版本。
-2. 执行完整压力回归，提交全部源码及文档；工作树须干净。
-3. 从仓库根目录打包，按安装位置覆盖 `QtRoot`、`MinGWRoot`、`CMakeExe`、`NinjaExe`、`QtSourceDir`：
+1. 更新 CMake 应用版本和 `CHANGELOG.md`，将新版本置顶。打包标签默认取自 CMake 版本。
+2. 执行[完整压力回归](tests/README.md)，提交源码与文档，确认工作树干净。
+3. 在仓库根目录打包并验收。按安装位置传入 `QtRoot`、`MinGWRoot`、`CMakeExe`、`NinjaExe`、`QtSourceDir`，验收命令使用当次发布的版本号和数据库 schema。
 
    ```powershell
    ./app/package.ps1
-   python app/tests/verify_package.py 4.2.0 9
+   python app/tests/verify_package.py 4.3.0 9
    ```
 
 4. 确认 CI、包验收及必要的原生交互检查通过，为已验收提交打标签，发布 ZIP 与 `.zip.sha256`。Release 说明取自同版本的 `CHANGELOG.md` 条目。

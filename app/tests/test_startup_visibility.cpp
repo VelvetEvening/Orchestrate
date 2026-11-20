@@ -2,6 +2,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
@@ -18,10 +19,14 @@
 #include <windows.h>
 
 namespace {
-struct MainWindowSearch { DWORD pid; HWND hwnd = nullptr; };
-HWND nativeMainWindow(DWORD pid)
+struct MainWindowSearch {
+    DWORD pid;
+    const QString &title;
+    HWND hwnd = nullptr;
+};
+HWND nativeMainWindow(DWORD pid, const QString &title)
 {
-    MainWindowSearch search{pid};
+    MainWindowSearch search{pid, title};
     EnumWindows([](HWND hwnd, LPARAM parameter) -> BOOL {
         auto &search = *reinterpret_cast<MainWindowSearch *>(parameter);
         DWORD owner = 0;
@@ -29,7 +34,7 @@ HWND nativeMainWindow(DWORD pid)
         if (owner != search.pid || GetWindow(hwnd, GW_OWNER)) return TRUE;
         wchar_t title[128]{};
         GetWindowTextW(hwnd, title, 128);
-        if (QString::fromWCharArray(title) == QStringLiteral("Orchestrate")) {
+        if (QString::fromWCharArray(title) == search.title) {
             search.hwnd = hwnd;
             return FALSE;
         }
@@ -59,7 +64,9 @@ private slots:
         QVERIFY(QDir().mkpath(install + QStringLiteral("/data")));
         QVERIFY(QDir().mkpath(workspace));
         const QString source = qEnvironmentVariable("ORCHESTRATE_VISIBILITY_APP", QStringLiteral(ORCHESTRATE_APPLICATION));
-        const QString executable = install + QStringLiteral("/Orchestrate.exe");
+        const QFileInfo sourceInfo(source);
+        const QString expectedTitle = sourceInfo.completeBaseName();
+        const QString executable = QDir(install).filePath(sourceInfo.fileName());
         QVERIFY2(QFile::copy(source, executable), qPrintable(source));
         // Synthetic database: do not import user data or claim the user's Alt+X.
         const QString connection = QStringLiteral("visibility-fixture");
@@ -88,7 +95,7 @@ private slots:
         });
         const auto stop = qScopeGuard([&] {
             if (process.state() == QProcess::NotRunning) return;
-            if (const auto hwnd = nativeMainWindow(DWORD(process.processId()))) {
+            if (const auto hwnd = nativeMainWindow(DWORD(process.processId()), expectedTitle)) {
                 const DWORD thread = GetWindowThreadProcessId(hwnd, nullptr);
                 PostThreadMessageW(thread, WM_QUIT, 0, 0);
             }
@@ -100,7 +107,7 @@ private slots:
         timer.start();
         while (!QFile::exists(healthPath) && process.state() != QProcess::NotRunning && timer.elapsed() < 10000)
             QTest::qWait(25);
-        const HWND hwnd = nativeMainWindow(DWORD(process.processId()));
+        const HWND hwnd = nativeMainWindow(DWORD(process.processId()), expectedTitle);
         QVERIFY2(hwnd, "No native main window was created.");
         QVERIFY2(IsWindowVisible(hwnd) && !IsIconic(hwnd), "Updater reported startup with an invisible native main window.");
         QFile healthFile(healthPath);

@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Orchestrate VERSION 4.2.0 LANGUAGES CXX)
+project(Orchestrate VERSION 4.3.0 LANGUAGES CXX)
 
+option(ORCHESTRATE_DEV_BUILD "Use the development executable and display name" ON)
+if(ORCHESTRATE_DEV_BUILD)
+    set(ORCHESTRATE_APP_NAME "orchestrate-dev")
+else()
+    set(ORCHESTRATE_APP_NAME "${PROJECT_NAME}")
+endif()
 configure_file(src/version.h.in generated/version.h @ONLY)
 
 set(CMAKE_AUTOMOC ON)
@@ -21,14 +27,17 @@ function(orchestrate_enable_warnings target)
 endfunction()
 
 add_library(OrchestrateUi STATIC src/ui/theme.cpp src/ui/theme.h
+    src/ui/motion.cpp src/ui/motion.h
     src/ui/appearancechoice.cpp
+    src/ui/navigationsidebar.cpp src/ui/navigationsidebar.h
     src/ui/skinlibrary.cpp src/ui/skinlibrary.h
     src/ui/contentworkspace.cpp src/ui/contentworkspace.h
+    src/ui/pagetransition.cpp src/ui/pagetransition.h
     resources/ui/uitheme.qrc resources/resources.qrc)
 target_link_libraries(OrchestrateUi PUBLIC Qt6::Widgets Qt6::Network)
 target_include_directories(OrchestrateUi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 if(WIN32)
-    target_link_libraries(OrchestrateUi PRIVATE dwmapi)
+    target_link_libraries(OrchestrateUi PRIVATE dwmapi user32)
 endif()
 
 add_subdirectory(third_party)
@@ -124,20 +133,23 @@ target_link_libraries(OrchestrateApplication PUBLIC
     OrchestrateUpdate OrchestrateClipboard OrchestrateGit)
 target_include_directories(OrchestrateApplication PUBLIC
     ${CMAKE_CURRENT_BINARY_DIR}/generated ${CMAKE_CURRENT_SOURCE_DIR}/src)
-if(WIN32)
-    target_link_libraries(OrchestrateApplication PRIVATE dwmapi)
-endif()
 
 qt_add_executable(Orchestrate WIN32 src/main.cpp)
+set_target_properties(Orchestrate PROPERTIES OUTPUT_NAME "${ORCHESTRATE_APP_NAME}")
 
 if (WIN32)
+    add_custom_target(DeployOrchestrate
+        COMMAND Qt6::windeployqt "$<IF:$<CONFIG:Debug>,--debug,--release>"
+                --no-translations --compiler-runtime "$<TARGET_FILE:Orchestrate>"
+        DEPENDS Orchestrate OrchestrateMath
+        COMMENT "Deploying Qt for ${ORCHESTRATE_APP_NAME}"
+        VERBATIM
+    )
     target_sources(Orchestrate PRIVATE resources/app.rc)
     # MinGW's resource compiler does not track included headers in Ninja.
-    # Rebuild Explorer's version resource whenever the CMake version changes.
+    # Rebuild Explorer's resource when the version or build name changes.
     set_property(SOURCE resources/app.rc APPEND PROPERTY OBJECT_DEPENDS
         "${CMAKE_CURRENT_BINARY_DIR}/generated/version.h")
-    # 标题栏配色通过 DWM 设置
-    target_link_libraries(Orchestrate PRIVATE dwmapi)
 endif()
 
 target_link_libraries(Orchestrate PRIVATE OrchestrateApplication)
@@ -151,7 +163,6 @@ target_include_directories(Orchestrate PRIVATE
 if (WIN32)
     set_target_properties(Orchestrate PROPERTIES
         WIN32_EXECUTABLE TRUE
-        OUTPUT_NAME "Orchestrate"
         VERSION "${PROJECT_VERSION}"
     )
 endif()

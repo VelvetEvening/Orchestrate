@@ -17,11 +17,11 @@ BEGIN
     BEGIN
         BLOCK "040904B0"
         BEGIN
-            VALUE "FileDescription", "Orchestrate\0"
+            VALUE "FileDescription", ORCHESTRATE_APP_NAME "\0"
             VALUE "FileVersion", ORCHESTRATE_VERSION "\0"
-            VALUE "InternalName", "Orchestrate\0"
-            VALUE "OriginalFilename", "Orchestrate.exe\0"
-            VALUE "ProductName", "Orchestrate\0"
+            VALUE "InternalName", ORCHESTRATE_APP_NAME "\0"
+            VALUE "OriginalFilename", ORCHESTRATE_APP_NAME ".exe\0"
+            VALUE "ProductName", ORCHESTRATE_APP_NAME "\0"
             VALUE "ProductVersion", ORCHESTRATE_VERSION "\0"
         END
     END

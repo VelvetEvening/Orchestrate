@@ -223,9 +223,10 @@ QString uiIconSource(const QString &name)
 class PaletteIconEngine final : public QIconEngine
 {
 public:
-    PaletteIconEngine(const QString &path, Role role) : path_(path), source_(path), role_(role) {}
+    PaletteIconEngine(const QString &path, Role role, bool accentWhenChecked)
+        : source_(path), role_(role), accentWhenChecked_(accentWhenChecked) {}
 
-    QIconEngine *clone() const override { return new PaletteIconEngine(path_, role_); }
+    QIconEngine *clone() const override { return new PaletteIconEngine(*this); }
     bool isNull() override { return source_.isNull(); }
     QSize actualSize(const QSize &size, QIcon::Mode mode, QIcon::State state) override
     {
@@ -239,8 +240,10 @@ public:
     {
         auto image = source_.pixmap(size, scale, QIcon::Normal, state);
         if (!image.isNull()) {
-            const auto role = mode == QIcon::Disabled ? Role::Disabled
-                : mode == QIcon::Selected && role_ == Role::Icon ? Role::SelectionText : role_;
+            auto role = role_;
+            if (mode == QIcon::Disabled) role = Role::Disabled;
+            else if (state == QIcon::On && accentWhenChecked_) role = Role::Accent;
+            else if ((mode == QIcon::Selected || state == QIcon::On) && role_ == Role::Icon) role = Role::SelectionText;
             QPainter painter(&image);
             painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
             painter.fillRect(QRectF(QPointF(), image.deviceIndependentSize()), currentColor(role));
@@ -256,9 +259,9 @@ public:
     }
 
 private:
-    QString path_;
     QIcon source_;
     Role role_;
+    bool accentWhenChecked_;
 };
 
 // Stylesheet subcontrols require image filenames. Tint the bundled SVGs by color
@@ -488,14 +491,19 @@ static void applyStylesheet(QApplication &app)
     replace("radioIcon", styleIconSource(QStringLiteral("radio"), Role::CheckInk));
     replace("checkDisabledIcon", styleIconSource(QStringLiteral("check"), Role::Disabled));
     replace("radioDisabledIcon", styleIconSource(QStringLiteral("radio"), Role::Disabled));
+    const auto &face = currentColor(Role::ControlSurface);
+    replace("buttonEdge", mix(face, currentColor(Role::ControlBorder), .65).name());
+    replace("buttonTop", mix(face, Qt::white, active.dark ? .045 : .22).name());
+    replace("buttonBottom", mix(face, currentColor(Role::ControlBorder), .10).name());
+    replace("primaryEdge", mix(currentColor(Role::PrimaryBackground), currentColor(Role::PrimaryText), .23).name());
     const bool compact = compactLayout;
     const std::pair<const char *, const char *> metrics[] = {
-        {"controlPadding", compact ? "4px 9px" : "6px 11px"},
-        {"controlRadius", compact ? "4px" : "6px"},
+        {"controlPadding", compact ? "4px 10px" : "6px 13px"},
+        {"controlRadius", compact ? "6px" : "8px"},
         {"inputPadding", compact ? "4px 8px" : "6px 9px"},
         {"choiceItemPadding", compact ? "5px 24px 5px 7px" : "8px 26px 8px 9px"},
         {"navPadding", compact ? "6px 10px" : "10px 12px"},
-        {"navRadius", compact ? "4px" : "7px"},
+        {"navRadius", compact ? "6px" : "8px"},
         {"tabPadding", compact ? "4px 9px" : "7px 12px"},
         {"calendarPadding", compact ? "4px" : "7px"},
         {"calendarBottomInset", compact ? "5em" : "0px"},
@@ -503,7 +511,10 @@ static void applyStylesheet(QApplication &app)
         {"itemPadding", compact ? "3px 8px" : "7px 10px"},
         {"recordMinHeight", compact ? "30px" : "42px"},
         {"diaryMinHeight", compact ? "30px" : "40px"},
-        {"collectionMinHeight", compact ? "34px" : "46px"}
+        {"collectionMinHeight", compact ? "34px" : "46px"},
+        {"appearancePreviewHeight", compact ? "140px" : "164px"},
+        {"clipboardListSize", compact ? "10pt" : "11pt"},
+        {"clipboardRowHeight", compact ? "30px" : "38px"}
     };
     for (const auto &metric : metrics) replace(metric.first, QString::fromLatin1(metric.second));
     app.setStyleSheet(css);
@@ -552,7 +563,7 @@ void apply(QApplication &app, const QString &paletteId, const QString &layoutId)
     }
 }
 
-QIcon icon(const QString &name)
+static QIcon loadIcon(const QString &name, bool accentWhenChecked)
 {
     initializeUiResources();
     auto role = Role::Icon;
@@ -563,7 +574,19 @@ QIcon icon(const QString &name)
         role = Role::Warning;
         path = QStringLiteral(":/icons/%1.svg").arg(name);
     }
-    return QIcon(new PaletteIconEngine(path, role));
+    return QIcon(new PaletteIconEngine(path, role, accentWhenChecked));
+}
+
+QIcon icon(const QString &name) { return loadIcon(name, false); }
+QIcon navigationIcon(const QString &name) { return loadIcon(name, true); }
+
+const QList<SkinCatalogEntry> &builtInPalettes()
+{
+    static const QList<SkinCatalogEntry> palettes{
+        {QStringLiteral("mist"), QStringLiteral("云白 × 雾蓝")},
+        {QStringLiteral("paper"), QStringLiteral("暖白 × 陶褐")},
+    };
+    return palettes;
 }
 
 QIcon paletteSwatch(const QString &id)

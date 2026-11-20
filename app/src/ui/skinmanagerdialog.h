@@ -16,8 +16,8 @@ class SkinLibrary;
 class SkinManagerDialog final : public QDialog
 {
 public:
-    SkinManagerDialog(SkinLibrary &library, std::function<bool(const QString &, QString *)> removeTheme,
-                      QWidget *parent);
+    using ThemeAction = std::function<bool(const QString &, QString *)>;
+    SkinManagerDialog(SkinLibrary &library, ThemeAction activateTheme, ThemeAction removeTheme, QWidget *parent);
 
     void refreshCatalog();
     void updateActiveSkin();
@@ -31,14 +31,17 @@ private:
     void filterRows();
     void updateActions();
     void updateRowActions(QTreeWidgetItem *item);
-    void download(QTreeWidgetItem *item);
+    void activateOrDownload(QTreeWidgetItem *item);
     void remove(QTreeWidgetItem *item);
     void showItemMenu(QTreeWidgetItem *item, const QPoint &globalPosition);
     void showStatus(const QString &message, const QString &error = {}, bool clearOnReturn = false);
 
     SkinLibrary &library_;
-    std::function<bool(const QString &, QString *)> removeTheme_;
+    ThemeAction activateTheme_;
+    ThemeAction removeTheme_;
     QTreeWidget *list_;
+    QTreeWidgetItem *builtInGroup_ = nullptr;
+    QTreeWidgetItem *extensionGroup_ = nullptr;
     QLineEdit *search_;
     QLabel *status_;
     QPushButton *refresh_;

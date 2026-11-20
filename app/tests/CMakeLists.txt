@@ -223,6 +223,16 @@ if(WIN32)
     set_property(TEST skin_library theme_rendering APPEND PROPERTY ENVIRONMENT "PATH=${test_path}")
 endif()
 
+if(WIN32)
+    add_executable(PageTransitionNativeTest test_page_transition.cpp)
+    target_link_libraries(PageTransitionNativeTest PRIVATE OrchestrateUi Qt6::Test user32)
+    set_target_properties(PageTransitionNativeTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY "$<1:${CMAKE_CURRENT_BINARY_DIR}/page-transition-native-test>")
+    add_test(NAME page_transition_native COMMAND PageTransitionNativeTest
+        -o "${CMAKE_CURRENT_BINARY_DIR}/page-transition-native-test/results.txt,txt" -o -,txt)
+    set_tests_properties(page_transition_native PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=windows;PATH=${test_path}" TIMEOUT 30 RUN_SERIAL TRUE)
+endif()
+
 get_property(test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 foreach(test_target IN LISTS test_targets)
     get_target_property(test_type ${test_target} TYPE)

@@ -13,6 +13,7 @@ class QComboBox;
 class QLayout;
 class QModelIndex;
 class QWidget;
+struct SkinCatalogEntry;
 struct SkinTheme;
 
 namespace UiTheme {
@@ -50,7 +51,10 @@ QString sidebarImagePath();
 void apply(QApplication &app, const QString &paletteId, const QString &layoutId);
 void install(QApplication &app);
 QIcon icon(const QString &name);
+QIcon navigationIcon(const QString &name);
+const QList<SkinCatalogEntry> &builtInPalettes();
 QIcon paletteSwatch(const QString &id);
+QWidget *createAppearancePreview(QWidget *parent);
 void styleAppearanceChoice(QComboBox *choice);
 void setRole(QWidget *widget, const char *role);
 void setSurface(QWidget *widget, const char *surface);

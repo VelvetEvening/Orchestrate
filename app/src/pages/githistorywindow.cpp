@@ -6,6 +6,7 @@
 #include <QAbstractTableModel>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QGuiApplication>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
@@ -151,7 +152,7 @@ GitHistoryWindow::GitHistoryWindow(const QString &projectName, const RepositoryT
 {
     setObjectName(QStringLiteral("gitHistoryWindow"));
     setAttribute(Qt::WA_DeleteOnClose); setWindowFlag(Qt::WindowMaximizeButtonHint);
-    setWindowTitle(projectName + QStringLiteral(" · Git 历史 · Orchestrate"));
+    setWindowTitle(projectName + QStringLiteral(" · Git 历史 · ") + QGuiApplication::applicationDisplayName());
     resize(1180, 800); setMinimumSize(780, 540);
     auto *layout = new QVBoxLayout(this); layout->setContentsMargins(20,16,20,16); layout->setSpacing(12);
     auto *environment = plainLabel(this); environment->setText(target.description()); UiTheme::setRole(environment, "muted"); layout->addWidget(environment);

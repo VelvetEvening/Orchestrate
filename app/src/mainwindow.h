@@ -8,10 +8,11 @@
 class QAction;
 class ContentWorkspace;
 class GlobalShortcut;
+class NavigationSidebar;
 class QCloseEvent;
+class QComboBox;
 class QFrame;
 class QLabel;
-class QMenu;
 class QNetworkAccessManager;
 class QPushButton;
 class QScrollArea;
@@ -39,20 +40,20 @@ protected:
 #endif
 
 private:
-    class NavigationSidebar;
     void toggleMainWindow();
     bool savePendingChanges();
     void buildUi();
-    void buildNavigation(QWidget *parent);
+    void buildNavigation();
     QScrollArea *makeSettingsPage();
     QFrame *makeAppearanceSection(QWidget *parent);
     QFrame *makeRuntimeSection(QWidget *parent);
     void applyAppearance(const QString &palette, const QString &layout);
+    bool selectPalette(const QString &id, QString *error);
     void openSkinManager(QWidget *source);
     void buildTray();
     void switchToPage(int index, bool confirmLeave = true);
     void toggleSidebar();
-    void updateSidebarAppearance();
+    void updateSidebarAppearance(bool collapsed, bool animated = false);
     void quitApplication();
     void installUpdate();
     void refreshAutoStartSettings(const QString &error = QString());
@@ -70,14 +71,11 @@ private:
     QStackedWidget *pageStack_ = nullptr;
     ContentWorkspace *settingsWorkspace_ = nullptr;
     QScrollArea *settingsScroll_ = nullptr;
+    QComboBox *paletteChoice_ = nullptr;
     UpdateWidget *updateWidget_ = nullptr;
     QSystemTrayIcon *trayIcon_ = nullptr;
-    QMenu *trayMenu_ = nullptr;
-    QAction *showAction_ = nullptr;
-    QAction *quitAction_ = nullptr;
     QAction *updateAction_ = nullptr;
     QList<QPushButton *> navigationButtons_;
-    bool sidebarCollapsed_ = false;
     bool closeToTray_ = true;
     bool allowQuit_ = false;
     AppDatabase database_;

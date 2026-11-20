@@ -70,7 +70,7 @@ try {
     $qtVersion = (& "$QtRoot/bin/qtpaths.exe" --query QT_VERSION).Trim()
     if ($LASTEXITCODE -ne 0) { throw 'Could not identify Qt version.' }
     Run $CMakeExe @('-S', "$sourceRoot/app", '-B', $buildRoot, '-G', 'Ninja',
-        '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_TESTING=OFF', "-DCMAKE_PREFIX_PATH=$QtRoot",
+        '-DCMAKE_BUILD_TYPE=Release', '-DORCHESTRATE_DEV_BUILD=OFF', '-DBUILD_TESTING=OFF', "-DCMAKE_PREFIX_PATH=$QtRoot",
         "-DCMAKE_MAKE_PROGRAM=$NinjaExe", "-DCMAKE_CXX_COMPILER=$MinGWRoot/bin/g++.exe")
     Run $CMakeExe @('--build', $buildRoot, '--parallel', '3')
     # Test sources are tracked and run in app/build-qt before packaging.

@@ -2,6 +2,7 @@
 #include "ui/theme.h"
 #include <QComboBox>
 #include <QFontDatabase>
+#include <QGuiApplication>
 #include <QLabel>
 #include <QListWidget>
 #include <QPlainTextEdit>
@@ -59,7 +60,7 @@ void GitCommitDialog::setCommit(const Git::Commit &commit)
     selected_ = {}; changes_.clear(); message_->clear(); files_->clear(); diff_->clear(); status_->clear();
     const QSignalBlocker block(parent_); parent_->clear();
     selected_ = commit;
-    setWindowTitle(selected_.id.left(10) + QStringLiteral(" · 提交详情 · Orchestrate"));
+    setWindowTitle(selected_.id.left(10) + QStringLiteral(" · 提交详情 · ") + QGuiApplication::applicationDisplayName());
     if (selected_.parents.isEmpty()) parent_->addItem(QStringLiteral("空树（首次提交）"),QString());
     for (int i=0;i<selected_.parents.size();++i) parent_->addItem(QStringLiteral("父提交 %1 · %2").arg(i+1).arg(selected_.parents[i].left(10)),selected_.parents[i]);
     message_->setPlainText(selected_.id + QStringLiteral("\n") + selected_.subject);
